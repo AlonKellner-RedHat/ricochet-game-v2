@@ -19,6 +19,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 		_renderer._compute_trace()
 	violations.append_array(check_UX7(player_pos, cursor_pos))
 	violations.append_array(check_PREVIEW_NOGAPS(player_pos, cursor_pos))
+	violations.append_array(check_S9_no_consecutive_rehit(player_pos, cursor_pos))
+	violations.append_array(check_S16_no_nan_in_trace(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -58,6 +60,40 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 		if prev_end.distance_to(curr_start) > 0.01:
 			violations.append("PREVIEW-NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev_end, i, curr_start])
 
+	return violations
+
+func check_S9_no_consecutive_rehit(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+
+	var path = _renderer.get_traced_path()
+	if path == null or path.steps.size() < 2:
+		return violations
+
+	for i in range(1, path.steps.size()):
+		var prev_step: Tracer.Step = path.steps[i - 1]
+		var curr_step: Tracer.Step = path.steps[i]
+		if prev_step.hit and curr_step.hit:
+			if prev_step.hit.segment == curr_step.hit.segment:
+				violations.append("S9: Same segment hit consecutively at steps %d and %d (point=%s)" % [i - 1, i, curr_step.end])
+	return violations
+
+func check_S16_no_nan_in_trace(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+
+	var path = _renderer.get_traced_path()
+	if path == null:
+		return violations
+
+	for i in path.steps.size():
+		var step: Tracer.Step = path.steps[i]
+		if is_nan(step.start.x) or is_nan(step.start.y):
+			violations.append("S16: NaN in step %d start=%s" % [i, step.start])
+		if is_nan(step.end.x) or is_nan(step.end.y):
+			violations.append("S16: NaN in step %d end=%s" % [i, step.end])
 	return violations
 
 static func check_S11(segment: Segment) -> Array[String]:
