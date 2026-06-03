@@ -23,7 +23,7 @@ func test_stage8_S1_carrier_via_roundtrip_line() -> void:
 	var end_pt := Point.new(Vector2(10, 0), Point.Provenance.SEGMENT_END)
 	var via := Point.new(Vector2(5, 0), Point.Provenance.SEGMENT_VIA)
 
-	var carrier := cache.derive_carrier_cached(start, end_pt, via, true)
+	var carrier := cache.derive_carrier_cached(start, end_pt, via)
 	var recovered := cache.derive_via_cached(start, end_pt, carrier)
 
 	assert_not_null(recovered, "S1: Should recover via from cache")
@@ -49,8 +49,8 @@ func test_stage8_cache_hit_on_second_lookup() -> void:
 	var end_pt := Point.new(Vector2(10, 0))
 	var via := Point.new(Vector2(5, 0))
 
-	var carrier1 := cache.derive_carrier_cached(start, end_pt, via, true)
-	var carrier2 := cache.derive_carrier_cached(start, end_pt, via, true)
+	var carrier1 := cache.derive_carrier_cached(start, end_pt, via)
+	var carrier2 := cache.derive_carrier_cached(start, end_pt, via)
 
 	assert_eq(carrier1, carrier2, "Second lookup should return same cached object")
 

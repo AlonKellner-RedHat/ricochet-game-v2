@@ -42,11 +42,11 @@ func test_invariant_sweep_all_scenes() -> void:
 
 func test_invariant_S11_S12_segments() -> void:
 	var test_segments: Array[Segment] = [
-		Segment.new(Vector2(0, 0), Vector2(10, 0), Vector2(5, 0), true),
-		Segment.new(Vector2(100, 400), Vector2(100, 200), Vector2(100, 300), true),
+		Segment.new(Vector2(0, 0), Vector2(10, 0), Vector2(5, 0)),
+		Segment.new(Vector2(100, 400), Vector2(100, 200), Vector2(100, 300)),
 		Segment.new(Vector2(200, 100), Vector2(200, 300), Vector2(300, 200)),
 		Segment.new(Vector2(0, 0), Vector2(10, 0), Vector2(INF, INF)),
-		Segment.new(Vector2(0, 0), Vector2(100, 100), Vector2(50, 50), true),
+		Segment.new(Vector2(0, 0), Vector2(100, 100), Vector2(50, 50)),
 	]
 
 	var test_points: Array[Vector2] = []
@@ -71,24 +71,24 @@ func test_invariant_S11_S12_segments() -> void:
 func test_invariant_S1_carrier_roundtrip() -> void:
 	Point.reset_id_counter()
 	var cache := TransformCache.new()
-	var test_cases: Array[Dictionary] = [
-		{"s": Vector2(0, 0), "e": Vector2(10, 0), "v": Vector2(5, 0), "line": true},
-		{"s": Vector2(100, 400), "e": Vector2(100, 200), "v": Vector2(100, 300), "line": true},
-		{"s": Vector2(200, 100), "e": Vector2(200, 300), "v": Vector2(300, 200), "line": false},
-		{"s": Vector2(0, 0), "e": Vector2(10, 0), "v": Vector2(INF, INF), "line": true},
+	var test_configs: Array[Array] = [
+		[Vector2(0, 0), Vector2(10, 0), Vector2(5, 0)],
+		[Vector2(100, 400), Vector2(100, 200), Vector2(100, 300)],
+		[Vector2(200, 100), Vector2(200, 300), Vector2(300, 200)],
+		[Vector2(0, 0), Vector2(10, 0), Vector2(INF, INF)],
 	]
 
 	var all_violations: Array[String] = []
-	for tc: Dictionary in test_cases:
-		var start := Point.new(tc.s as Vector2, Point.Provenance.SEGMENT_START)
-		var end_pt := Point.new(tc.e as Vector2, Point.Provenance.SEGMENT_END)
-		var via := Point.new(tc.v as Vector2, Point.Provenance.SEGMENT_VIA)
-		all_violations.append_array(InvariantChecker.check_S1(cache, start, end_pt, via, tc.line as bool))
+	for tc: Array in test_configs:
+		var start := Point.new(tc[0] as Vector2, Point.Provenance.SEGMENT_START)
+		var end_pt := Point.new(tc[1] as Vector2, Point.Provenance.SEGMENT_END)
+		var via := Point.new(tc[2] as Vector2, Point.Provenance.SEGMENT_VIA)
+		all_violations.append_array(InvariantChecker.check_S1(cache, start, end_pt, via))
 
 	if all_violations.size() > 0:
 		fail_test("S1 violations: %s" % str(all_violations))
 	else:
-		pass_test("S1 passed across %d segment configs" % test_cases.size())
+		pass_test("S1 passed across %d segment configs" % test_configs.size())
 
 func test_invariant_S17_unique_ids() -> void:
 	Point.reset_id_counter()

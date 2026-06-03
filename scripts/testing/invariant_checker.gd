@@ -73,9 +73,9 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 			violations.append("S12: point %s side=%d expected=%d (cross=%f)" % [point, side, expected_side, cross_val])
 	return violations
 
-static func check_S1(cache: TransformCache, start: Point, end_pt: Point, via: Point, is_line: bool = false) -> Array[String]:
+static func check_S1(cache: TransformCache, start: Point, end_pt: Point, via: Point) -> Array[String]:
 	var violations: Array[String] = []
-	var carrier := cache.derive_carrier_cached(start, end_pt, via, is_line)
+	var carrier := cache.derive_carrier_cached(start, end_pt, via)
 	var recovered := cache.derive_via_cached(start, end_pt, carrier)
 	if recovered == null:
 		violations.append("S1: derive_via returned null — cache miss")

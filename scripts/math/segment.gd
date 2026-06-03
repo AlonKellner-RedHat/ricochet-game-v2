@@ -4,23 +4,21 @@ extends RefCounted
 var start: Vector2
 var end: Vector2
 var via: Vector2
-var is_line_by_construction: bool
 
 var _carrier: GeneralizedCircle = null
 
-func _init(p_start: Vector2, p_end: Vector2, p_via: Vector2, p_is_line: bool = false) -> void:
+func _init(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> void:
 	start = p_start
 	end = p_end
 	via = p_via
-	is_line_by_construction = p_is_line or p_via == Vector2(INF, INF)
 
 func get_carrier() -> GeneralizedCircle:
 	if _carrier == null:
-		_carrier = _derive_carrier()
+		_carrier = derive_carrier(start, end, via)
 	return _carrier
 
 func is_line() -> bool:
-	return is_line_by_construction
+	return get_carrier().is_line()
 
 func determine_side(point: Vector2) -> Side.Value:
 	var carrier := get_carrier()
@@ -34,40 +32,35 @@ func determine_side(point: Vector2) -> Side.Value:
 
 func _compute_winding() -> float:
 	var w := (via - start).cross(end - start)
-	if is_line_by_construction:
+	if get_carrier().is_line():
 		var carrier := get_carrier()
 		var traversal := end - start
 		var normal := Vector2(carrier.b, carrier.c)
 		w = -traversal.cross(normal)
 	return w
 
-func _derive_carrier() -> GeneralizedCircle:
-	if is_line_by_construction:
-		return _line_carrier_from_two_points(start, end)
-	return _circle_carrier_from_three_points(start, end, via)
+static func _to_homogeneous_row(p: Vector2) -> Array[float]:
+	if is_inf(p.x) or is_inf(p.y):
+		return [1.0, 0.0, 0.0, 0.0]
+	return [p.x * p.x + p.y * p.y, p.x, p.y, 1.0]
 
-static func _line_carrier_from_two_points(p1: Vector2, p2: Vector2) -> GeneralizedCircle:
-	var dx := p2.x - p1.x
-	var dy := p2.y - p1.y
-	var b_val := -dy
-	var c_val := dx
-	var d_val := dy * p1.x - dx * p1.y
-	return GeneralizedCircle.new(0.0, b_val, c_val, d_val)
+static func derive_carrier(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> GeneralizedCircle:
+	var r1 := _to_homogeneous_row(p_start)
+	var r2 := _to_homogeneous_row(p_via)
+	var r3 := _to_homogeneous_row(p_end)
 
-static func _circle_carrier_from_three_points(p1: Vector2, p2: Vector2, p3: Vector2) -> GeneralizedCircle:
-	var ax := p1.x
-	var ay := p1.y
-	var bx := p2.x
-	var by := p2.y
-	var cx := p3.x
-	var cy := p3.y
+	var a := _det3x3(r1[1], r1[2], r1[3], r2[1], r2[2], r2[3], r3[1], r3[2], r3[3])
+	var b := -_det3x3(r1[0], r1[2], r1[3], r2[0], r2[2], r2[3], r3[0], r3[2], r3[3])
+	var c := _det3x3(r1[0], r1[1], r1[3], r2[0], r2[1], r2[3], r3[0], r3[1], r3[3])
+	var d := -_det3x3(r1[0], r1[1], r1[2], r2[0], r2[1], r2[2], r3[0], r3[1], r3[2])
 
-	var d_val := 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+	return GeneralizedCircle.new(a, b, c, d)
 
-	var ux := ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d_val
-	var uy := ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d_val
-
-	var center := Vector2(ux, uy)
-	var radius := center.distance_to(p1)
-
-	return GeneralizedCircle.from_circle(center, radius)
+static func _det3x3(
+	a11: float, a12: float, a13: float,
+	a21: float, a22: float, a23: float,
+	a31: float, a32: float, a33: float,
+) -> float:
+	return (a11 * (a22 * a33 - a23 * a32)
+		- a12 * (a21 * a33 - a23 * a31)
+		+ a13 * (a21 * a32 - a22 * a31))

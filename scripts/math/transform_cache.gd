@@ -4,12 +4,12 @@ extends RefCounted
 var _carrier_cache: Dictionary = {}
 var _via_cache: Dictionary = {}
 
-func derive_carrier_cached(start: Point, end_pt: Point, via: Point, is_line: bool = false) -> GeneralizedCircle:
+func derive_carrier_cached(start: Point, end_pt: Point, via: Point) -> GeneralizedCircle:
 	var key := Vector3i(start.id, end_pt.id, via.id)
 	if _carrier_cache.has(key):
 		return _carrier_cache[key]
 
-	var seg := Segment.new(start.position, end_pt.position, via.position, is_line)
+	var seg := Segment.new(start.position, end_pt.position, via.position)
 	var carrier := seg.get_carrier()
 
 	_carrier_cache[key] = carrier
