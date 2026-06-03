@@ -1,23 +1,26 @@
 class_name Segment
 extends RefCounted
 
-const COLLINEARITY_THRESHOLD := 1e-10
-
 var start: Vector2
 var end: Vector2
 var via: Vector2
+var is_line_by_construction: bool
 
 var _carrier: GeneralizedCircle = null
 
-func _init(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> void:
+func _init(p_start: Vector2, p_end: Vector2, p_via: Vector2, p_is_line: bool = false) -> void:
 	start = p_start
 	end = p_end
 	via = p_via
+	is_line_by_construction = p_is_line or p_via == Vector2(INF, INF)
 
 func get_carrier() -> GeneralizedCircle:
 	if _carrier == null:
-		_carrier = derive_carrier(start, end, via)
+		_carrier = _derive_carrier()
 	return _carrier
+
+func is_line() -> bool:
+	return is_line_by_construction
 
 func determine_side(point: Vector2) -> Side.Value:
 	var carrier := get_carrier()
@@ -31,22 +34,17 @@ func determine_side(point: Vector2) -> Side.Value:
 
 func _compute_winding() -> float:
 	var w := (via - start).cross(end - start)
-	if absf(w) < COLLINEARITY_THRESHOLD:
+	if is_line_by_construction:
 		var carrier := get_carrier()
 		var traversal := end - start
 		var normal := Vector2(carrier.b, carrier.c)
 		w = -traversal.cross(normal)
 	return w
 
-static func derive_carrier(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> GeneralizedCircle:
-	if p_via == Vector2(INF, INF):
-		return _line_carrier_from_two_points(p_start, p_end)
-
-	var cross_val := (p_via - p_start).cross(p_end - p_start)
-	if absf(cross_val) < COLLINEARITY_THRESHOLD:
-		return _line_carrier_from_two_points(p_start, p_end)
-
-	return _circle_carrier_from_three_points(p_start, p_end, p_via)
+func _derive_carrier() -> GeneralizedCircle:
+	if is_line_by_construction:
+		return _line_carrier_from_two_points(start, end)
+	return _circle_carrier_from_three_points(start, end, via)
 
 static func _line_carrier_from_two_points(p1: Vector2, p2: Vector2) -> GeneralizedCircle:
 	var dx := p2.x - p1.x

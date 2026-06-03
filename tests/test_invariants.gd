@@ -42,11 +42,11 @@ func test_invariant_sweep_all_scenes() -> void:
 
 func test_invariant_S11_S12_segments() -> void:
 	var test_segments: Array[Segment] = [
-		Segment.new(Vector2(0, 0), Vector2(10, 0), Vector2(5, 0)),
-		Segment.new(Vector2(100, 400), Vector2(100, 200), Vector2(100, 300)),
+		Segment.new(Vector2(0, 0), Vector2(10, 0), Vector2(5, 0), true),
+		Segment.new(Vector2(100, 400), Vector2(100, 200), Vector2(100, 300), true),
 		Segment.new(Vector2(200, 100), Vector2(200, 300), Vector2(300, 200)),
 		Segment.new(Vector2(0, 0), Vector2(10, 0), Vector2(INF, INF)),
-		Segment.new(Vector2(0, 0), Vector2(100, 100), Vector2(50, 50)),
+		Segment.new(Vector2(0, 0), Vector2(100, 100), Vector2(50, 50), true),
 	]
 
 	var test_points: Array[Vector2] = []
