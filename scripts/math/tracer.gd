@@ -40,7 +40,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		var hit = Intersection.find_earliest_hit(ray, segments, excluded)
 
 		if hit == null:
-			var escape_end := origin + direction.to_vector().normalized() * 10000.0
+			var dir_vec: Vector2 = ray.direction.to_vector().normalized()
+			var escape_end := ray.origin + dir_vec * 10000.0
 			path.steps.append(Step.new(ray.origin, escape_end, frame_id, null))
 			break
 
@@ -56,8 +57,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			config = surf.active_side_config(hit.side, state_copy)
 
 		if config == null or config.effect == null:
-			excluded = [hit.segment]
-			ray = Ray.new(hit.point, direction)
+			excluded.append(hit.segment)
+			ray = Ray.new(hit.point, ray.direction)
 			continue
 
 		if config.effect is TerminalEffect:
