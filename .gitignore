@@ -23,6 +23,12 @@ mono_crash.*.json
 *.swo
 *~
 
+# GUT testing artifacts
+.gut_editor_config.json
+
+# Godot logs
+*.log
+
 # OS
 .DS_Store
 Thumbs.db
