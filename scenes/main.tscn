@@ -14,6 +14,7 @@ script = ExtResource("2")
 gravity = Vector2(0, 980)
 room_rect = Rect2(560, 240, 800, 600)
 build_room = true
+passthrough_lines = [Vector4(800, 240, 800, 840), Vector4(1100, 240, 1100, 840)]
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0
