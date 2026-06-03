@@ -13,6 +13,12 @@ func get_level_gravity() -> Vector2:
 func has_level_gravity() -> bool:
 	return get_level_gravity().length_squared() > 0.0
 
+func _process(_delta: float) -> void:
+	var cursor := get_node_or_null("../Cursor")
+	if cursor:
+		var visual := $Visual as Node2D
+		visual.rotation = (cursor.global_position - global_position).angle()
+
 func _physics_process(delta: float) -> void:
 	var gravity_vec := get_level_gravity()
 
