@@ -1,0 +1,53 @@
+extends GutTest
+
+var _player: CharacterBody2D
+var _main_scene: Node
+
+func before_each() -> void:
+	_main_scene = load("res://scenes/main.tscn").instantiate()
+	add_child_autofree(_main_scene)
+	_player = _main_scene.get_node("Player")
+
+func test_stage2_player_speed_constant() -> void:
+	assert_eq(_player.SPEED, 200.0, "Player speed should be 200")
+
+func test_stage2_player_collision_radius() -> void:
+	var collision_shape := _player.get_node("CollisionShape2D") as CollisionShape2D
+	var circle := collision_shape.shape as CircleShape2D
+	assert_eq(circle.radius, 12.0, "Player collision radius should be 12")
+
+func test_stage2_player_initial_position() -> void:
+	assert_eq(_player.position, Vector2(960, 540), "Player should spawn at center")
+
+func test_stage2_player_moves_on_input() -> void:
+	var start_pos := _player.position
+	Input.action_press("move_right")
+	_simulate_frames(5)
+	Input.action_release("move_right")
+	assert_gt(_player.position.x, start_pos.x, "Player should move right")
+	assert_almost_eq(_player.position.y, start_pos.y, 0.1, "Player should not move vertically")
+
+func test_stage2_simultaneous_movement() -> void:
+	var start_pos := _player.position
+	Input.action_press("move_right")
+	Input.action_press("move_down")
+	_simulate_frames(10)
+	Input.action_release("move_right")
+	Input.action_release("move_down")
+	var delta_pos := _player.position - start_pos
+	var ratio := delta_pos.x / delta_pos.y if delta_pos.y != 0.0 else 0.0
+	assert_almost_eq(ratio, 1.0, 0.01, "Diagonal movement should be equal in both axes")
+
+func test_stage2_player_stops_on_release() -> void:
+	Input.action_press("move_right")
+	_simulate_frames(5)
+	Input.action_release("move_right")
+	_simulate_frames(1)
+	var pos_after_release := _player.position
+	_simulate_frames(5)
+	assert_eq(_player.position, pos_after_release, "Player should stop immediately on key release")
+
+func _simulate_frames(count: int) -> void:
+	for i in count:
+		get_tree().physics_frame.emit()
+		_player._physics_process(get_physics_process_delta_time())
