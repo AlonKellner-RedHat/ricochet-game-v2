@@ -38,6 +38,41 @@ func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 
 	return violations
 
+static func check_S11(segment: Segment) -> Array[String]:
+	var violations: Array[String] = []
+	var carrier := segment.get_carrier()
+	var eps := 0.01
+	var f_start := carrier.evaluate(segment.start)
+	var f_end := carrier.evaluate(segment.end)
+	var f_via := carrier.evaluate(segment.via)
+	if absf(f_start) > eps:
+		violations.append("S11: start evaluates to %f (expected ~0) on carrier" % f_start)
+	if absf(f_end) > eps:
+		violations.append("S11: end evaluates to %f (expected ~0) on carrier" % f_end)
+	if segment.via != Vector2(INF, INF) and absf(f_via) > eps:
+		violations.append("S11: via evaluates to %f (expected ~0) on carrier" % f_via)
+	return violations
+
+static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[String]:
+	var violations: Array[String] = []
+	for point in test_points:
+		var carrier := segment.get_carrier()
+		var f_val := carrier.evaluate(point)
+		if absf(f_val) < 1e-10:
+			continue
+		var side := segment.determine_side(point)
+		var traversal := segment.end - segment.start
+		var to_point := point - segment.start
+		var cross_val := traversal.cross(to_point)
+		var expected_side: Side.Value
+		if cross_val < 0.0:
+			expected_side = Side.Value.LEFT
+		else:
+			expected_side = Side.Value.RIGHT
+		if carrier.is_line() and side != expected_side:
+			violations.append("S12: point %s side=%d expected=%d (cross=%f)" % [point, side, expected_side, cross_val])
+	return violations
+
 func _position_nodes(player_pos: Vector2, cursor_pos: Vector2) -> void:
 	if _player:
 		_player.global_position = player_pos
