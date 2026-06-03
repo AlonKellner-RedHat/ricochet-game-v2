@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3 uid="uid://bru25try0j4yd"]
+[gd_scene load_steps=6 format=3 uid="uid://bru25try0j4yd"]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1"]
 [ext_resource type="Script" path="res://scripts/game/level_settings.gd" id="2"]
 [ext_resource type="Script" path="res://scripts/game/cursor.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/visual/path_renderer.gd" id="4"]
 
 [sub_resource type="SegmentShape2D" id="floor_shape"]
 a = Vector2(0, 0)
@@ -28,3 +29,6 @@ position = Vector2(960, 540)
 
 [node name="Cursor" type="Node2D" parent="."]
 script = ExtResource("3")
+
+[node name="PathRenderer" type="Node2D" parent="."]
+script = ExtResource("4")
