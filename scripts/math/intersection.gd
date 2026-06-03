@@ -11,6 +11,69 @@ class HitCandidate extends RefCounted:
 		point = p_point
 		segment = p_segment
 
+class HitRecord extends RefCounted:
+	var t: float
+	var point: Vector2
+	var segment: Segment
+	var side: Side.Value
+
+	func _init(p_t: float, p_point: Vector2, p_segment: Segment, p_side: Side.Value) -> void:
+		t = p_t
+		point = p_point
+		segment = p_segment
+		side = p_side
+
+const ORIGIN_EXCLUSION_THRESHOLD := 1e-10
+
+static func find_earliest_hit(ray: Ray, segments: Array, excluded_segments: Array = []) -> RefCounted:
+	var excluded_set: Dictionary = {}
+	for seg in excluded_segments:
+		excluded_set[seg] = true
+
+	var forward: Array = []
+	var beyond: Array = []
+
+	for seg in segments:
+		if excluded_set.has(seg):
+			continue
+		var candidates := intersect_line_with_gcircle(ray, seg)
+		for candidate in candidates:
+			if absf(candidate.t) < ORIGIN_EXCLUSION_THRESHOLD:
+				continue
+			var side := _determine_side_at_hit(ray, candidate)
+			var record := HitRecord.new(candidate.t, candidate.point, candidate.segment, side)
+			if candidate.t > 0.0:
+				forward.append(record)
+			else:
+				beyond.append(record)
+
+	if forward.size() > 0:
+		return _select_winner(forward, true)
+	elif beyond.size() > 0:
+		return _select_winner(beyond, false)
+	return null
+
+static func _select_winner(hits: Array, pick_smallest: bool) -> RefCounted:
+	var winner = hits[0]
+	for i in range(1, hits.size()):
+		var hit = hits[i]
+		if pick_smallest:
+			if hit.t < winner.t:
+				winner = hit
+			elif hit.t == winner.t and hit.segment.get_instance_id() < winner.segment.get_instance_id():
+				winner = hit
+		else:
+			if hit.t < winner.t:
+				winner = hit
+			elif hit.t == winner.t and hit.segment.get_instance_id() < winner.segment.get_instance_id():
+				winner = hit
+	return winner
+
+static func _determine_side_at_hit(ray: Ray, candidate: HitCandidate) -> Side.Value:
+	var dir := ray.direction.to_vector().normalized()
+	var approach_point := candidate.point - dir * 0.001
+	return candidate.segment.determine_side(approach_point)
+
 static func intersect_line_with_gcircle(ray: Ray, segment: Segment) -> Array:
 	var origin := ray.origin
 	var dir := ray.direction.to_vector()
