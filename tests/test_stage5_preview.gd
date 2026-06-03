@@ -14,17 +14,26 @@ func before_each() -> void:
 	_renderer = _main_scene.get_node("PathRenderer")
 
 func test_stage5_preview_exists_when_cursor_differs() -> void:
-	_cursor.global_position = Vector2(500, 300)
+	_cursor.global_position = Vector2(800, 400)
+	_renderer._compute_trace()
 	assert_true(_renderer.has_line(), "Renderer should have a line when cursor differs from player")
 
 func test_stage5_preview_absent_when_cursor_equals_player() -> void:
 	_cursor.global_position = _player.global_position
+	_renderer._compute_trace()
 	assert_false(_renderer.has_line(), "Renderer should have no line when cursor equals player")
 
 func test_stage5_preview_color_green() -> void:
 	assert_eq(_renderer.LINE_COLOR, Color.GREEN, "Preview line color should be green")
 
-func test_stage5_preview_endpoints() -> void:
-	_cursor.global_position = Vector2(500, 300)
+func test_stage5_preview_starts_at_player() -> void:
+	_cursor.global_position = Vector2(800, 400)
+	_renderer._compute_trace()
 	assert_eq(_renderer.get_line_from(), _player.global_position, "Line should start at player position")
-	assert_eq(_renderer.get_line_to(), _cursor.global_position, "Line should end at cursor position")
+
+func test_stage5_preview_direction_toward_cursor() -> void:
+	_cursor.global_position = Vector2(800, 400)
+	_renderer._compute_trace()
+	var expected_dir := (_cursor.global_position - _player.global_position).normalized()
+	var actual_dir: Vector2 = _renderer.get_line_direction()
+	assert_almost_eq(expected_dir.dot(actual_dir), 1.0, 0.01, "Line should point toward cursor")

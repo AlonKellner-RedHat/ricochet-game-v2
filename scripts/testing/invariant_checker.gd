@@ -15,7 +15,10 @@ func setup(scene: Node) -> void:
 func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
 	_position_nodes(player_pos, cursor_pos)
+	if _renderer:
+		_renderer._compute_trace()
 	violations.append_array(check_UX7(player_pos, cursor_pos))
+	violations.append_array(check_PREVIEW_NOGAPS(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -30,11 +33,30 @@ func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 		else:
 			if _renderer.get_line_from() != player_pos:
 				violations.append("UX7: Line start %s != player %s" % [_renderer.get_line_from(), player_pos])
-			if _renderer.get_line_to() != cursor_pos:
-				violations.append("UX7: Line end %s != cursor %s" % [_renderer.get_line_to(), cursor_pos])
+			var expected_dir := (cursor_pos - player_pos).normalized()
+			var actual_dir: Vector2 = _renderer.get_line_direction()
+			if expected_dir.dot(actual_dir) < 0.99:
+				violations.append("UX7: Line direction %s not toward cursor direction %s" % [actual_dir, expected_dir])
 	else:
 		if _renderer.has_line():
 			violations.append("UX7: Line present when cursor == player at %s" % [player_pos])
+
+	return violations
+
+func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+
+	var path = _renderer.get_traced_path()
+	if path == null:
+		return violations
+
+	for i in range(1, path.steps.size()):
+		var prev_end: Vector2 = path.steps[i - 1].end
+		var curr_start: Vector2 = path.steps[i].start
+		if prev_end.distance_to(curr_start) > 0.01:
+			violations.append("PREVIEW-NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev_end, i, curr_start])
 
 	return violations
 
