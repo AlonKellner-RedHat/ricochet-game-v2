@@ -2,13 +2,38 @@ extends CharacterBody2D
 
 const SPEED := 200.0
 const COLLISION_RADIUS := 12.0
+const JUMP_VELOCITY := 400.0
 
-func _physics_process(_delta: float) -> void:
-	var input_dir := Vector2(
-		Input.get_axis("move_left", "move_right"),
-		Input.get_axis("move_up", "move_down"),
-	)
-	if input_dir.length_squared() > 0.0:
-		input_dir = input_dir.normalized()
-	velocity = input_dir * SPEED
+func get_level_gravity() -> Vector2:
+	var parent := get_parent()
+	if parent and parent.has_method("get") and "gravity" in parent:
+		return parent.gravity
+	return Vector2.ZERO
+
+func has_level_gravity() -> bool:
+	return get_level_gravity().length_squared() > 0.0
+
+func _physics_process(delta: float) -> void:
+	var gravity_vec := get_level_gravity()
+
+	if has_level_gravity():
+		if not is_on_floor():
+			velocity += gravity_vec * delta
+		else:
+			velocity.y = 0.0
+
+		var horizontal := Input.get_axis("move_left", "move_right")
+		velocity.x = horizontal * SPEED
+
+		if is_on_floor() and Input.is_action_just_pressed("move_up"):
+			velocity.y = -JUMP_VELOCITY
+	else:
+		var input_dir := Vector2(
+			Input.get_axis("move_left", "move_right"),
+			Input.get_axis("move_up", "move_down"),
+		)
+		if input_dir.length_squared() > 0.0:
+			input_dir = input_dir.normalized()
+		velocity = input_dir * SPEED
+
 	move_and_slide()

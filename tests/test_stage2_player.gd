@@ -6,6 +6,7 @@ var _main_scene: Node
 func before_each() -> void:
 	_main_scene = load("res://scenes/main.tscn").instantiate()
 	add_child_autofree(_main_scene)
+	_main_scene.gravity = Vector2.ZERO
 	_player = _main_scene.get_node("Player")
 
 func test_stage2_player_speed_constant() -> void:
