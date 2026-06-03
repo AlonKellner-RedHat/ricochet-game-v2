@@ -73,6 +73,25 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 			violations.append("S12: point %s side=%d expected=%d (cross=%f)" % [point, side, expected_side, cross_val])
 	return violations
 
+static func check_S1(cache: TransformCache, start: Point, end_pt: Point, via: Point, is_line: bool = false) -> Array[String]:
+	var violations: Array[String] = []
+	var carrier := cache.derive_carrier_cached(start, end_pt, via, is_line)
+	var recovered := cache.derive_via_cached(start, end_pt, carrier)
+	if recovered == null:
+		violations.append("S1: derive_via returned null — cache miss")
+	elif recovered.id != via.id:
+		violations.append("S1: round-trip via ID %d != original %d" % [recovered.id, via.id])
+	return violations
+
+static func check_S17(points: Array[Point]) -> Array[String]:
+	var violations: Array[String] = []
+	var seen_ids: Dictionary = {}
+	for p in points:
+		if seen_ids.has(p.id):
+			violations.append("S17: duplicate Point ID %d" % p.id)
+		seen_ids[p.id] = true
+	return violations
+
 func _position_nodes(player_pos: Vector2, cursor_pos: Vector2) -> void:
 	if _player:
 		_player.global_position = player_pos

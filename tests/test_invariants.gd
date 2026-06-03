@@ -68,6 +68,39 @@ func test_invariant_S11_S12_segments() -> void:
 	else:
 		pass_test("S11/S12 passed across %d segments × %d test points" % [test_segments.size(), test_points.size()])
 
+func test_invariant_S1_carrier_roundtrip() -> void:
+	Point.reset_id_counter()
+	var cache := TransformCache.new()
+	var test_cases: Array[Dictionary] = [
+		{"s": Vector2(0, 0), "e": Vector2(10, 0), "v": Vector2(5, 0), "line": true},
+		{"s": Vector2(100, 400), "e": Vector2(100, 200), "v": Vector2(100, 300), "line": true},
+		{"s": Vector2(200, 100), "e": Vector2(200, 300), "v": Vector2(300, 200), "line": false},
+		{"s": Vector2(0, 0), "e": Vector2(10, 0), "v": Vector2(INF, INF), "line": true},
+	]
+
+	var all_violations: Array[String] = []
+	for tc: Dictionary in test_cases:
+		var start := Point.new(tc.s as Vector2, Point.Provenance.SEGMENT_START)
+		var end_pt := Point.new(tc.e as Vector2, Point.Provenance.SEGMENT_END)
+		var via := Point.new(tc.v as Vector2, Point.Provenance.SEGMENT_VIA)
+		all_violations.append_array(InvariantChecker.check_S1(cache, start, end_pt, via, tc.line as bool))
+
+	if all_violations.size() > 0:
+		fail_test("S1 violations: %s" % str(all_violations))
+	else:
+		pass_test("S1 passed across %d segment configs" % test_cases.size())
+
+func test_invariant_S17_unique_ids() -> void:
+	Point.reset_id_counter()
+	var points: Array[Point] = []
+	for i in 50:
+		points.append(Point.new(Vector2(i, i), Point.Provenance.values()[i % Point.Provenance.size()]))
+	var violations := InvariantChecker.check_S17(points)
+	if violations.size() > 0:
+		fail_test("S17 violations: %s" % str(violations))
+	else:
+		pass_test("S17 passed: %d points all have unique IDs" % points.size())
+
 func _discover_test_scenes() -> Array[String]:
 	var scenes: Array[String] = []
 	var dir := DirAccess.open(TEST_LEVELS_DIR)
