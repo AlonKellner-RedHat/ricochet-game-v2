@@ -23,8 +23,6 @@ class HitRecord extends RefCounted:
 		segment = p_segment
 		side = p_side
 
-const ORIGIN_EXCLUSION_THRESHOLD := 1e-10
-
 static func find_earliest_hit(ray: Ray, segments: Array, excluded_segments: Array = []) -> RefCounted:
 	var excluded_set: Dictionary = {}
 	for seg in excluded_segments:
@@ -38,7 +36,7 @@ static func find_earliest_hit(ray: Ray, segments: Array, excluded_segments: Arra
 			continue
 		var candidates := intersect_line_with_gcircle(ray, seg)
 		for candidate in candidates:
-			if absf(candidate.t) < ORIGIN_EXCLUSION_THRESHOLD:
+			if candidate.point == ray.origin:
 				continue
 			var side := _determine_side_at_hit(ray, candidate)
 			var record := HitRecord.new(candidate.t, candidate.point, candidate.segment, side)
@@ -93,8 +91,8 @@ static func intersect_line_with_gcircle(ray: Ray, segment: Segment) -> Array:
 
 	var t_values: Array[float] = []
 
-	if absf(qa) < 1e-30:
-		if absf(qb) < 1e-30:
+	if qa == 0.0:
+		if qb == 0.0:
 			return []
 		t_values.append(-qc / qb)
 	else:
@@ -116,50 +114,35 @@ static func intersect_line_with_gcircle(ray: Ray, segment: Segment) -> Array:
 	return results
 
 static func _is_on_segment(point: Vector2, segment: Segment) -> bool:
-	if segment.is_line():
-		return _is_on_line_segment(point, segment)
-	return _is_on_arc_segment(point, segment)
+	var zP := Vector2(point.x, point.y)
+	var wP := 1.0
+	var zS := Vector2(segment.start.x, segment.start.y)
+	var wS := 1.0
+	var zE := Vector2(segment.end.x, segment.end.y)
+	var wE := 1.0
+	var zV: Vector2
+	var wV: float
+	if is_inf(segment.via.x) or is_inf(segment.via.y):
+		zV = Vector2(1.0, 0.0)
+		wV = 0.0
+	else:
+		zV = Vector2(segment.via.x, segment.via.y)
+		wV = 1.0
 
-static func _is_on_line_segment(point: Vector2, segment: Segment) -> bool:
-	var is_inf_segment := is_inf(segment.via.x) or is_inf(segment.via.y)
+	var sv := _hdet(zS, wS, zV, wV)
+	var ep := _hdet(zE, wE, zP, wP)
+	var sp := _hdet(zS, wS, zP, wP)
+	var ev := _hdet(zE, wE, zV, wV)
 
-	var seg_dir := segment.end - segment.start
-	var to_point := point - segment.start
-	var seg_len_sq := seg_dir.length_squared()
+	var num := MobiusTransform.cmul(sv, ep)
+	var den := MobiusTransform.cmul(sp, ev)
 
-	if seg_len_sq == 0.0:
-		return point == segment.start
+	var den_conj := MobiusTransform.cconj(den)
+	var product := MobiusTransform.cmul(num, den_conj)
+	return product.x >= 0.0
 
-	var param := seg_dir.dot(to_point) / seg_len_sq
-	var is_between := param >= 0.0 and param <= 1.0
-
-	if is_inf_segment:
-		return not is_between
-	return is_between
-
-static func _is_on_arc_segment(point: Vector2, segment: Segment) -> bool:
-	var carrier := segment.get_carrier()
-	var center := carrier.center()
-
-	if segment.start == segment.end:
-		return true
-
-	var cp := point - center
-	var cs := segment.start - center
-	if cp.cross(cs) == 0.0 and cp.dot(cs) > 0.0:
-		return true
-	var ce := segment.end - center
-	if cp.cross(ce) == 0.0 and cp.dot(ce) > 0.0:
-		return true
-
-	var cv := segment.via - center
-
-	var cross_sv := cs.cross(cv)
-	var cross_sp := cs.cross(cp)
-	var cross_ve := cv.cross(ce)
-	var cross_vp := cv.cross(cp)
-
-	return _same_sign(cross_sp, cross_sv) and _same_sign(cross_vp, cross_ve)
+static func _hdet(zA: Vector2, wA: float, zB: Vector2, wB: float) -> Vector2:
+	return Vector2(zA.x * wB - zB.x * wA, zA.y * wB - zB.y * wA)
 
 static func _same_sign(a: float, b: float) -> bool:
 	return (a >= 0.0 and b >= 0.0) or (a <= 0.0 and b <= 0.0)
