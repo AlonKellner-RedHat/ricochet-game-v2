@@ -13,6 +13,7 @@ var _progress_along_step := 0.0
 var _flying := false
 var _arrow_position := Vector2.ZERO
 var _arrow_direction := Vector2.RIGHT
+var _speed_multiplier := 1.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -23,6 +24,7 @@ func start_flight(path: Tracer.TracedPath) -> void:
 	_current_step_index = 0
 	_progress_along_step = 0.0
 	_flying = true
+	_speed_multiplier = 1.0
 	visible = true
 	if _path.steps.size() > 0:
 		var step: Tracer.Step = _path.steps[0]
@@ -30,9 +32,9 @@ func start_flight(path: Tracer.TracedPath) -> void:
 		_arrow_direction = (step.end - step.start).normalized()
 	queue_redraw()
 
-func skip_animation() -> void:
+func speed_up() -> void:
 	if _flying:
-		_finish_flight()
+		_speed_multiplier *= 10.0
 
 func is_flying() -> bool:
 	return _flying
@@ -41,7 +43,7 @@ func _process(delta: float) -> void:
 	if not _flying or _path == null:
 		return
 
-	var distance := ARROW_SPEED * delta
+	var distance := ARROW_SPEED * _speed_multiplier * delta
 	while distance > 0.0 and _current_step_index < _path.steps.size():
 		var step: Tracer.Step = _path.steps[_current_step_index]
 		var step_length: float = step.start.distance_to(step.end)

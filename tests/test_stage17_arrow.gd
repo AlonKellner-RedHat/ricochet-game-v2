@@ -26,6 +26,11 @@ func _fire_at(cursor_pos: Vector2) -> void:
 	_cursor.global_position = cursor_pos
 	_game_mgr._try_fire()
 
+func _fast_forward() -> void:
+	_arrow.speed_up()
+	_arrow.speed_up()
+	_arrow._process(1.0)
+
 func test_stage17_fire_pauses_tree() -> void:
 	_fire_at(Vector2(1200, 540))
 	assert_true(get_tree().paused, "Tree should be paused during flight")
@@ -55,17 +60,17 @@ func test_stage17_fire_starts_flying() -> void:
 
 func test_stage17_flight_completed_unpauses() -> void:
 	_fire_at(Vector2(1200, 540))
-	_arrow.skip_animation()
+	_fast_forward()
 	assert_false(get_tree().paused, "Tree should be unpaused after flight completes")
 
 func test_stage17_preview_reappears_after_flight() -> void:
 	_fire_at(Vector2(1200, 540))
-	_arrow.skip_animation()
+	_fast_forward()
 	assert_almost_eq(_renderer.modulate.a, 1.0, 0.01, "Preview should be fully opaque after flight")
 
 func test_stage17_arrow_disappears_after_flight() -> void:
 	_fire_at(Vector2(1200, 540))
-	_arrow.skip_animation()
+	_fast_forward()
 	assert_false(_arrow.visible, "Arrow should be hidden after flight")
 	assert_false(_arrow.is_flying(), "Arrow should not be flying after completion")
 

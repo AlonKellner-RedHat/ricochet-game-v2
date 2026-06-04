@@ -31,7 +31,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					is_movement = true
 					break
 			if not is_movement:
-				_arrow_animator.skip_animation()
+				_arrow_animator.speed_up()
 		return
 
 	if event.is_action_pressed("fire"):
