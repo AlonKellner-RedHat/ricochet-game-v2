@@ -45,9 +45,6 @@ func _get_surfaces() -> Array:
 	return []
 
 func _get_bounds() -> Rect2:
-	var parent := get_parent()
-	if parent and "room_rect" in parent:
-		return parent.room_rect
 	return Tracer.DEFAULT_BOUNDS
 
 func _draw() -> void:

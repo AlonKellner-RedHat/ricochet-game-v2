@@ -36,12 +36,8 @@ func _try_fire() -> void:
 	if _level_settings and "surfaces" in _level_settings:
 		surfaces = _level_settings.surfaces
 
-	var bounds: Rect2 = Tracer.DEFAULT_BOUNDS
-	if _level_settings and "room_rect" in _level_settings:
-		bounds = _level_settings.room_rect
-
 	var dir := Direction.new(player_pos, cursor_pos)
-	var path := Tracer.trace(player_pos, dir, surfaces, GameState.new(), bounds)
+	var path := Tracer.trace(player_pos, dir, surfaces, GameState.new())
 
 	if _path_renderer:
 		_path_renderer.modulate.a = 0.25
