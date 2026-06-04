@@ -90,6 +90,24 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	return path
 
+static func transform_all(surfaces: Array, mobius: MobiusTransform) -> Array:
+	var result: Array = []
+	for surf in surfaces:
+		var s: Vector2 = mobius.apply(surf.segment.start)
+		var e: Vector2 = mobius.apply(surf.segment.end)
+		var v: Vector2
+		if is_inf(surf.segment.via.x) or is_inf(surf.segment.via.y):
+			v = Vector2(INF, INF)
+		else:
+			v = mobius.apply(surf.segment.via)
+		var new_seg := Segment.new(s, e, v)
+		var state := GameState.new()
+		var left: SideConfig = surf.active_side_config(Side.Value.LEFT, state)
+		var right: SideConfig = surf.active_side_config(Side.Value.RIGHT, state)
+		var new_surf := Surface.new(new_seg, left, right, surf.is_target, surf.player_solid)
+		result.append(new_surf)
+	return result
+
 static func _clip_to_bounds_edge(origin: Vector2, dir: Vector2, bounds: Rect2) -> Vector2:
 	var min_t := INF
 	if dir.x > 0.0:
