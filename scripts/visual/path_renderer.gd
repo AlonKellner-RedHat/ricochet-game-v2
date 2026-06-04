@@ -71,6 +71,16 @@ func _draw() -> void:
 		else:
 			_draw_dashed_line(from, to)
 
+	_draw_hit_points()
+
+func _draw_hit_points() -> void:
+	var hit_color := Color(1.0, 1.0, 0.0, 0.35)
+	for i in _traced_path.steps.size():
+		var step: Tracer.Step = _traced_path.steps[i]
+		if step.hit != null:
+			var pos: Vector2 = step.end - global_position
+			draw_circle(pos, 5.0, hit_color)
+
 func _draw_solid_line(from: Vector2, to: Vector2) -> void:
 	if from == to:
 		return
