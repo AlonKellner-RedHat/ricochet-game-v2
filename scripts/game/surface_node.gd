@@ -47,18 +47,28 @@ func _draw() -> void:
 	if left_color == right_color:
 		draw_line(surface.segment.start, surface.segment.end, left_color, LINE_WIDTH)
 	else:
+		var mid := (surface.segment.start + surface.segment.end) / 2.0
 		var seg_dir := (surface.segment.end - surface.segment.start).normalized()
 		var normal := Vector2(-seg_dir.y, seg_dir.x)
+		var test_point := mid + normal * SIDE_OFFSET
+		var side_at_normal: Side.Value = surface.segment.determine_side(test_point)
 		var offset := normal * SIDE_OFFSET
 		var left_alpha := 1.0 if left_config.interactive else 0.5
 		var right_alpha := 1.0 if right_config.interactive else 0.5
-		draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
-		draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+		if side_at_normal == Side.Value.LEFT:
+			draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
+			draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+		else:
+			draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+			draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
 
 	if _hover_side >= 0:
-		var seg_dir := (surface.segment.end - surface.segment.start).normalized()
-		var normal := Vector2(-seg_dir.y, seg_dir.x)
-		var hover_offset := normal * (SIDE_OFFSET + 2.0) * (1.0 if _hover_side == Side.Value.LEFT else -1.0)
+		var seg_dir2 := (surface.segment.end - surface.segment.start).normalized()
+		var normal2 := Vector2(-seg_dir2.y, seg_dir2.x)
+		var mid2 := (surface.segment.start + surface.segment.end) / 2.0
+		var side_at_n2: Side.Value = surface.segment.determine_side(mid2 + normal2 * SIDE_OFFSET)
+		var sign2 := 1.0 if side_at_n2 == _hover_side else -1.0
+		var hover_offset := normal2 * (SIDE_OFFSET + 2.0) * sign2
 		draw_line(surface.segment.start + hover_offset, surface.segment.end + hover_offset, HOVER_COLOR, HOVER_WIDTH)
 
 	if _plan_indices.size() > 0:
