@@ -11,6 +11,7 @@ var _plan_hud: Control
 
 var plan := PlanManager.new()
 var click_detector := ClickDetector.new()
+var _hovered_node: Node2D = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -23,6 +24,35 @@ func _ready() -> void:
 	_plan_hud = parent.get_node_or_null("PlanHUD")
 	if _arrow_animator:
 		_arrow_animator.flight_completed.connect(_on_flight_completed)
+
+func _process(_delta: float) -> void:
+	_update_hover()
+
+func _update_hover() -> void:
+	if not _cursor or not _level_settings:
+		return
+	if _arrow_animator and _arrow_animator.is_flying():
+		_clear_all_hover()
+		return
+
+	var surfaces := _get_surfaces()
+	var result := click_detector.detect_hover(_cursor.global_position, surfaces)
+
+	_clear_all_hover()
+
+	if not result.is_empty():
+		var surf: Surface = result.surface
+		var side: Side.Value = result.side
+		for child in _level_settings.get_children():
+			if child.has_method("set_hover_side") and "surface" in child and child.surface == surf:
+				child.set_hover_side(side)
+				_hovered_node = child
+				break
+
+func _clear_all_hover() -> void:
+	if _hovered_node and is_instance_valid(_hovered_node):
+		_hovered_node.clear_hover()
+	_hovered_node = null
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _arrow_animator and _arrow_animator.is_flying():

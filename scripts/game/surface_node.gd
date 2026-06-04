@@ -6,14 +6,26 @@ const BLOCK_COLOR := Color.RED
 const REFLECTION_COLOR := Color.BLUE
 const PASSTHROUGH_COLOR := Color.GRAY
 
+const HOVER_COLOR := Color(1.0, 1.0, 1.0, 0.3)
+const HOVER_WIDTH := 8.0
+
 var surface: Surface
 var _plan_indices: Array[int] = []
+var _hover_side: int = -1
 
 func setup(p_surface: Surface) -> void:
 	surface = p_surface
 	if surface.player_solid and surface.segment.is_line():
 		_add_collision_shape()
 	queue_redraw()
+
+func set_hover_side(side: int) -> void:
+	if _hover_side != side:
+		_hover_side = side
+		queue_redraw()
+
+func clear_hover() -> void:
+	set_hover_side(-1)
 
 func update_plan_overlay(plan: PlanManager) -> void:
 	_plan_indices.clear()
@@ -42,6 +54,12 @@ func _draw() -> void:
 		var right_alpha := 1.0 if right_config.interactive else 0.5
 		draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
 		draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+
+	if _hover_side >= 0:
+		var seg_dir := (surface.segment.end - surface.segment.start).normalized()
+		var normal := Vector2(-seg_dir.y, seg_dir.x)
+		var hover_offset := normal * (SIDE_OFFSET + 2.0) * (1.0 if _hover_side == Side.Value.LEFT else -1.0)
+		draw_line(surface.segment.start + hover_offset, surface.segment.end + hover_offset, HOVER_COLOR, HOVER_WIDTH)
 
 	if _plan_indices.size() > 0:
 		var mid := (surface.segment.start + surface.segment.end) / 2.0
