@@ -11,7 +11,7 @@ class TypedStep extends RefCounted:
 		end = p_end
 		type = p_type
 
-static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_pos: Vector2, surfaces: Array, bounds: Rect2 = Tracer.DEFAULT_BOUNDS) -> Array:
+static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_pos: Vector2, surfaces: Array, bounds: Rect2 = Tracer.DEFAULT_BOUNDS, planned_surface_ids: Array[int] = []) -> Array:
 	if traced_path == null or traced_path.steps.size() == 0:
 		return []
 
@@ -19,7 +19,7 @@ static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_po
 	var cursor_dir: Vector2 = (cursor_pos - player_pos).normalized()
 	var typed_steps: Array = []
 
-	var div := _find_divergence(traced_path, cursor_dist, surfaces)
+	var div := _find_divergence(traced_path, cursor_dist, surfaces, planned_surface_ids)
 	var div_index: int = div[0]
 	var div_point: Vector2 = div[1]
 
@@ -33,13 +33,17 @@ static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_po
 
 	return typed_steps
 
-static func _find_divergence(path: Tracer.TracedPath, cursor_dist: float, surfaces: Array) -> Array:
+static func _find_divergence(path: Tracer.TracedPath, cursor_dist: float, surfaces: Array, planned_surface_ids: Array[int] = []) -> Array:
 	var accumulated := 0.0
 	for i in path.steps.size():
 		var step: Tracer.Step = path.steps[i]
 		var step_len: float = step.start.distance_to(step.end)
 
 		if step.hit != null and accumulated + step_len <= cursor_dist + 0.01:
+			var hit_surface_id := _get_surface_id_for_hit(step.hit, surfaces)
+			if hit_surface_id >= 0 and hit_surface_id in planned_surface_ids:
+				accumulated += step_len
+				continue
 			var config: SideConfig = _get_config_for_hit(step.hit, surfaces)
 			if config != null and config.effect != null:
 				return [i + 1, step.end]
@@ -49,6 +53,12 @@ static func _find_divergence(path: Tracer.TracedPath, cursor_dist: float, surfac
 			return [-1, Vector2.ZERO]
 
 	return [-1, Vector2.ZERO]
+
+static func _get_surface_id_for_hit(hit: RefCounted, surfaces: Array) -> int:
+	for surf in surfaces:
+		if surf.segment == hit.segment:
+			return surf.id
+	return -1
 
 static func _build_aligned(path: Tracer.TracedPath, _player_pos: Vector2, _cursor_pos: Vector2, cursor_dist: float) -> Array:
 	var result: Array = []

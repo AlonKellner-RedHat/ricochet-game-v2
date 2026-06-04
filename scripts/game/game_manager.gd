@@ -128,7 +128,7 @@ func _try_fire() -> void:
 		return
 
 	var surfaces := _get_surfaces()
-	var dir := Direction.new(player_pos, cursor_pos)
+	var dir := _compute_aim_direction(player_pos, cursor_pos, surfaces)
 	var path := Tracer.trace(player_pos, dir, surfaces, GameState.new())
 
 	if _path_renderer:
@@ -143,6 +143,15 @@ func _on_flight_completed() -> void:
 	get_tree().paused = false
 	if _path_renderer:
 		_path_renderer.modulate.a = 1.0
+
+func _compute_aim_direction(player_pos: Vector2, cursor_pos: Vector2, surfaces: Array) -> Direction:
+	if not plan.is_empty():
+		var planned := Planner.plan_transformative_subchain(
+			player_pos, cursor_pos, plan.entries, surfaces, GameState.new())
+		if planned.steps.size() > 0:
+			var first_step: Tracer.Step = planned.steps[0]
+			return Direction.new(player_pos, first_step.end)
+	return Direction.new(player_pos, cursor_pos)
 
 func _get_surfaces() -> Array:
 	if _level_settings and "surfaces" in _level_settings:
