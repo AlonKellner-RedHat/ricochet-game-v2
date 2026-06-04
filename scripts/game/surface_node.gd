@@ -7,11 +7,20 @@ const REFLECTION_COLOR := Color.BLUE
 const PASSTHROUGH_COLOR := Color.GRAY
 
 var surface: Surface
+var _plan_indices: Array[int] = []
 
 func setup(p_surface: Surface) -> void:
 	surface = p_surface
 	if surface.player_solid and surface.segment.is_line():
 		_add_collision_shape()
+	queue_redraw()
+
+func update_plan_overlay(plan: PlanManager) -> void:
+	_plan_indices.clear()
+	for i in plan.size():
+		var entry: PlanManager.PlanEntry = plan.get_entry(i)
+		if entry.surface_id == surface.id:
+			_plan_indices.append(i + 1)
 	queue_redraw()
 
 func _draw() -> void:
@@ -33,6 +42,15 @@ func _draw() -> void:
 		var right_alpha := 1.0 if right_config.interactive else 0.5
 		draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
 		draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+
+	if _plan_indices.size() > 0:
+		var mid := (surface.segment.start + surface.segment.end) / 2.0
+		var label_text := ""
+		for idx in _plan_indices:
+			if label_text != "":
+				label_text += ","
+			label_text += str(idx)
+		draw_string(ThemeDB.fallback_font, mid + Vector2(-5, -10), label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
 
 func _effect_color(config: SideConfig) -> Color:
 	if config == null or config.effect == null:

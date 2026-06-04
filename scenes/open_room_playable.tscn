@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1"]
 [ext_resource type="Script" path="res://scripts/game/level_settings.gd" id="2"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/visual/path_renderer.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/game/arrow_animator.gd" id="5"]
 [ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/game/plan_hud.gd" id="7"]
 
 [sub_resource type="SegmentShape2D" id="floor_shape"]
 a = Vector2(560, 0)
@@ -45,3 +46,6 @@ script = ExtResource("5")
 
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("6")
+
+[node name="PlanHUD" type="Control" parent="."]
+script = ExtResource("7")

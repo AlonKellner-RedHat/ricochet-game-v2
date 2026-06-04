@@ -7,6 +7,10 @@ var _cursor: Node2D
 var _arrow_animator: Node2D
 var _path_renderer: Node2D
 var _level_settings: Node2D
+var _plan_hud: Control
+
+var plan := PlanManager.new()
+var click_detector := ClickDetector.new()
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -16,14 +20,12 @@ func _ready() -> void:
 	_arrow_animator = parent.get_node_or_null("ArrowAnimator")
 	_path_renderer = parent.get_node_or_null("PathRenderer")
 	_level_settings = parent
+	_plan_hud = parent.get_node_or_null("PlanHUD")
 	if _arrow_animator:
 		_arrow_animator.flight_completed.connect(_on_flight_completed)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _arrow_animator:
-		return
-
-	if _arrow_animator.is_flying():
+	if _arrow_animator and _arrow_animator.is_flying():
 		if event is InputEventKey and event.pressed and not event.echo:
 			var is_movement := false
 			for action in MOVEMENT_ACTIONS:
@@ -38,8 +40,31 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dump_debug_state()
 		return
 
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_C:
+		plan.clear()
+		_update_hud()
+		return
+
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_try_plan_click()
+			return
+
 	if event.is_action_pressed("fire"):
 		_try_fire()
+
+func _try_plan_click() -> void:
+	if not _cursor:
+		return
+	var surfaces := _get_surfaces()
+	var result := click_detector.detect_click(_cursor.global_position, surfaces)
+	if result.is_empty():
+		return
+	var surf: Surface = result.surface
+	var side: Side.Value = result.side
+	plan.add_entry(surf.id, side)
+	_update_hud()
+	_update_surface_overlays()
 
 func _try_fire() -> void:
 	if not _player or not _cursor:
@@ -50,10 +75,7 @@ func _try_fire() -> void:
 	if player_pos == cursor_pos:
 		return
 
-	var surfaces: Array = []
-	if _level_settings and "surfaces" in _level_settings:
-		surfaces = _level_settings.surfaces
-
+	var surfaces := _get_surfaces()
 	var dir := Direction.new(player_pos, cursor_pos)
 	var path := Tracer.trace(player_pos, dir, surfaces, GameState.new())
 
@@ -70,6 +92,23 @@ func _on_flight_completed() -> void:
 	if _path_renderer:
 		_path_renderer.modulate.a = 1.0
 
+func _get_surfaces() -> Array:
+	if _level_settings and "surfaces" in _level_settings:
+		return _level_settings.surfaces
+	return []
+
+func _update_hud() -> void:
+	if not _plan_hud:
+		return
+	_plan_hud.update_plan(plan, _get_surfaces())
+
+func _update_surface_overlays() -> void:
+	if not _level_settings:
+		return
+	for child in _level_settings.get_children():
+		if child.has_method("update_plan_overlay"):
+			child.update_plan_overlay(plan)
+
 func _dump_debug_state() -> void:
 	var lines: PackedStringArray = []
 	lines.append("=== DEBUG STATE (F12) ===")
@@ -78,9 +117,7 @@ func _dump_debug_state() -> void:
 	if _cursor:
 		lines.append("Cursor: %s" % _cursor.global_position)
 
-	var surfaces: Array = []
-	if _level_settings and "surfaces" in _level_settings:
-		surfaces = _level_settings.surfaces
+	var surfaces := _get_surfaces()
 	lines.append("Surfaces: %d" % surfaces.size())
 	for surf in surfaces:
 		var state := GameState.new()
@@ -90,6 +127,11 @@ func _dump_debug_state() -> void:
 		var right_type := _effect_name(right.effect)
 		lines.append("  Surface %d: (%s → %s) L=%s R=%s" % [
 			surf.id, surf.segment.start, surf.segment.end, left_type, right_type])
+
+	lines.append("Plan: %d entries" % plan.size())
+	for i in plan.size():
+		var entry: PlanManager.PlanEntry = plan.get_entry(i)
+		lines.append("  [%d] surface_id=%d side=%d" % [i, entry.surface_id, entry.side])
 
 	if _path_renderer and _path_renderer.get_traced_path():
 		var path: Tracer.TracedPath = _path_renderer.get_traced_path()
@@ -101,7 +143,6 @@ func _dump_debug_state() -> void:
 
 	var output := "\n".join(lines)
 	print(output)
-	lines.append("========================")
 
 static func _effect_name(effect: RefCounted) -> String:
 	if effect == null:
