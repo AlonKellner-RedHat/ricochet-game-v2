@@ -24,7 +24,7 @@ func test_stage5_preview_absent_when_cursor_equals_player() -> void:
 	assert_false(_renderer.has_line(), "Renderer should have no line when cursor equals player")
 
 func test_stage5_preview_color_green() -> void:
-	assert_eq(_renderer.LINE_COLOR, Color.GREEN, "Preview line color should be green")
+	assert_eq(StepTypes.color(StepTypes.Type.ALIGNED), Color.GREEN, "ALIGNED color should be green")
 
 func test_stage5_preview_starts_at_player() -> void:
 	_cursor.global_position = Vector2(800, 400)

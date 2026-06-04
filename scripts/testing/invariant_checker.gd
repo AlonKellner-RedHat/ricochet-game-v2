@@ -21,6 +21,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	violations.append_array(check_PREVIEW_NOGAPS(player_pos, cursor_pos))
 	violations.append_array(check_S9_no_consecutive_rehit(player_pos, cursor_pos))
 	violations.append_array(check_S16_no_nan_in_trace(player_pos, cursor_pos))
+	violations.append_array(check_PREVIEW_GREEN_FROM_PLAYER(player_pos, cursor_pos))
+	violations.append_array(check_PREVIEW_SOLID_TO_CURSOR(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -96,6 +98,35 @@ func check_S16_no_nan_in_trace(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 			violations.append("S16: NaN in step %d start=%s" % [i, step.start])
 		if is_nan(step.end.x) or is_nan(step.end.y):
 			violations.append("S16: NaN in step %d end=%s" % [i, step.end])
+	return violations
+
+func check_PREVIEW_GREEN_FROM_PLAYER(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var typed: Array = _renderer.get_typed_steps()
+	if typed.size() == 0:
+		return violations
+	var first: PreviewBuilder.TypedStep = typed[0]
+	if first.type != StepTypes.Type.ALIGNED:
+		violations.append("PREVIEW-GREEN-FROM-PLAYER: First step type=%d, expected ALIGNED(0)" % first.type)
+	return violations
+
+func check_PREVIEW_SOLID_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var typed: Array = _renderer.get_typed_steps()
+	if typed.size() == 0:
+		return violations
+	var last_solid_end := Vector2.ZERO
+	for i in typed.size():
+		var step: PreviewBuilder.TypedStep = typed[i]
+		if StepTypes.is_solid(step.type):
+			last_solid_end = step.end
+	var dist_to_cursor: float = last_solid_end.distance_to(cursor_pos)
+	if dist_to_cursor > 1.0:
+		violations.append("PREVIEW-SOLID-TO-CURSOR: Solid path ends at %s, cursor at %s (dist=%f)" % [last_solid_end, cursor_pos, dist_to_cursor])
 	return violations
 
 static func check_S11(segment: Segment) -> Array[String]:
