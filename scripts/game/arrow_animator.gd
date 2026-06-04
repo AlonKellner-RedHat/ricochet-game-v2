@@ -44,14 +44,6 @@ func _process(delta: float) -> void:
 	var distance := ARROW_SPEED * delta
 	while distance > 0.0 and _current_step_index < _path.steps.size():
 		var step: Tracer.Step = _path.steps[_current_step_index]
-
-		if step.hit == null:
-			_arrow_position = step.end
-			_arrow_direction = (step.end - step.start).normalized()
-			_current_step_index += 1
-			_progress_along_step = 0.0
-			continue
-
 		var step_length: float = step.start.distance_to(step.end)
 		var remaining_in_step: float = step_length - _progress_along_step
 

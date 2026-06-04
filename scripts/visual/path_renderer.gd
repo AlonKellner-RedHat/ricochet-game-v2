@@ -35,13 +35,20 @@ func _compute_trace() -> void:
 
 	var surfaces := _get_surfaces()
 	var dir := Direction.new(player_pos, _cursor_pos)
-	_traced_path = Tracer.trace(player_pos, dir, surfaces, GameState.new())
+	var bounds := _get_bounds()
+	_traced_path = Tracer.trace(player_pos, dir, surfaces, GameState.new(), bounds)
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
 	if parent and "surfaces" in parent:
 		return parent.surfaces
 	return []
+
+func _get_bounds() -> Rect2:
+	var parent := get_parent()
+	if parent and "room_rect" in parent:
+		return parent.room_rect
+	return Tracer.DEFAULT_BOUNDS
 
 func _draw() -> void:
 	if _traced_path == null or _traced_path.steps.size() == 0:
