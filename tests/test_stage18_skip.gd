@@ -61,7 +61,7 @@ func test_stage18_wasd_does_not_speed_up() -> void:
 	var event := InputEventKey.new()
 	event.physical_keycode = KEY_W
 	event.pressed = true
-	_game_mgr._unhandled_input(event)
+	_game_mgr._input(event)
 	assert_almost_eq(_arrow._speed_multiplier, 1.0, 0.01, "WASD should not speed up")
 
 func test_stage18_non_movement_key_speeds_up() -> void:
@@ -69,7 +69,7 @@ func test_stage18_non_movement_key_speeds_up() -> void:
 	var event := InputEventKey.new()
 	event.physical_keycode = KEY_ENTER
 	event.pressed = true
-	_game_mgr._unhandled_input(event)
+	_game_mgr._input(event)
 	assert_almost_eq(_arrow._speed_multiplier, 10.0, 0.01, "Non-movement key should speed up 10x")
 
 func test_stage18_fire_during_flight_speeds_up() -> void:
@@ -77,7 +77,7 @@ func test_stage18_fire_during_flight_speeds_up() -> void:
 	var event := InputEventKey.new()
 	event.physical_keycode = KEY_SPACE
 	event.pressed = true
-	_game_mgr._unhandled_input(event)
+	_game_mgr._input(event)
 	assert_almost_eq(_arrow._speed_multiplier, 10.0, 0.01, "Spacebar during flight should speed up")
 
 func test_stage18_echo_keys_ignored() -> void:
@@ -86,7 +86,7 @@ func test_stage18_echo_keys_ignored() -> void:
 	event.physical_keycode = KEY_ENTER
 	event.pressed = true
 	event.echo = true
-	_game_mgr._unhandled_input(event)
+	_game_mgr._input(event)
 	assert_almost_eq(_arrow._speed_multiplier, 1.0, 0.01, "Echo key events should not speed up")
 
 func test_stage18_speed_resets_on_new_flight() -> void:

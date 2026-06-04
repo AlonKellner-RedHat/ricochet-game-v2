@@ -54,7 +54,7 @@ func _clear_all_hover() -> void:
 		_hovered_node.clear_hover()
 	_hovered_node = null
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if _arrow_animator and _arrow_animator.is_flying():
 		if event is InputEventKey and event.pressed and not event.echo:
 			var is_movement := false
