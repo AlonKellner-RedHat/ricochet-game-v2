@@ -55,10 +55,12 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 		return violations
 
 	for i in range(1, path.steps.size()):
-		var prev_end: Vector2 = path.steps[i - 1].end
-		var curr_start: Vector2 = path.steps[i].start
-		if prev_end.distance_to(curr_start) > 0.01:
-			violations.append("PREVIEW-NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev_end, i, curr_start])
+		var prev_step: Tracer.Step = path.steps[i - 1]
+		var curr_step: Tracer.Step = path.steps[i]
+		if prev_step.hit == null:
+			continue
+		if prev_step.end.distance_to(curr_step.start) > 0.01:
+			violations.append("PREVIEW-NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev_step.end, i, curr_step.start])
 
 	return violations
 

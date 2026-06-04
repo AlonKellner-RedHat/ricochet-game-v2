@@ -45,8 +45,10 @@ func build_positions(custom_positions: Array[Vector2] = []) -> Array[Vector2]:
 	return positions
 
 func sweep(scene: Node, custom_positions: Array[Vector2] = []) -> Dictionary:
-	if scene.has_method("get") and "room_rect" in scene and "build_room" in scene and scene.build_room:
-		var rect: Rect2 = scene.room_rect
+	var has_room: bool = "room_rect" in scene and "build_room" in scene and scene.build_room
+	var has_blocks: bool = "block_lines" in scene and scene.block_lines.size() > 0
+	if has_room or has_blocks:
+		var rect: Rect2 = scene.room_rect if "room_rect" in scene else Rect2(560, 240, 800, 600)
 		var margin := 10.0
 		_bounds_min = rect.position + Vector2(margin, margin)
 		_bounds_max = rect.position + rect.size - Vector2(margin, margin)

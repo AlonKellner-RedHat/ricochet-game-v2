@@ -45,8 +45,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			path.steps.append(Step.new(ray.origin, escape_end, frame_id, null))
 			break
 
-		var step := Step.new(ray.origin, hit.point, frame_id, hit)
-		path.steps.append(step)
+		if hit.t < 0.0:
+			var dir_vec: Vector2 = ray.direction.to_vector().normalized()
+			var escape_end: Vector2 = ray.origin + dir_vec * 10000.0
+			var return_start: Vector2 = hit.point - dir_vec * 10000.0
+			path.steps.append(Step.new(ray.origin, escape_end, frame_id, null))
+			path.steps.append(Step.new(return_start, hit.point, frame_id, hit))
+		else:
+			path.steps.append(Step.new(ray.origin, hit.point, frame_id, hit))
 
 		var surf = segment_to_surface.get(hit.segment)
 		if surf and surf.is_target:
