@@ -1,7 +1,10 @@
 extends Node2D
 
 const LINE_WIDTH := 3.0
+const SIDE_OFFSET := 2.0
 const BLOCK_COLOR := Color.RED
+const REFLECTION_COLOR := Color.BLUE
+const PASSTHROUGH_COLOR := Color.GRAY
 
 var surface: Surface
 
@@ -14,14 +17,31 @@ func setup(p_surface: Surface) -> void:
 func _draw() -> void:
 	if not surface:
 		return
-	var color := _get_color()
-	draw_line(surface.segment.start, surface.segment.end, color, LINE_WIDTH)
+	var state := GameState.new()
+	var left_config := surface.active_side_config(Side.Value.LEFT, state)
+	var right_config := surface.active_side_config(Side.Value.RIGHT, state)
+	var left_color := _effect_color(left_config)
+	var right_color := _effect_color(right_config)
 
-func _get_color() -> Color:
-	var left_config := surface.active_side_config(Side.Value.LEFT, GameState.new())
-	if left_config and left_config.effect is TerminalEffect:
+	if left_color == right_color:
+		draw_line(surface.segment.start, surface.segment.end, left_color, LINE_WIDTH)
+	else:
+		var seg_dir := (surface.segment.end - surface.segment.start).normalized()
+		var normal := Vector2(-seg_dir.y, seg_dir.x)
+		var offset := normal * SIDE_OFFSET
+		var left_alpha := 1.0 if left_config.interactive else 0.5
+		var right_alpha := 1.0 if right_config.interactive else 0.5
+		draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
+		draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+
+func _effect_color(config: SideConfig) -> Color:
+	if config == null or config.effect == null:
+		return PASSTHROUGH_COLOR
+	if config.effect is TerminalEffect:
 		return BLOCK_COLOR
-	return Color.GRAY
+	if config.effect is ReflectionEffect:
+		return REFLECTION_COLOR
+	return PASSTHROUGH_COLOR
 
 func _add_collision_shape() -> void:
 	var body := StaticBody2D.new()

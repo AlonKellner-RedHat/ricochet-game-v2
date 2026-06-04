@@ -73,7 +73,19 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if config.effect is TerminalEffect:
 			break
 
-		assert(false, "TransformativeEffect/ProjectiveEffect not implemented until Stage 20b/47")
+		if config.effect is TransformativeEffect:
+			var mobius: MobiusTransform = config.effect.get_mobius()
+			var dir_vec: Vector2 = ray.direction.to_vector().normalized()
+			var forward_point: Vector2 = hit.point + dir_vec
+			var reflected_forward: Vector2 = mobius.apply(forward_point)
+			var reflected_origin: Vector2 = mobius.apply(hit.point)
+			var new_dir := Direction.new(reflected_origin, reflected_forward)
+			excluded = []
+			ray = Ray.new(reflected_origin, new_dir)
+			frame_id = mobius.id
+			continue
+
+		assert(false, "ProjectiveEffect not implemented until Stage 47")
 		break
 
 	return path
