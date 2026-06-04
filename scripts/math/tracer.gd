@@ -41,8 +41,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		if hit == null:
 			var dir_vec: Vector2 = ray.direction.to_vector().normalized()
-			var escape_end := ray.origin + dir_vec * 10000.0
+			var escape_end: Vector2 = ray.origin + dir_vec * 10000.0
+			var return_start: Vector2 = ray.origin - dir_vec * 10000.0
 			path.steps.append(Step.new(ray.origin, escape_end, frame_id, null))
+			path.steps.append(Step.new(return_start, ray.origin, frame_id, null))
 			break
 
 		if hit.t < 0.0:

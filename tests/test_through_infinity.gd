@@ -61,3 +61,22 @@ func test_through_infinity_terminal_stops() -> void:
 	var path := Tracer.trace(Vector2(960, 540), dir, surfaces, GameState.new())
 	var last_step: Tracer.Step = path.steps[path.steps.size() - 1]
 	assert_not_null(last_step.hit, "Last step should end at a terminal hit")
+
+func test_through_infinity_full_loop_no_surfaces() -> void:
+	var origin := Vector2(960, 540)
+	var dir := Direction.new(origin, Vector2(1400, 540))
+	var path := Tracer.trace(origin, dir, [], GameState.new())
+	assert_eq(path.steps.size(), 2, "Full loop: escape + return")
+	var escape_step: Tracer.Step = path.steps[0]
+	var return_step: Tracer.Step = path.steps[1]
+	assert_eq(escape_step.start, origin, "Escape starts at origin")
+	assert_gt(escape_step.end.x, origin.x, "Escape goes forward")
+	assert_lt(return_step.start.x, origin.x, "Return comes from behind")
+	assert_almost_eq(return_step.end.x, origin.x, 0.1, "Return ends at origin")
+	assert_almost_eq(return_step.end.y, origin.y, 0.1, "Return y matches origin")
+
+func test_through_infinity_single_loop_only() -> void:
+	var origin := Vector2(960, 540)
+	var dir := Direction.new(origin, Vector2(1400, 540))
+	var path := Tracer.trace(origin, dir, [], GameState.new())
+	assert_eq(path.steps.size(), 2, "Should be exactly one loop, not more")

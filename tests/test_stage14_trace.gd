@@ -52,8 +52,11 @@ func test_stage14_trace_target_tracking() -> void:
 
 func test_stage14_trace_no_hit_escape() -> void:
 	var path := Tracer.trace(Vector2(400, 300), Direction.new(Vector2(400, 300), Vector2(500, 300)), [], GameState.new())
-	assert_eq(path.steps.size(), 1, "Escape should produce 1 step")
+	assert_eq(path.steps.size(), 2, "Full loop should produce 2 steps (escape + return)")
 	assert_null(path.steps[0].hit, "Escape step should have null hit")
+	assert_null(path.steps[1].hit, "Return step should have null hit")
+	assert_almost_eq(path.steps[1].end.x, 400.0, 0.1, "Return step should end at origin")
+	assert_almost_eq(path.steps[1].end.y, 300.0, 0.1, "Return step y should match origin")
 
 func test_stage14_S3_determinism() -> void:
 	var surfaces := _make_room(Rect2(100, 100, 600, 400))

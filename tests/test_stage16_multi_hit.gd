@@ -58,8 +58,9 @@ func test_stage16_escape_after_passthrough() -> void:
 	var surfaces: Array[Surface] = [pt_surf]
 	var dir := Direction.new(Vector2(100, 300), Vector2(600, 300))
 	var path := Tracer.trace(Vector2(100, 300), dir, surfaces, GameState.new())
-	assert_eq(path.steps.size(), 2, "Should have 2 steps: pass-through + escape")
+	assert_eq(path.steps.size(), 3, "Should have 3 steps: pass-through + escape + return")
 	assert_null(path.steps[1].hit, "Escape step should have null hit")
+	assert_null(path.steps[2].hit, "Return step should have null hit")
 
 func test_stage16_S3_determinism_multi_step() -> void:
 	var pt_surf := _passthrough_surface(Vector2(300, 0), Vector2(300, 600))
