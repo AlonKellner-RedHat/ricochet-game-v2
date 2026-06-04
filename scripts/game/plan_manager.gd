@@ -32,3 +32,9 @@ func get_entry(index: int) -> PlanEntry:
 
 func is_empty() -> bool:
 	return entries.size() == 0
+
+func has_surface(surface_id: int) -> bool:
+	for entry in entries:
+		if entry.surface_id == surface_id:
+			return true
+	return false

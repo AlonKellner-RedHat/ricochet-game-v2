@@ -73,11 +73,15 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_C:
 		plan.clear()
 		_update_hud()
+		_update_surface_overlays()
 		return
 
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_try_plan_click()
+			return
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			_try_plan_right_click()
 			return
 
 	if event.is_action_pressed("fire"):
@@ -93,6 +97,24 @@ func _try_plan_click() -> void:
 	var surf: Surface = result.surface
 	var side: Side.Value = result.side
 	plan.add_entry(surf.id, side)
+	_update_hud()
+	_update_surface_overlays()
+
+func _try_plan_right_click() -> void:
+	if not _cursor:
+		return
+	var surfaces := _get_surfaces()
+	var result := click_detector.detect_click(_cursor.global_position, surfaces)
+
+	if result.is_empty():
+		plan.clear()
+	else:
+		var surf: Surface = result.surface
+		if plan.has_surface(surf.id):
+			plan.remove_last_of(surf.id)
+		else:
+			plan.clear()
+
 	_update_hud()
 	_update_surface_overlays()
 
