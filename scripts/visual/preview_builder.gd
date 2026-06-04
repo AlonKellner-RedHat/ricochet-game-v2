@@ -11,7 +11,7 @@ class TypedStep extends RefCounted:
 		end = p_end
 		type = p_type
 
-static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_pos: Vector2, surfaces: Array, bounds: Rect2 = Tracer.DEFAULT_BOUNDS) -> Array:
+static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_pos: Vector2, surfaces: Array, bounds: Rect2 = Tracer.DEFAULT_BOUNDS, planned_path: Planner.PlannedPath = null) -> Array:
 	if traced_path == null or traced_path.steps.size() == 0:
 		return []
 
@@ -19,38 +19,63 @@ static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_po
 	var cursor_dir: Vector2 = (cursor_pos - player_pos).normalized()
 	var typed_steps: Array = []
 
-	var div := _find_divergence(traced_path, cursor_dist, surfaces)
-	var div_index: int = div[0]
-	var div_point: Vector2 = div[1]
+	var div_index := _find_divergence(traced_path, planned_path, cursor_dist, surfaces)
 
 	if div_index < 0:
-		typed_steps.append_array(_build_aligned(traced_path, player_pos, cursor_pos, cursor_dist))
+		typed_steps.append_array(_build_no_divergence(traced_path, cursor_dist))
 	else:
-		typed_steps.append_array(_build_aligned_before_div(traced_path, div_index, div_point, cursor_dist))
-		typed_steps.append_array(_build_diverged_planned(div_point, cursor_pos, cursor_dir))
+		var div_point: Vector2 = traced_path.steps[div_index - 1].end if div_index > 0 else player_pos
+		typed_steps.append_array(_build_aligned_before(traced_path, div_index, cursor_dist))
+		typed_steps.append(TypedStep.new(div_point, cursor_pos, StepTypes.Type.DIVERGED_PLANNED))
 		typed_steps.append_array(_build_diverged_post_planned(cursor_pos, cursor_dir, surfaces, bounds))
 		typed_steps.append_array(_build_diverged_physical(traced_path, div_index))
 
 	return typed_steps
 
-static func _find_divergence(path: Tracer.TracedPath, cursor_dist: float, surfaces: Array) -> Array:
+static func _find_divergence(phys_path: Tracer.TracedPath, planned_path: Planner.PlannedPath, cursor_dist: float, surfaces: Array) -> int:
+	if planned_path == null or planned_path.steps.size() == 0:
+		return _find_divergence_no_plan(phys_path, cursor_dist, surfaces)
+
 	var accumulated := 0.0
-	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+	for i in phys_path.steps.size():
+		var phys_step: Tracer.Step = phys_path.steps[i]
+		var step_len: float = phys_step.start.distance_to(phys_step.end)
+
+		if accumulated + step_len > cursor_dist:
+			return -1
+
+		if phys_step.hit != null:
+			if i < planned_path.steps.size():
+				var plan_step: Tracer.Step = planned_path.steps[i]
+				if plan_step.end.distance_to(phys_step.end) > 1.0:
+					return i + 1
+			else:
+				var config: SideConfig = _get_config_for_hit(phys_step.hit, surfaces)
+				if config != null and config.effect != null:
+					return i + 1
+
+		accumulated += step_len
+
+	return -1
+
+static func _find_divergence_no_plan(phys_path: Tracer.TracedPath, cursor_dist: float, surfaces: Array) -> int:
+	var accumulated := 0.0
+	for i in phys_path.steps.size():
+		var step: Tracer.Step = phys_path.steps[i]
 		var step_len: float = step.start.distance_to(step.end)
 
 		if step.hit != null and accumulated + step_len <= cursor_dist + 0.01:
 			var config: SideConfig = _get_config_for_hit(step.hit, surfaces)
 			if config != null and config.effect != null:
-				return [i + 1, step.end]
+				return i + 1
 
 		accumulated += step_len
 		if accumulated >= cursor_dist:
-			return [-1, Vector2.ZERO]
+			return -1
 
-	return [-1, Vector2.ZERO]
+	return -1
 
-static func _build_aligned(path: Tracer.TracedPath, _player_pos: Vector2, _cursor_pos: Vector2, cursor_dist: float) -> Array:
+static func _build_no_divergence(path: Tracer.TracedPath, cursor_dist: float) -> Array:
 	var result: Array = []
 	var accumulated := 0.0
 
@@ -73,7 +98,7 @@ static func _build_aligned(path: Tracer.TracedPath, _player_pos: Vector2, _curso
 
 	return result
 
-static func _build_aligned_before_div(path: Tracer.TracedPath, div_index: int, _div_point: Vector2, cursor_dist: float) -> Array:
+static func _build_aligned_before(path: Tracer.TracedPath, div_index: int, cursor_dist: float) -> Array:
 	var result: Array = []
 	var accumulated := 0.0
 
@@ -91,9 +116,6 @@ static func _build_aligned_before_div(path: Tracer.TracedPath, div_index: int, _
 		accumulated += step_len
 
 	return result
-
-static func _build_diverged_planned(div_point: Vector2, cursor_pos: Vector2, _cursor_dir: Vector2) -> Array:
-	return [TypedStep.new(div_point, cursor_pos, StepTypes.Type.DIVERGED_PLANNED)]
 
 static func _build_diverged_post_planned(cursor_pos: Vector2, cursor_dir: Vector2, surfaces: Array, bounds: Rect2) -> Array:
 	var dir := Direction.new(cursor_pos, cursor_pos + cursor_dir)
