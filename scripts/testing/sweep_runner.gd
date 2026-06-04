@@ -53,10 +53,15 @@ func sweep(scene: Node, custom_positions: Array[Vector2] = []) -> Dictionary:
 		_bounds_min = rect.position + Vector2(margin, margin)
 		_bounds_max = rect.position + rect.size - Vector2(margin, margin)
 
+	var poi := _extract_points_of_interest(scene)
+	var all_custom: Array[Vector2] = []
+	all_custom.append_array(poi)
+	all_custom.append_array(custom_positions)
+
 	var checker := InvariantChecker.new()
 	checker.setup(scene)
 
-	var positions := build_positions(custom_positions)
+	var positions := build_positions(all_custom)
 	var total := positions.size() * positions.size()
 	var failures: Array[Dictionary] = []
 
@@ -77,3 +82,27 @@ func sweep(scene: Node, custom_positions: Array[Vector2] = []) -> Dictionary:
 		"fail_count": failures.size(),
 		"failures": failures,
 	}
+
+func _extract_points_of_interest(scene: Node) -> Array[Vector2]:
+	var points: Array[Vector2] = []
+	var seen: Dictionary = {}
+
+	if "room_rect" in scene:
+		var r: Rect2 = scene.room_rect
+		for corner in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+			_add_unique(points, seen, corner)
+
+	if "surfaces" in scene:
+		for surf in scene.surfaces:
+			_add_unique(points, seen, surf.segment.start)
+			_add_unique(points, seen, surf.segment.end)
+			if not is_inf(surf.segment.via.x) and not is_inf(surf.segment.via.y):
+				_add_unique(points, seen, surf.segment.via)
+
+	return points
+
+func _add_unique(points: Array[Vector2], seen: Dictionary, point: Vector2) -> void:
+	var key := "%f,%f" % [point.x, point.y]
+	if not seen.has(key):
+		seen[key] = true
+		points.append(point)
