@@ -36,7 +36,7 @@ func test_stage17_fire_noop_zero_length() -> void:
 	assert_false(_arrow.is_flying(), "Arrow should not fly")
 
 func test_stage17_arrow_speed_constant() -> void:
-	assert_eq(_arrow.ARROW_SPEED, 800.0, "Arrow speed should be 800 u/s")
+	assert_eq(_arrow.ARROW_SPEED, 1600.0, "Arrow speed should be 1600 u/s")
 
 func test_stage17_arrow_animator_process_mode() -> void:
 	assert_eq(_arrow.process_mode, Node.PROCESS_MODE_ALWAYS, "Arrow should run during pause")
@@ -44,9 +44,9 @@ func test_stage17_arrow_animator_process_mode() -> void:
 func test_stage17_game_manager_process_mode() -> void:
 	assert_eq(_game_mgr.process_mode, Node.PROCESS_MODE_ALWAYS, "GameManager should run during pause")
 
-func test_stage17_preview_hidden_during_flight() -> void:
+func test_stage17_preview_faded_during_flight() -> void:
 	_fire_at(Vector2(1200, 540))
-	assert_false(_renderer.visible, "Preview should be hidden during flight")
+	assert_almost_eq(_renderer.modulate.a, 0.25, 0.01, "Preview should be semi-transparent during flight")
 
 func test_stage17_fire_starts_flying() -> void:
 	_fire_at(Vector2(1200, 540))
@@ -61,7 +61,7 @@ func test_stage17_flight_completed_unpauses() -> void:
 func test_stage17_preview_reappears_after_flight() -> void:
 	_fire_at(Vector2(1200, 540))
 	_arrow.skip_animation()
-	assert_true(_renderer.visible, "Preview should reappear after flight")
+	assert_almost_eq(_renderer.modulate.a, 1.0, 0.01, "Preview should be fully opaque after flight")
 
 func test_stage17_arrow_disappears_after_flight() -> void:
 	_fire_at(Vector2(1200, 540))

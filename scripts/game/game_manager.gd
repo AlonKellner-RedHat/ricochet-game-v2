@@ -40,7 +40,7 @@ func _try_fire() -> void:
 	var path := Tracer.trace(player_pos, dir, surfaces, GameState.new())
 
 	if _path_renderer:
-		_path_renderer.visible = false
+		_path_renderer.modulate.a = 0.25
 
 	get_tree().paused = true
 
@@ -50,4 +50,4 @@ func _try_fire() -> void:
 func _on_flight_completed() -> void:
 	get_tree().paused = false
 	if _path_renderer:
-		_path_renderer.visible = true
+		_path_renderer.modulate.a = 1.0

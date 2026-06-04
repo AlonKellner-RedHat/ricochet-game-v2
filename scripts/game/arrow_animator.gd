@@ -1,6 +1,6 @@
 extends Node2D
 
-const ARROW_SPEED := 800.0
+const ARROW_SPEED := 1600.0
 const ARROW_LENGTH := 40.0
 const ARROW_HEAD_ANGLE := deg_to_rad(30.0)
 const ARROW_HEAD_LENGTH := 16.0
