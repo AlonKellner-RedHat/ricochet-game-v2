@@ -15,48 +15,41 @@ static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_po
 	if traced_path == null or traced_path.steps.size() == 0:
 		return []
 
+	if planned_path != null and planned_path.steps.size() > 0:
+		return _build_with_plan(traced_path, planned_path, player_pos, cursor_pos, surfaces, bounds)
+	else:
+		return _build_no_plan(traced_path, player_pos, cursor_pos, surfaces, bounds)
+
+static func _build_no_plan(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_pos: Vector2, surfaces: Array, bounds: Rect2) -> Array:
 	var cursor_dist: float = player_pos.distance_to(cursor_pos)
 	var cursor_dir: Vector2 = (cursor_pos - player_pos).normalized()
-	var typed_steps: Array = []
 
-	var div_index := _find_divergence(traced_path, planned_path, cursor_dist, surfaces)
+	var div_index := _find_divergence_no_plan(traced_path, cursor_dist, surfaces)
 
 	if div_index < 0:
-		typed_steps.append_array(_build_no_divergence(traced_path, cursor_dist))
+		return _split_at_cursor_dist(traced_path, cursor_dist)
 	else:
 		var div_point: Vector2 = traced_path.steps[div_index - 1].end if div_index > 0 else player_pos
-		typed_steps.append_array(_build_aligned_before(traced_path, div_index, cursor_dist))
-		typed_steps.append(TypedStep.new(div_point, cursor_pos, StepTypes.Type.DIVERGED_PLANNED))
-		typed_steps.append_array(_build_diverged_post_planned(cursor_pos, cursor_dir, surfaces, bounds))
-		typed_steps.append_array(_build_diverged_physical(traced_path, div_index))
+		var result: Array = []
+		result.append_array(_build_aligned_before(traced_path, div_index, cursor_dist))
+		result.append(TypedStep.new(div_point, cursor_pos, StepTypes.Type.DIVERGED_PLANNED))
+		result.append_array(_build_post_planned_physical(cursor_pos, cursor_dir, surfaces, bounds))
+		result.append_array(_build_physical_from(traced_path, div_index))
+		return result
 
-	return typed_steps
+static func _build_with_plan(traced_path: Tracer.TracedPath, _planned_path: Planner.PlannedPath, _player_pos: Vector2, cursor_pos: Vector2, _surfaces: Array, _bounds: Rect2) -> Array:
+	var result: Array = []
 
-static func _find_divergence(phys_path: Tracer.TracedPath, planned_path: Planner.PlannedPath, cursor_dist: float, surfaces: Array) -> int:
-	if planned_path == null or planned_path.steps.size() == 0:
-		return _find_divergence_no_plan(phys_path, cursor_dist, surfaces)
+	for i in traced_path.steps.size():
+		var step: Tracer.Step = traced_path.steps[i]
+		result.append(TypedStep.new(step.start, step.end, StepTypes.Type.ALIGNED))
 
-	var accumulated := 0.0
-	for i in phys_path.steps.size():
-		var phys_step: Tracer.Step = phys_path.steps[i]
-		var step_len: float = phys_step.start.distance_to(phys_step.end)
+	var last_phys_point: Vector2 = traced_path.steps[traced_path.steps.size() - 1].end
 
-		if accumulated + step_len > cursor_dist:
-			return -1
+	if last_phys_point.distance_to(cursor_pos) > 1.0:
+		result.append(TypedStep.new(last_phys_point, cursor_pos, StepTypes.Type.DIVERGED_PLANNED))
 
-		if phys_step.hit != null:
-			if i < planned_path.steps.size():
-				var plan_step: Tracer.Step = planned_path.steps[i]
-				if plan_step.end.distance_to(phys_step.end) > 1.0:
-					return i + 1
-			else:
-				var config: SideConfig = _get_config_for_hit(phys_step.hit, surfaces)
-				if config != null and config.effect != null:
-					return i + 1
-
-		accumulated += step_len
-
-	return -1
+	return result
 
 static func _find_divergence_no_plan(phys_path: Tracer.TracedPath, cursor_dist: float, surfaces: Array) -> int:
 	var accumulated := 0.0
@@ -75,7 +68,7 @@ static func _find_divergence_no_plan(phys_path: Tracer.TracedPath, cursor_dist: 
 
 	return -1
 
-static func _build_no_divergence(path: Tracer.TracedPath, cursor_dist: float) -> Array:
+static func _split_at_cursor_dist(path: Tracer.TracedPath, cursor_dist: float) -> Array:
 	var result: Array = []
 	var accumulated := 0.0
 
@@ -117,7 +110,7 @@ static func _build_aligned_before(path: Tracer.TracedPath, div_index: int, curso
 
 	return result
 
-static func _build_diverged_post_planned(cursor_pos: Vector2, cursor_dir: Vector2, surfaces: Array, bounds: Rect2) -> Array:
+static func _build_post_planned_physical(cursor_pos: Vector2, cursor_dir: Vector2, surfaces: Array, bounds: Rect2) -> Array:
 	var dir := Direction.new(cursor_pos, cursor_pos + cursor_dir)
 	var post_trace := Tracer.trace(cursor_pos, dir, surfaces, GameState.new(), bounds)
 	var result: Array = []
@@ -126,7 +119,7 @@ static func _build_diverged_post_planned(cursor_pos: Vector2, cursor_dir: Vector
 		result.append(TypedStep.new(step.start, step.end, StepTypes.Type.DIVERGED_POST_PLANNED))
 	return result
 
-static func _build_diverged_physical(path: Tracer.TracedPath, div_index: int) -> Array:
+static func _build_physical_from(path: Tracer.TracedPath, div_index: int) -> Array:
 	var result: Array = []
 	for i in range(div_index, path.steps.size()):
 		var step: Tracer.Step = path.steps[i]
