@@ -75,6 +75,36 @@ func test_stage24_plan_empty_no_crash() -> void:
 		Vector2(50, 300), Vector2(400, 300), [], surfaces, GameState.new())
 	assert_eq(planned.steps.size(), 0, "Empty plan should produce no steps")
 
+func test_stage24_through_infinity_bounce() -> void:
+	var mirror := _make_mirror(800)
+	var surfaces: Array[Surface] = [mirror]
+	var plan := PlanManager.new()
+	plan.add_entry(mirror.id, Side.Value.LEFT)
+	# Player at x=960 (right), cursor at x=700 (left) — cursor on opposite side
+	var planned := Planner.plan_transformative_subchain(
+		Vector2(960, 500), Vector2(700, 500), plan.entries, surfaces, GameState.new())
+	assert_gte(planned.steps.size(), 2, "Through-infinity: should have at least 2 steps")
+	# The bounce should be on the carrier at x=800
+	var found_bounce := false
+	for i in planned.steps.size():
+		var step: Tracer.Step = planned.steps[i]
+		if absf(step.end.x - 800.0) < 0.1:
+			found_bounce = true
+	assert_true(found_bounce, "Should find a bounce at x=800 (via through-infinity)")
+
+func test_stage24_through_infinity_reaches_cursor() -> void:
+	var mirror := _make_mirror(800)
+	var surfaces: Array[Surface] = [mirror]
+	var plan := PlanManager.new()
+	plan.add_entry(mirror.id, Side.Value.LEFT)
+	var cursor := Vector2(700, 500)
+	var planned := Planner.plan_transformative_subchain(
+		Vector2(960, 500), cursor, plan.entries, surfaces, GameState.new())
+	if planned.steps.size() > 0:
+		var last_step: Tracer.Step = planned.steps[planned.steps.size() - 1]
+		assert_almost_eq(last_step.end.x, cursor.x, 0.1, "Plan should reach cursor x")
+		assert_almost_eq(last_step.end.y, cursor.y, 0.1, "Plan should reach cursor y")
+
 func test_stage24_S16_no_nan() -> void:
 	var mirror := _make_mirror(300)
 	var surfaces: Array[Surface] = [mirror]

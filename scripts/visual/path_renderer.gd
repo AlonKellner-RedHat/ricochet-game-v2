@@ -50,14 +50,7 @@ func _compute_trace() -> void:
 		trace_dir = Direction.new(player_pos, _cursor_pos)
 
 	_traced_path = Tracer.trace(player_pos, trace_dir, surfaces, GameState.new(), bounds)
-
-	var planned_ids: Array[int] = []
-	if plan:
-		for i in plan.size():
-			var entry: PlanManager.PlanEntry = plan.get_entry(i)
-			planned_ids.append(entry.surface_id)
-
-	_typed_steps = PreviewBuilder.build(_traced_path, player_pos, _cursor_pos, surfaces, bounds, planned_ids)
+	_typed_steps = PreviewBuilder.build(_traced_path, player_pos, _cursor_pos, surfaces, bounds)
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
