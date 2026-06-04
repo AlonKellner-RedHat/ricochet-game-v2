@@ -34,6 +34,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_arrow_animator.speed_up()
 		return
 
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_F12:
+		_dump_debug_state()
+		return
+
 	if event.is_action_pressed("fire"):
 		_try_fire()
 
@@ -65,3 +69,45 @@ func _on_flight_completed() -> void:
 	get_tree().paused = false
 	if _path_renderer:
 		_path_renderer.modulate.a = 1.0
+
+func _dump_debug_state() -> void:
+	var lines: PackedStringArray = []
+	lines.append("=== DEBUG STATE (F12) ===")
+	if _player:
+		lines.append("Player: %s" % _player.global_position)
+	if _cursor:
+		lines.append("Cursor: %s" % _cursor.global_position)
+
+	var surfaces: Array = []
+	if _level_settings and "surfaces" in _level_settings:
+		surfaces = _level_settings.surfaces
+	lines.append("Surfaces: %d" % surfaces.size())
+	for surf in surfaces:
+		var state := GameState.new()
+		var left: SideConfig = surf.active_side_config(Side.Value.LEFT, state)
+		var right: SideConfig = surf.active_side_config(Side.Value.RIGHT, state)
+		var left_type := _effect_name(left.effect)
+		var right_type := _effect_name(right.effect)
+		lines.append("  Surface %d: (%s → %s) L=%s R=%s" % [
+			surf.id, surf.segment.start, surf.segment.end, left_type, right_type])
+
+	if _path_renderer and _path_renderer.get_traced_path():
+		var path: Tracer.TracedPath = _path_renderer.get_traced_path()
+		lines.append("Traced path: %d steps" % path.steps.size())
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			var hit_info := "escape" if step.hit == null else "hit"
+			lines.append("  Step %d: %s → %s [%s]" % [i, step.start, step.end, hit_info])
+
+	var output := "\n".join(lines)
+	print(output)
+	lines.append("========================")
+
+static func _effect_name(effect: RefCounted) -> String:
+	if effect == null:
+		return "pass"
+	if effect is TerminalEffect:
+		return "block"
+	if effect is ReflectionEffect:
+		return "reflect"
+	return "unknown"
