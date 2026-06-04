@@ -1,5 +1,7 @@
 extends Node
 
+const MOVEMENT_ACTIONS := ["move_up", "move_down", "move_left", "move_right"]
+
 var _player: CharacterBody2D
 var _cursor: Node2D
 var _arrow_animator: Node2D
@@ -18,12 +20,24 @@ func _ready() -> void:
 		_arrow_animator.flight_completed.connect(_on_flight_completed)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not _arrow_animator:
+		return
+
+	if _arrow_animator.is_flying():
+		if event is InputEventKey and event.pressed and not event.echo:
+			var is_movement := false
+			for action in MOVEMENT_ACTIONS:
+				if event.is_action(action):
+					is_movement = true
+					break
+			if not is_movement:
+				_arrow_animator.skip_animation()
+		return
+
 	if event.is_action_pressed("fire"):
 		_try_fire()
 
 func _try_fire() -> void:
-	if _arrow_animator and _arrow_animator.is_flying():
-		return
 	if not _player or not _cursor:
 		return
 
