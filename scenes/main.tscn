@@ -12,7 +12,6 @@ b = Vector2(1920, 0)
 
 [node name="Main" type="Node2D" unique_id=1606209940]
 script = ExtResource("2")
-gravity = Vector2(0, 980)
 passthrough_lines = Array[Vector4]([Vector4(800, 240, 800, 840), Vector4(1100, 240, 1100, 840)])
 
 [node name="Background" type="ColorRect" parent="." unique_id=1610522736]

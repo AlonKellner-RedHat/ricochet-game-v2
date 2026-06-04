@@ -11,6 +11,52 @@ class TypedStep extends RefCounted:
 		end = p_end
 		type = p_type
 
+static func build_with_plan(traced_path: Tracer.TracedPath, planned_path: Planner.PlannedPath, player_pos: Vector2, cursor_pos: Vector2, surfaces: Array, bounds: Rect2 = Tracer.DEFAULT_BOUNDS) -> Array:
+	if planned_path == null or planned_path.steps.size() == 0:
+		return build(traced_path, player_pos, cursor_pos, surfaces, bounds)
+
+	var typed_steps: Array = []
+	var cursor_dist: float = player_pos.distance_to(cursor_pos)
+	var _cursor_dir: Vector2 = (cursor_pos - player_pos).normalized()
+
+	var accumulated := 0.0
+	for i in planned_path.steps.size():
+		var step: Tracer.Step = planned_path.steps[i]
+		var step_len: float = step.start.distance_to(step.end)
+		var dist_at_end: float = accumulated + step_len
+
+		if accumulated < cursor_dist and dist_at_end >= cursor_dist:
+			var t: float = (cursor_dist - accumulated) / step_len if step_len > 0.0 else 1.0
+			var split: Vector2 = step.start.lerp(step.end, t)
+			typed_steps.append(TypedStep.new(step.start, split, StepTypes.Type.ALIGNED))
+			typed_steps.append(TypedStep.new(split, step.end, StepTypes.Type.ALIGNED_POST_PLANNED))
+		elif accumulated < cursor_dist:
+			typed_steps.append(TypedStep.new(step.start, step.end, StepTypes.Type.ALIGNED))
+		else:
+			typed_steps.append(TypedStep.new(step.start, step.end, StepTypes.Type.ALIGNED_POST_PLANNED))
+
+		accumulated += step_len
+
+	var physical_diverges := _check_plan_physical_divergence(traced_path, planned_path, surfaces)
+	if physical_diverges.size() > 0:
+		typed_steps.append_array(physical_diverges)
+
+	return typed_steps
+
+static func _check_plan_physical_divergence(traced_path: Tracer.TracedPath, planned_path: Planner.PlannedPath, _surfaces: Array) -> Array:
+	var result: Array = []
+	if planned_path.steps.size() == 0:
+		return result
+
+	var plan_first_bounce: Vector2 = planned_path.steps[0].end if planned_path.steps.size() > 0 else Vector2.ZERO
+	var phys_first_end: Vector2 = traced_path.steps[0].end if traced_path.steps.size() > 0 else Vector2.ZERO
+
+	if plan_first_bounce.distance_to(phys_first_end) > 1.0:
+		for i in traced_path.steps.size():
+			var step: Tracer.Step = traced_path.steps[i]
+			result.append(TypedStep.new(step.start, step.end, StepTypes.Type.DIVERGED_PHYSICAL))
+	return result
+
 static func build(traced_path: Tracer.TracedPath, player_pos: Vector2, cursor_pos: Vector2, surfaces: Array, bounds: Rect2 = Tracer.DEFAULT_BOUNDS) -> Array:
 	if traced_path == null or traced_path.steps.size() == 0:
 		return []

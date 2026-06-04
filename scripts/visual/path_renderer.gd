@@ -34,10 +34,18 @@ func _compute_trace() -> void:
 		return
 
 	var surfaces := _get_surfaces()
+	var plan := _get_plan()
 	var dir := Direction.new(player_pos, _cursor_pos)
 	var bounds := _get_bounds()
 	_traced_path = Tracer.trace(player_pos, dir, surfaces, GameState.new(), bounds)
-	_typed_steps = PreviewBuilder.build(_traced_path, player_pos, _cursor_pos, surfaces, bounds)
+
+	if plan and not plan.is_empty():
+		var planned := Planner.plan_transformative_subchain(
+			player_pos, _cursor_pos, plan.entries, surfaces, GameState.new())
+		_typed_steps = PreviewBuilder.build_with_plan(
+			_traced_path, planned, player_pos, _cursor_pos, surfaces, bounds)
+	else:
+		_typed_steps = PreviewBuilder.build(_traced_path, player_pos, _cursor_pos, surfaces, bounds)
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
@@ -47,6 +55,12 @@ func _get_surfaces() -> Array:
 
 func _get_bounds() -> Rect2:
 	return Tracer.DEFAULT_BOUNDS
+
+func _get_plan() -> PlanManager:
+	var game_mgr := get_node_or_null("../GameManager")
+	if game_mgr and "plan" in game_mgr:
+		return game_mgr.plan
+	return null
 
 func _draw() -> void:
 	if _typed_steps.size() == 0:
