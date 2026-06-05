@@ -32,26 +32,27 @@ func test_merge_fully_aligned() -> void:
 	assert_eq(m1.type, StepTypes.Type.ALIGNED_POST_PLANNED, "Step 1 after cursor = POST_PLANNED")
 
 func test_merge_diverged_different_endpoint() -> void:
+	# Physical hits closer (100 units), planned goes further (150 units)
 	var planned: Array = [
 		_step(Vector2(0, 0), Vector2(100, 0)),
-		_step(Vector2(100, 0), Vector2(200, 50)),
+		_step(Vector2(100, 0), Vector2(250, 0)),
 	]
 	var physical: Array = [
 		_step(Vector2(0, 0), Vector2(100, 0)),
-		_step(Vector2(100, 0), Vector2(200, -50)),
+		_step(Vector2(100, 0), Vector2(200, 0)),
 	]
 	var merged := StepTreeMerge.merge(planned, physical, 2)
 	assert_eq(merged[0].type, StepTypes.Type.ALIGNED, "Step 0 aligned")
+	var found_aligned_split := false
 	var found_div_planned := false
-	var found_div_physical := false
 	for i in merged.size():
 		var ms: StepTreeMerge.MergedStep = merged[i]
+		if ms.type == StepTypes.Type.ALIGNED and i > 0:
+			found_aligned_split = true
 		if ms.type == StepTypes.Type.DIVERGED_PLANNED:
 			found_div_planned = true
-		if ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
-			found_div_physical = true
-	assert_true(found_div_planned, "Should have DIVERGED_PLANNED")
-	assert_true(found_div_physical, "Should have DIVERGED_PHYSICAL")
+	assert_true(found_aligned_split, "Should have ALIGNED split at nearer endpoint")
+	assert_true(found_div_planned, "Should have DIVERGED_PLANNED remainder")
 
 func test_merge_diverged_different_frame() -> void:
 	var planned: Array = [

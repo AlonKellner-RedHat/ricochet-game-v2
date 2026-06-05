@@ -40,12 +40,30 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 						step_type = StepTypes.Type.ALIGNED
 					merged.append(MergedStep.new(p.start, p.end, step_type, p.frame_id))
 				else:
+					var p_len: float = p.start.distance_to(p.end)
+					var r_len: float = r.start.distance_to(r.end)
+					var shorter_end: Vector2 = r.end if r_len <= p_len else p.end
+					var aligned_type: StepTypes.Type = StepTypes.Type.ALIGNED if not past_cursor else StepTypes.Type.ALIGNED_POST_PLANNED
+					merged.append(MergedStep.new(p.start, shorter_end, aligned_type, p.frame_id))
 					diverged = true
-					if not past_cursor:
-						merged.append(MergedStep.new(p.start, p.end, StepTypes.Type.DIVERGED_PLANNED, p.frame_id))
-					else:
-						merged.append(MergedStep.new(p.start, p.end, StepTypes.Type.DIVERGED_POST_PLANNED, p.frame_id))
-					merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id))
+					if p_len > r_len:
+						if not past_cursor:
+							merged.append(MergedStep.new(r.end, p.end, StepTypes.Type.DIVERGED_PLANNED, p.frame_id))
+						else:
+							merged.append(MergedStep.new(r.end, p.end, StepTypes.Type.DIVERGED_POST_PLANNED, p.frame_id))
+					elif r_len > p_len:
+						merged.append(MergedStep.new(p.end, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id))
+					for remaining_idx in range(idx + 1, physical_steps.size()):
+						var rem: Tracer.Step = physical_steps[remaining_idx]
+						merged.append(MergedStep.new(rem.start, rem.end, StepTypes.Type.DIVERGED_PHYSICAL, rem.frame_id))
+					for remaining_idx in range(idx + 1, planned_steps.size()):
+						var rem: Tracer.Step = planned_steps[remaining_idx]
+						var rem_past: bool = remaining_idx >= cursor_index
+						if not rem_past:
+							merged.append(MergedStep.new(rem.start, rem.end, StepTypes.Type.DIVERGED_PLANNED, rem.frame_id))
+						else:
+							merged.append(MergedStep.new(rem.start, rem.end, StepTypes.Type.DIVERGED_POST_PLANNED, rem.frame_id))
+					break
 			else:
 				diverged = true
 				if p != null:
