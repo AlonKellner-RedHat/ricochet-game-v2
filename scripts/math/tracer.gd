@@ -27,43 +27,52 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		return path
 
 	var state_copy := game_state.copy()
-	var segments: Array = []
-	var segment_to_surface: Dictionary = {}
-	for surf in surfaces:
-		segments.append(surf.segment)
-		segment_to_surface[surf.segment] = surf
-
+	var frame := MobiusTransform.identity()
 	var ray := Ray.new(origin, direction)
-	var frame_id := MobiusTransform.IDENTITY_ID
 	var excluded: Array = []
+	var frame_dirty := true
+	var normalized_surfaces: Array = []
+	var norm_to_surface: Dictionary = {}
 
 	for i in MAX_HITS:
-		var hit = Intersection.find_earliest_hit(ray, segments, excluded)
+		if frame_dirty:
+			normalized_surfaces = _build_normalized(surfaces, frame, norm_to_surface)
+			frame_dirty = false
+
+		var norm_segments: Array = []
+		for ns in normalized_surfaces:
+			norm_segments.append(ns.segment)
+
+		var hit = Intersection.find_earliest_hit(ray, norm_segments, excluded)
 
 		if hit == null:
-			var dir_vec: Vector2 = ray.direction.to_vector().normalized()
-			var escape_end: Vector2 = _clip_to_bounds_edge(ray.origin, dir_vec, bounds)
-			var return_start: Vector2 = _clip_to_bounds_edge(ray.origin, -dir_vec, bounds)
-			path.steps.append(Step.new(ray.origin, escape_end, frame_id, null))
-			path.steps.append(Step.new(return_start, ray.origin, frame_id, null))
+			var vis_origin: Vector2 = frame.apply(ray.origin)
+			var vis_dir: Vector2 = (frame.apply(ray.origin + ray.direction.to_vector().normalized()) - vis_origin).normalized()
+			var escape_end: Vector2 = _clip_to_bounds_edge(vis_origin, vis_dir, bounds)
+			var return_start: Vector2 = _clip_to_bounds_edge(vis_origin, -vis_dir, bounds)
+			path.steps.append(Step.new(vis_origin, escape_end, frame.id, null))
+			path.steps.append(Step.new(return_start, vis_origin, frame.id, null))
 			break
 
-		if hit.t < 0.0:
-			var dir_vec: Vector2 = ray.direction.to_vector().normalized()
-			var escape_end: Vector2 = _clip_to_bounds_edge(ray.origin, dir_vec, bounds)
-			var return_start: Vector2 = _clip_to_bounds_edge(hit.point, -dir_vec, bounds)
-			path.steps.append(Step.new(ray.origin, escape_end, frame_id, null))
-			path.steps.append(Step.new(return_start, hit.point, frame_id, hit))
-		else:
-			path.steps.append(Step.new(ray.origin, hit.point, frame_id, hit))
+		var vis_start: Vector2 = frame.apply(ray.origin)
+		var vis_end: Vector2 = frame.apply(hit.point)
 
-		var surf = segment_to_surface.get(hit.segment)
-		if surf and surf.is_target:
-			path.targets_hit[surf.id] = true
+		if hit.t < 0.0:
+			var vis_dir: Vector2 = (vis_end - vis_start).normalized()
+			var escape_end: Vector2 = _clip_to_bounds_edge(vis_start, -vis_dir, bounds)
+			var return_start: Vector2 = _clip_to_bounds_edge(vis_end, vis_dir, bounds)
+			path.steps.append(Step.new(vis_start, escape_end, frame.id, null))
+			path.steps.append(Step.new(return_start, vis_end, frame.id, hit))
+		else:
+			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit))
+
+		var orig_surf: Surface = norm_to_surface.get(hit.segment)
+		if orig_surf and orig_surf.is_target:
+			path.targets_hit[orig_surf.id] = true
 
 		var config: SideConfig = null
-		if surf:
-			config = surf.active_side_config(hit.side, state_copy)
+		if orig_surf:
+			config = orig_surf.active_side_config(hit.side, state_copy)
 
 		if config == null or config.effect == null:
 			excluded.append(hit.segment)
@@ -75,20 +84,44 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		if config.effect is TransformativeEffect:
 			var mobius: MobiusTransform = config.effect.get_mobius()
-			var dir_vec: Vector2 = ray.direction.to_vector().normalized()
-			var forward_point: Vector2 = hit.point + dir_vec
-			var reflected_forward: Vector2 = mobius.apply(forward_point)
-			var reflected_origin: Vector2 = mobius.apply(hit.point)
-			var new_dir := Direction.new(reflected_origin, reflected_forward)
+			var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
+			frame = frame.compose(mobius)
+			var new_origin: Vector2 = inv_mobius.apply(hit.point)
 			excluded = []
-			ray = Ray.new(reflected_origin, new_dir)
-			frame_id = mobius.id
+			ray = Ray.new(new_origin, ray.direction)
+			frame_dirty = true
 			continue
 
 		assert(false, "ProjectiveEffect not implemented until Stage 47")
 		break
 
 	return path
+
+static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary) -> Array:
+	out_mapping.clear()
+	if frame.id == MobiusTransform.IDENTITY_ID:
+		for surf in surfaces:
+			out_mapping[surf.segment] = surf
+		return surfaces
+
+	var inv := frame.invert()
+	var result: Array = []
+	for surf in surfaces:
+		var s: Vector2 = inv.apply(surf.segment.start)
+		var e: Vector2 = inv.apply(surf.segment.end)
+		var v: Vector2
+		if is_inf(surf.segment.via.x) or is_inf(surf.segment.via.y):
+			v = Vector2(INF, INF)
+		else:
+			v = inv.apply(surf.segment.via)
+		var new_seg := Segment.new(s, e, v)
+		var state := GameState.new()
+		var left: SideConfig = surf.active_side_config(Side.Value.LEFT, state)
+		var right: SideConfig = surf.active_side_config(Side.Value.RIGHT, state)
+		var new_surf := Surface.new(new_seg, left, right, surf.is_target, surf.player_solid)
+		out_mapping[new_surf.segment] = surf
+		result.append(new_surf)
+	return result
 
 static func transform_all(surfaces: Array, mobius: MobiusTransform) -> Array:
 	var result: Array = []
