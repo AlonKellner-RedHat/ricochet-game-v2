@@ -48,30 +48,50 @@ func _compute_trace() -> void:
 	var identity_frame := MobiusTransform.identity()
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray)
 
-	var pre_cursor_steps: Array = []
+	var physical_steps := _split_steps_at_cursor(_traced_path.steps, player_pos, _cursor_pos, aim_ray)
+
+	var planned_steps: Array = []
 	if plan_entries.size() > 0:
 		var planned_path := Tracer.trace_planned(
 			player_pos, aim_dir, plan_entries, surfaces, GameState.new(), _cursor_pos, aim_ray)
-		pre_cursor_steps = planned_path.steps
+		planned_steps = planned_path.steps
 	else:
-		pre_cursor_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
+		planned_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
 
-	var cursor_index: int = pre_cursor_steps.size()
+	var cursor_index: int = planned_steps.size()
 
-	var post_cursor_trace := Tracer.trace(_cursor_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray)
-	var full_planned_steps: Array = []
-	full_planned_steps.append_array(pre_cursor_steps)
-	for i in post_cursor_trace.steps.size():
-		var step: Tracer.Step = post_cursor_trace.steps[i]
-		full_planned_steps.append(step)
+	for i in range(cursor_index, physical_steps.size()):
+		planned_steps.append(physical_steps[i])
 
-	_merged_steps = StepTreeMerge.merge(full_planned_steps, _traced_path.steps, cursor_index)
+	_merged_steps = StepTreeMerge.merge(planned_steps, physical_steps, cursor_index)
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
 	if parent and "surfaces" in parent:
 		return parent.surfaces
 	return []
+
+func _split_steps_at_cursor(steps: Array, player_pos: Vector2, cursor_pos: Vector2, aim_ray: Ray) -> Array:
+	var cursor_dist: float = player_pos.distance_to(cursor_pos)
+	var result: Array = []
+	var accumulated := 0.0
+
+	for i in steps.size():
+		var step: Tracer.Step = steps[i]
+		var step_len: float = step.start.distance_to(step.end)
+		var dist_at_end: float = accumulated + step_len
+
+		if accumulated < cursor_dist and dist_at_end > cursor_dist + 0.01:
+			var t: float = (cursor_dist - accumulated) / step_len
+			var split: Vector2 = step.start.lerp(step.end, t)
+			result.append(Tracer.Step.new(step.start, split, step.frame_id, step.hit, aim_ray, step.frame))
+			result.append(Tracer.Step.new(split, step.end, step.frame_id, step.hit, aim_ray, step.frame))
+		else:
+			result.append(step)
+
+		accumulated += step_len
+
+	return result
 
 func _get_bounds() -> Rect2:
 	return Tracer.DEFAULT_BOUNDS
