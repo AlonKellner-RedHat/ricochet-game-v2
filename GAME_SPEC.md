@@ -1249,11 +1249,20 @@ Both modes use the same intersection pipeline, the same effects, and the same sc
 
 ### 14.2 Divergence: exact definition
 
-Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. At each step, the two traces have a start point and a frame. Divergence occurs in exactly two situations:
+Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. Two steps are compared using four fields from the Step record (§14.7):
 
-1. **Same start point and frame, different first hit point.** Both traces start the same step from the same position in the same Möbius frame, but they reach different hit points (or one hits something while the other escapes). The shared portion of the step — from the common start to the nearer of the two hit points — is **aligned**. The remainder of the longer step is **diverged**.
+**Fully aligned** — two steps at the same index are aligned if ALL of:
+- Same **ray** (reference identity — same Ray object, guaranteeing same normalized-frame intersection line)
+- Same **frame** (ID equality — same accumulated Möbius transform)
+- Same **start point** (exact equality)
+- Same **end point** (exact equality)
 
-2. **Different active frame.** The accumulated Möbius frame transforms differ between the two traces at the start of a step. This can occur when a prior step hit different surfaces (triggering different effects with different frame updates). From this point on, all subsequent steps are diverged.
+**Partially aligned** — sub-segmentation required if:
+- Same **ray**, same **frame**, same **start point**
+- DIFFERENT **end point** (one path hits a surface before the other)
+- The shared portion — from the common start to the nearer endpoint — is **aligned**. The remainder of the longer step is **diverged**.
+
+**Diverged** — if any of ray, frame, or start point differ, the steps are immediately diverged. No alignment is possible.
 
 Once divergence occurs, the traces never re-converge — divergence is permanent for the remainder of the shot. *(Principle 12.)*
 
@@ -1281,16 +1290,10 @@ StepTree:
 
 ### 14.5 Step tree merge algorithm
 
-The merge walks both traces **by index**. Steps at the same index are compared by start point and frame ID. Once they disagree, all subsequent steps are diverged.
+The merge walks both traces **by index**. Steps at the same index are compared using the alignment rules from §14.2: same ray (reference), same frame (ID), same start (exact), then check end.
 
 ```
 func merge(planned_steps, physical_steps, cursor_index) → Array[Step]:
-    # cursor_index is passed as a parameter: the count of pre-cursor planned steps.
-    
-    # Empty plan: all physical steps are post-planned.
-    if len(planned_steps) == 0:
-        return physical_steps.map(step -> step(r, ALIGNED_POST_PLANNED))
-    
     merged = []
     diverged = false
     
@@ -1300,32 +1303,29 @@ func merge(planned_steps, physical_steps, cursor_index) → Array[Step]:
         past_cursor = (idx >= cursor_index)
         
         if not diverged:
-            if p != null and r != null and p.start.id == r.start.id and p.frame_id == r.frame_id:
+            if p != null and r != null and p.ray == r.ray and p.frame.id == r.frame.id and p.start == r.start:
                 if p.end == r.end:
-                    # Fully aligned at this index.
+                    # Fully aligned.
                     merged.append(step(p, ALIGNED if not past_cursor else ALIGNED_POST_PLANNED))
                 else:
-                    # Same start and frame, different end — partial alignment.
-                    # Split at the nearer hit point.
-                    split_t = min(p.hit.t, r.hit.t)
-                    merged.append(step_truncated(p, split_t, ALIGNED))
+                    # Partially aligned — split at the nearer endpoint.
+                    nearer = p.end if dist(p.start, p.end) <= dist(r.start, r.end) else r.end
+                    merged.append(step(p.start, nearer, ALIGNED if not past_cursor else ALIGNED_POST_PLANNED))
                     diverged = true
-                    merged.append(step_remainder(p, split_t, DIVERGED_PLANNED))
-                    merged.append(step_remainder(r, split_t, DIVERGED_PHYSICAL))
+                    # Append remainders and all subsequent steps as diverged
+                    ...
             else:
-                # Different start or frame — immediate divergence.
+                # Different ray, frame, or start — immediate divergence.
                 diverged = true
-                if p: merged.append(step(p, DIVERGED_PLANNED if not past_cursor else DIVERGED_POST_PLANNED))
-                if r: merged.append(step(r, DIVERGED_PHYSICAL))
+                ...
         else:
-            # Already diverged — all remaining steps are diverged.
-            if p: merged.append(step(p, DIVERGED_PLANNED if not past_cursor else DIVERGED_POST_PLANNED))
-            if r: merged.append(step(r, DIVERGED_PHYSICAL))
+            # Already diverged.
+            ...
     
     return merged
 ```
 
-Alignment is checked by **provenance ID**, not coordinate equality — consistent with Principle 22 and §14.8.
+Alignment is checked by **ray reference identity** and **exact start equality** — not approximate coordinate comparison. This guarantees that aligned steps were computed from the same normalized-frame intersection, ensuring numerical stability. *(Principle 22, §14.8.)*
 
 After divergence, the planned and physical traces may be in different frames with different origins. Index-matching past the divergence point no longer implies geometric correspondence — all post-divergence steps are classified as diverged regardless of coincidental coordinate matches.
 
@@ -1352,13 +1352,19 @@ The planned continuation past the cursor starts in the **planned** frame (the fr
 
 ```
 Step:
-    start:   Vector2           # in normalized coords
-    end:     Vector2           # in normalized coords
-    frame:   MobiusTransform   # the frame active during this step
+    start:   Vector2           # in visual coords (frame.apply(normalized_start))
+    end:     Vector2           # in visual coords (frame.apply(normalized_end))
+    ray:     Ray               # the originating ray in the normalized frame (provenance)
+    frame:   MobiusTransform   # the frame active during this step (maps normalized → visual)
     hit:     HitRecord?        # null if ray escaped
     type:    StepType          # ALIGNED, ALIGNED_POST_PLANNED, DIVERGED_PHYSICAL,
                                # DIVERGED_PLANNED, DIVERGED_POST_PLANNED
 ```
+
+**Ray provenance:** Every step stores a reference to the normalized-frame ray used for its intersection computation. Since Direction never changes through transformative effects (§10.7), all steps within a transformative sub-chain share the same Ray object by reference identity. This guarantees:
+1. The original ray is always available for re-computation and re-intersection (numerical stability — avoids recomputing a ray from step endpoints which may accumulate floating-point drift).
+2. Alignment checking can use ray reference identity — if two steps share the same Ray, they were computed from the same intersection line.
+3. Any system that needs to re-intersect a step's ray with surfaces (e.g., splitting at a cursor distance, computing visibility) should use `step.ray`, not construct a new ray from `step.start` and `step.end`.
 
 ```
 TracedPath:
