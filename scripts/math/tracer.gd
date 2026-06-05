@@ -27,7 +27,7 @@ const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS) -> TracedPath:
 	return trace(initial_ray.origin, initial_ray.direction, surfaces, game_state, bounds, initial_ray)
 
-static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null) -> TracedPath:
+static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, target_dist: float = -1.0) -> TracedPath:
 	var path := TracedPath.new()
 
 	if direction.is_zero_length():
@@ -38,6 +38,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 	var provenance_ray: Ray = shared_ray if shared_ray != null else Ray.new(origin, direction)
 	var ray := provenance_ray
 	var excluded: Array = []
+	var target_passed := target_dist < 0.0
+	var accumulated_dist := 0.0
 	var frame_dirty := true
 	var normalized_surfaces: Array = []
 	var norm_to_surface: Dictionary = {}
@@ -53,6 +55,21 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		var hit = Intersection.find_earliest_hit(ray, norm_segments, excluded)
 
+		if not target_passed:
+			var dir_vec: Vector2 = ray.direction.to_vector()
+			var dir_len: float = dir_vec.length()
+			var remaining_to_target: float = target_dist - accumulated_dist
+			var t_target: float = remaining_to_target / dir_len if dir_len > 0.0 else -1.0
+			if remaining_to_target > 0.01 and t_target > 0.0 and (hit == null or hit.t < 0.0 or t_target < hit.t):
+				var target_point: Vector2 = ray.origin + dir_vec.normalized() * (target_dist - accumulated_dist)
+				var tgt_vis_start: Vector2 = frame.apply(ray.origin)
+				var tgt_vis_end: Vector2 = frame.apply(target_point)
+				path.steps.append(Step.new(tgt_vis_start, tgt_vis_end, frame.id, null, provenance_ray, frame))
+				accumulated_dist = target_dist
+				target_passed = true
+				ray = Ray.new(target_point, ray.direction)
+				continue
+
 		if hit == null:
 			var vis_origin: Vector2 = frame.apply(ray.origin)
 			var vis_dir: Vector2 = (frame.apply(ray.origin + ray.direction.to_vector().normalized()) - vis_origin).normalized()
@@ -65,6 +82,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		var vis_start: Vector2 = frame.apply(ray.origin)
 		var vis_end: Vector2 = frame.apply(hit.point)
 
+		var step_len: float = ray.origin.distance_to(hit.point)
 		if hit.t < 0.0:
 			var vis_dir: Vector2 = (vis_end - vis_start).normalized()
 			var escape_end: Vector2 = _clip_to_bounds_edge(vis_start, -vis_dir, bounds)
@@ -73,6 +91,9 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			path.steps.append(Step.new(return_start, vis_end, frame.id, hit, provenance_ray, frame))
 		else:
 			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit, provenance_ray, frame))
+		accumulated_dist += step_len
+		if not target_passed and accumulated_dist >= target_dist:
+			target_passed = true
 
 		var orig_surf: Surface = norm_to_surface.get(hit.segment)
 		if orig_surf and orig_surf.is_target:

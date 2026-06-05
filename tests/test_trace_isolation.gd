@@ -153,6 +153,46 @@ func test_merge_partial_same_ray_diff_end() -> void:
 			has_div = true
 	assert_true(has_div, "Should have DIVERGED_PLANNED remainder")
 
+func test_mirror_before_cursor_has_diverged_physical() -> void:
+	# Mirror between player and cursor: physical bounces, planned goes straight
+	# Should have DIVERGED_PHYSICAL for the bounce path
+	var m := _mirror(800)
+	var w_left := _wall(560)
+	var w_top := RoomBuilder.create_block_surface(Vector2(560, 240), Vector2(1360, 240), Vector2(960, 240))
+	var w_right := _wall(1360)
+	var surfaces: Array[Surface] = [m, w_left, w_top, w_right]
+
+	var player := Vector2(960, 500)
+	var cursor := Vector2(600, 500)
+	var target_dist: float = player.distance_to(cursor)
+	var aim_dir := Direction.new(player, cursor)
+	var aim_ray := Ray.new(player, aim_dir)
+	var identity_frame := MobiusTransform.identity()
+
+	var physical := Tracer.trace(player, aim_dir, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, aim_ray, target_dist)
+	var planned_steps: Array = [Tracer.Step.new(player, cursor, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
+
+	for i in range(planned_steps.size(), physical.steps.size()):
+		planned_steps.append(physical.steps[i])
+
+	var merged := StepTreeMerge.merge(planned_steps, physical.steps, 1)
+
+	var has_aligned := false
+	var has_div_planned := false
+	var has_div_physical := false
+	for i in merged.size():
+		var ms: StepTreeMerge.MergedStep = merged[i]
+		if ms.type == StepTypes.Type.ALIGNED:
+			has_aligned = true
+		if ms.type == StepTypes.Type.DIVERGED_PLANNED:
+			has_div_planned = true
+		if ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
+			has_div_physical = true
+
+	assert_true(has_aligned, "Should have ALIGNED before mirror")
+	assert_true(has_div_planned, "Should have DIVERGED_PLANNED to cursor")
+	assert_true(has_div_physical, "Should have DIVERGED_PHYSICAL for bounce")
+
 func test_merge_diverged_different_start() -> void:
 	var ray := Ray.new(Vector2(0, 0), Direction.new(Vector2(0, 0), Vector2(100, 0)))
 	var frame := MobiusTransform.identity()

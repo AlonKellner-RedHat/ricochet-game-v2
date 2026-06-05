@@ -46,9 +46,10 @@ func _compute_trace() -> void:
 
 	var aim_ray := Ray.new(player_pos, aim_dir)
 	var identity_frame := MobiusTransform.identity()
-	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray)
+	var target_dist: float = player_pos.distance_to(_cursor_pos)
+	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray, target_dist)
 
-	var physical_steps := _split_steps_at_cursor(_traced_path.steps, player_pos, _cursor_pos, aim_ray)
+	var physical_steps: Array = _traced_path.steps
 
 	var planned_steps: Array = []
 	if plan_entries.size() > 0:
@@ -70,26 +71,6 @@ func _get_surfaces() -> Array:
 	if parent and "surfaces" in parent:
 		return parent.surfaces
 	return []
-
-func _split_steps_at_cursor(steps: Array, player_pos: Vector2, cursor_pos: Vector2, aim_ray: Ray) -> Array:
-	var cursor_dist: float = player_pos.distance_to(cursor_pos)
-	var result: Array = []
-	var accumulated := 0.0
-
-	for i in steps.size():
-		var step: Tracer.Step = steps[i]
-		var step_len: float = step.start.distance_to(step.end)
-		var dist_at_end: float = accumulated + step_len
-
-		if accumulated < cursor_dist and dist_at_end > cursor_dist + 0.01:
-			result.append(Tracer.Step.new(step.start, cursor_pos, step.frame_id, step.hit, aim_ray, step.frame))
-			result.append(Tracer.Step.new(cursor_pos, step.end, step.frame_id, step.hit, aim_ray, step.frame))
-		else:
-			result.append(step)
-
-		accumulated += step_len
-
-	return result
 
 func _get_bounds() -> Rect2:
 	return Tracer.DEFAULT_BOUNDS
