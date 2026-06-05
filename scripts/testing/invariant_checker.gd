@@ -168,7 +168,7 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 	for point in test_points:
 		var carrier := segment.get_carrier()
 		var f_val := carrier.evaluate(point)
-		if absf(f_val) < 1e-10:
+		if f_val == 0.0:
 			continue
 		var side := segment.determine_side(point)
 		var traversal := segment.end - segment.start

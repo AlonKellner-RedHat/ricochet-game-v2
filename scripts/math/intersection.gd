@@ -184,6 +184,3 @@ static func _is_on_segment(point: Vector2, segment: Segment) -> bool:
 
 static func _hdet(zA: Vector2, wA: float, zB: Vector2, wB: float) -> Vector2:
 	return Vector2(zA.x * wB - zB.x * wA, zA.y * wB - zB.y * wA)
-
-static func _same_sign(a: float, b: float) -> bool:
-	return (a >= 0.0 and b >= 0.0) or (a <= 0.0 and b <= 0.0)
