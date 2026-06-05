@@ -48,16 +48,24 @@ func _compute_trace() -> void:
 	var identity_frame := MobiusTransform.identity()
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray)
 
-	var planned_steps: Array = []
+	var pre_cursor_steps: Array = []
 	if plan_entries.size() > 0:
 		var planned_path := Tracer.trace_planned(
 			player_pos, aim_dir, plan_entries, surfaces, GameState.new(), _cursor_pos, aim_ray)
-		planned_steps = planned_path.steps
+		pre_cursor_steps = planned_path.steps
 	else:
-		planned_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
+		pre_cursor_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
 
-	var cursor_index: int = planned_steps.size()
-	_merged_steps = StepTreeMerge.merge(planned_steps, _traced_path.steps, cursor_index)
+	var cursor_index: int = pre_cursor_steps.size()
+
+	var post_cursor_trace := Tracer.trace(_cursor_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray)
+	var full_planned_steps: Array = []
+	full_planned_steps.append_array(pre_cursor_steps)
+	for i in post_cursor_trace.steps.size():
+		var step: Tracer.Step = post_cursor_trace.steps[i]
+		full_planned_steps.append(step)
+
+	_merged_steps = StepTreeMerge.merge(full_planned_steps, _traced_path.steps, cursor_index)
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
