@@ -6,6 +6,27 @@ class PlannedPath extends RefCounted:
 	var origin: Vector2
 	var target: Vector2
 
+static func compute_aim_direction(origin: Vector2, cursor: Vector2, plan_entries: Array, surfaces: Array, game_state: GameState) -> Direction:
+	if plan_entries.size() == 0:
+		return Direction.new(origin, cursor)
+
+	var image := cursor
+	for i in range(plan_entries.size() - 1, -1, -1):
+		var entry: PlanManager.PlanEntry = plan_entries[i]
+		var surf := _find_surface(entry.surface_id, surfaces)
+		if surf == null:
+			return Direction.new(origin, cursor)
+		var config: SideConfig = surf.active_side_config(entry.side, game_state)
+		if config == null or not config.effect is TransformativeEffect:
+			return Direction.new(origin, cursor)
+		var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
+		image = inv_mobius.apply(image)
+
+	var dir := Direction.new(origin, image)
+	if dir.is_zero_length():
+		return Direction.new(origin, cursor)
+	return dir
+
 static func plan_transformative_subchain(
 	sub_origin: Vector2,
 	sub_target: Vector2,

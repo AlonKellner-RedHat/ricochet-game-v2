@@ -97,6 +97,73 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	return path
 
+static func trace_planned(origin: Vector2, direction: Direction, plan_entries: Array, surfaces: Array, game_state: GameState, cursor: Vector2) -> TracedPath:
+	var path := TracedPath.new()
+
+	if direction.is_zero_length() or plan_entries.size() == 0:
+		return path
+
+	var frame := MobiusTransform.identity()
+	var ray := Ray.new(origin, direction)
+	for entry_idx in plan_entries.size():
+		var entry: PlanManager.PlanEntry = plan_entries[entry_idx]
+		var surf := _find_surface_by_id(entry.surface_id, surfaces)
+		if surf == null:
+			break
+
+		var norm_carrier: GeneralizedCircle
+		if frame.id == MobiusTransform.IDENTITY_ID:
+			norm_carrier = surf.segment.get_carrier()
+		else:
+			var inv := frame.invert()
+			var s: Vector2 = inv.apply(surf.segment.start)
+			var e: Vector2 = inv.apply(surf.segment.end)
+			var v: Vector2
+			if is_inf(surf.segment.via.x) or is_inf(surf.segment.via.y):
+				v = Vector2(INF, INF)
+			else:
+				v = inv.apply(surf.segment.via)
+			norm_carrier = Segment.new(s, e, v).get_carrier()
+
+		var hits := Intersection.intersect_line_with_carrier(ray, norm_carrier)
+		if hits.size() == 0:
+			break
+
+		var best: Dictionary = hits[0]
+		for j in range(1, hits.size()):
+			if hits[j].t > 0.0 and (best.t <= 0.0 or hits[j].t < best.t):
+				best = hits[j]
+			elif hits[j].t <= 0.0 and best.t <= 0.0 and hits[j].t < best.t:
+				best = hits[j]
+
+		if best.point == ray.origin:
+			break
+
+		var vis_start: Vector2 = frame.apply(ray.origin)
+		var vis_end: Vector2 = frame.apply(best.point)
+		path.steps.append(Step.new(vis_start, vis_end, frame.id, null))
+
+		var config: SideConfig = surf.active_side_config(entry.side, game_state)
+		if config != null and config.effect is TransformativeEffect:
+			var mobius: MobiusTransform = config.effect.get_mobius()
+			var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
+			frame = frame.compose(mobius)
+			ray = Ray.new(inv_mobius.apply(best.point), ray.direction)
+		else:
+			ray = Ray.new(best.point, ray.direction)
+
+	var vis_last: Vector2 = frame.apply(ray.origin)
+	if vis_last.distance_to(cursor) > 0.01:
+		path.steps.append(Step.new(vis_last, cursor, frame.id, null))
+
+	return path
+
+static func _find_surface_by_id(surface_id: int, surfaces: Array) -> Surface:
+	for surf in surfaces:
+		if surf.id == surface_id:
+			return surf
+	return null
+
 static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary) -> Array:
 	out_mapping.clear()
 	if frame.id == MobiusTransform.IDENTITY_ID:
