@@ -193,6 +193,66 @@ func test_mirror_before_cursor_has_diverged_physical() -> void:
 	assert_true(has_div_planned, "Should have DIVERGED_PLANNED to cursor")
 	assert_true(has_div_physical, "Should have DIVERGED_PHYSICAL for bounce")
 
+func test_post_cursor_copied_from_physical_is_wrong() -> void:
+	# Reproduce: mirror between player and cursor. Physical bounces off mirror.
+	# Post-cursor steps are copied from physical → they follow the bounce, not the aim.
+	var m := _mirror(800)
+	var w_right := _wall(1360)
+	var w_top := RoomBuilder.create_block_surface(Vector2(560, 240), Vector2(1360, 240), Vector2(960, 240))
+	var surfaces: Array[Surface] = [m, w_right, w_top]
+
+	var player := Vector2(1073, 828)
+	var cursor := Vector2(685, 598)
+	var target_dist: float = player.distance_to(cursor)
+	var aim_dir := Direction.new(player, cursor)
+	var aim_ray := Ray.new(player, aim_dir)
+	var identity_frame := MobiusTransform.identity()
+
+	var physical := Tracer.trace(player, aim_dir, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, aim_ray, target_dist)
+	var physical_steps: Array = physical.steps
+
+	gut.p("Physical steps: %d" % physical_steps.size())
+	for i in physical_steps.size():
+		var step: Tracer.Step = physical_steps[i]
+		gut.p("  [%d] %s → %s (ray=%d)" % [i, step.start, step.end, step.ray.get_instance_id()])
+
+	# Build planned path the CURRENT way (copying post-cursor from physical)
+	var planned_steps: Array = [Tracer.Step.new(player, cursor, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
+	var cursor_index: int = 1
+	for i in range(cursor_index, physical_steps.size()):
+		planned_steps.append(physical_steps[i])
+
+	gut.p("Planned steps (with copy): %d" % planned_steps.size())
+	for i in planned_steps.size():
+		var step: Tracer.Step = planned_steps[i]
+		gut.p("  [%d] %s → %s (ray=%d)" % [i, step.start, step.end, step.ray.get_instance_id()])
+
+	# Verify H3: are post-cursor steps the same objects?
+	if planned_steps.size() > 1 and physical_steps.size() > 1:
+		var same_ref: bool = planned_steps[1] == physical_steps[1]
+		gut.p("H3: planned[1] IS physical[1] by reference: %s" % same_ref)
+		assert_true(same_ref, "H3 confirmed: post-cursor steps are same objects")
+
+	# Merge
+	var merged := StepTreeMerge.merge(planned_steps, physical_steps, cursor_index)
+	gut.p("Merged: %d steps" % merged.size())
+	for i in merged.size():
+		var ms: StepTreeMerge.MergedStep = merged[i]
+		gut.p("  [%d] type=%d %s → %s" % [i, ms.type, ms.start, ms.end])
+
+	# With the fix: post-cursor planned steps come from a SEPARATE trace
+	# starting at cursor in the aim direction. They should NOT be the same
+	# objects as the physical steps.
+	# For this test (which uses the OLD copy method), the bug still exists.
+	# The path_renderer uses the FIXED method. This test verifies the bug exists
+	# in the copy approach.
+	var has_div_physical := false
+	for i in merged.size():
+		if merged[i].type == StepTypes.Type.DIVERGED_PHYSICAL:
+			has_div_physical = true
+	# With the copy approach, no DIVERGED_PHYSICAL — proving the bug
+	assert_false(has_div_physical, "Copy approach: no DIVERGED_PHYSICAL (bug demonstration)")
+
 func test_merge_diverged_different_start() -> void:
 	var ray := Ray.new(Vector2(0, 0), Direction.new(Vector2(0, 0), Vector2(100, 0)))
 	var frame := MobiusTransform.identity()

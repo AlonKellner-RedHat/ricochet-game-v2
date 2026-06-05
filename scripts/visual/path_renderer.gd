@@ -61,8 +61,12 @@ func _compute_trace() -> void:
 
 	var cursor_index: int = planned_steps.size()
 
-	for i in range(cursor_index, physical_steps.size()):
-		planned_steps.append(physical_steps[i])
+	if planned_steps.size() > 0:
+		var last_planned: Tracer.Step = planned_steps[planned_steps.size() - 1]
+		var post_ray := Ray.new(_cursor_pos, last_planned.ray.direction)
+		var post_trace := Tracer.trace(_cursor_pos, last_planned.ray.direction, surfaces, GameState.new(), bounds, post_ray)
+		for i in post_trace.steps.size():
+			planned_steps.append(post_trace.steps[i])
 
 	_merged_steps = StepTreeMerge.merge(planned_steps, physical_steps, cursor_index)
 
