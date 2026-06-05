@@ -51,42 +51,20 @@ func _compute_trace() -> void:
 
 	var physical_steps: Array = _traced_path.steps
 
-	# Find the target step in the physical trace (the step that ends at the target distance)
-	var target_step_idx := -1
-	for i in physical_steps.size():
-		var step: Tracer.Step = physical_steps[i]
-		if step.hit == null and i < physical_steps.size() - 1:
-			target_step_idx = i
-			break
-	# Fallback: if no explicit target step, find by distance
-	if target_step_idx < 0:
-		var acc := 0.0
-		for i in physical_steps.size():
-			var step: Tracer.Step = physical_steps[i]
-			var sl: float = step.start.distance_to(step.end)
-			if acc + sl >= target_dist - 0.01 and acc < target_dist:
-				target_step_idx = i
-				break
-			acc += sl
-
-	var cursor_on_path: Vector2 = _cursor_pos
-	if target_step_idx >= 0 and target_step_idx < physical_steps.size():
-		cursor_on_path = physical_steps[target_step_idx].end
-
 	var planned_steps: Array = []
 	if plan_entries.size() > 0:
 		var planned_path := Tracer.trace_planned(
 			player_pos, aim_dir, plan_entries, surfaces, GameState.new(), _cursor_pos, aim_ray)
 		planned_steps = planned_path.steps
 	else:
-		planned_steps = [Tracer.Step.new(player_pos, cursor_on_path, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
+		planned_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
 
 	var cursor_index: int = planned_steps.size()
 
 	if planned_steps.size() > 0:
 		var last_planned: Tracer.Step = planned_steps[planned_steps.size() - 1]
 		var post_start: Vector2 = last_planned.end
-		var post_trace := Tracer.trace(post_start, last_planned.ray.direction, surfaces, GameState.new(), bounds, last_planned.ray)
+		var post_trace := Tracer.trace(post_start, last_planned.ray.direction, surfaces, GameState.new(), bounds, aim_ray)
 		for i in post_trace.steps.size():
 			planned_steps.append(post_trace.steps[i])
 

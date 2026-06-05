@@ -24,6 +24,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	violations.append_array(check_PREVIEW_GREEN_FROM_PLAYER(player_pos, cursor_pos))
 	violations.append_array(check_PREVIEW_SOLID_TO_CURSOR(player_pos, cursor_pos))
 	violations.append_array(check_ORIGIN_NOT_REHIT(player_pos, cursor_pos))
+	violations.append_array(check_NO_DUPLICATE_GEOMETRY(player_pos, cursor_pos))
+	violations.append_array(check_NO_FALSE_DIVERGENCE(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -146,6 +148,42 @@ func check_ORIGIN_NOT_REHIT(player_pos: Vector2, cursor_pos: Vector2) -> Array[S
 		var step: Tracer.Step = path.steps[i]
 		if step.start == step.end:
 			violations.append("ORIGIN-NOT-REHIT: Zero-length step %d at %s" % [i, step.start])
+	return violations
+
+func check_NO_DUPLICATE_GEOMETRY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var typed: Array = _renderer.get_typed_steps()
+	for i in typed.size():
+		var a: StepTreeMerge.MergedStep = typed[i]
+		for j in range(i + 1, typed.size()):
+			var b: StepTreeMerge.MergedStep = typed[j]
+			if a.start == b.start and a.end == b.end and a.start != a.end:
+				violations.append("NO-DUPLICATE-GEOMETRY: steps %d (type=%d) and %d (type=%d) have same geometry %s→%s" % [i, a.type, j, b.type, a.start, a.end])
+	return violations
+
+func check_NO_FALSE_DIVERGENCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var typed: Array = _renderer.get_typed_steps()
+	var path = _renderer.get_traced_path()
+	if path == null:
+		return violations
+	for i in typed.size():
+		var ms: StepTreeMerge.MergedStep = typed[i]
+		var is_diverged: bool = ms.type == StepTypes.Type.DIVERGED_PHYSICAL or ms.type == StepTypes.Type.DIVERGED_PLANNED or ms.type == StepTypes.Type.DIVERGED_POST_PLANNED
+		if not is_diverged:
+			continue
+		for j in typed.size():
+			if i == j:
+				continue
+			var other: StepTreeMerge.MergedStep = typed[j]
+			if ms.start == other.start and ms.end == other.end and ms.frame_id == other.frame_id:
+				var other_aligned: bool = other.type == StepTypes.Type.ALIGNED or other.type == StepTypes.Type.ALIGNED_POST_PLANNED
+				if other_aligned:
+					violations.append("NO-FALSE-DIVERGENCE: step %d (type=%d) diverged but step %d (type=%d) has same geometry and is aligned" % [i, ms.type, j, other.type])
 	return violations
 
 static func check_S11(segment: Segment) -> Array[String]:
