@@ -6,12 +6,16 @@ class Step extends RefCounted:
 	var end: Vector2
 	var frame_id: int
 	var hit: RefCounted
+	var ray: Ray
+	var frame: MobiusTransform
 
-	func _init(p_start: Vector2, p_end: Vector2, p_frame_id: int, p_hit: RefCounted = null) -> void:
+	func _init(p_start: Vector2, p_end: Vector2, p_frame_id: int, p_hit: RefCounted = null, p_ray: Ray = null, p_frame: MobiusTransform = null) -> void:
 		start = p_start
 		end = p_end
 		frame_id = p_frame_id
 		hit = p_hit
+		ray = p_ray
+		frame = p_frame
 
 class TracedPath extends RefCounted:
 	var steps: Array = []
@@ -20,7 +24,10 @@ class TracedPath extends RefCounted:
 const MAX_HITS := 256
 const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 
-static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS) -> TracedPath:
+static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS) -> TracedPath:
+	return trace(initial_ray.origin, initial_ray.direction, surfaces, game_state, bounds, initial_ray)
+
+static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null) -> TracedPath:
 	var path := TracedPath.new()
 
 	if direction.is_zero_length():
@@ -28,7 +35,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	var state_copy := game_state.copy()
 	var frame := MobiusTransform.identity()
-	var ray := Ray.new(origin, direction)
+	var ray: Ray = shared_ray if shared_ray != null else Ray.new(origin, direction)
 	var excluded: Array = []
 	var frame_dirty := true
 	var normalized_surfaces: Array = []
@@ -50,8 +57,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var vis_dir: Vector2 = (frame.apply(ray.origin + ray.direction.to_vector().normalized()) - vis_origin).normalized()
 			var escape_end: Vector2 = _clip_to_bounds_edge(vis_origin, vis_dir, bounds)
 			var return_start: Vector2 = _clip_to_bounds_edge(vis_origin, -vis_dir, bounds)
-			path.steps.append(Step.new(vis_origin, escape_end, frame.id, null))
-			path.steps.append(Step.new(return_start, vis_origin, frame.id, null))
+			path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, ray, frame))
+			path.steps.append(Step.new(return_start, vis_origin, frame.id, null, ray, frame))
 			break
 
 		var vis_start: Vector2 = frame.apply(ray.origin)
@@ -61,10 +68,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var vis_dir: Vector2 = (vis_end - vis_start).normalized()
 			var escape_end: Vector2 = _clip_to_bounds_edge(vis_start, -vis_dir, bounds)
 			var return_start: Vector2 = _clip_to_bounds_edge(vis_end, vis_dir, bounds)
-			path.steps.append(Step.new(vis_start, escape_end, frame.id, null))
-			path.steps.append(Step.new(return_start, vis_end, frame.id, hit))
+			path.steps.append(Step.new(vis_start, escape_end, frame.id, null, ray, frame))
+			path.steps.append(Step.new(return_start, vis_end, frame.id, hit, ray, frame))
 		else:
-			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit))
+			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit, ray, frame))
 
 		var orig_surf: Surface = norm_to_surface.get(hit.segment)
 		if orig_surf and orig_surf.is_target:
@@ -97,14 +104,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	return path
 
-static func trace_planned(origin: Vector2, direction: Direction, plan_entries: Array, surfaces: Array, game_state: GameState, cursor: Vector2) -> TracedPath:
+static func trace_planned(origin: Vector2, direction: Direction, plan_entries: Array, surfaces: Array, game_state: GameState, cursor: Vector2, shared_ray: Ray = null) -> TracedPath:
 	var path := TracedPath.new()
 
 	if direction.is_zero_length() or plan_entries.size() == 0:
 		return path
 
 	var frame := MobiusTransform.identity()
-	var ray := Ray.new(origin, direction)
+	var ray: Ray = shared_ray if shared_ray != null else Ray.new(origin, direction)
 	for entry_idx in plan_entries.size():
 		var entry: PlanManager.PlanEntry = plan_entries[entry_idx]
 		var surf := _find_surface_by_id(entry.surface_id, surfaces)
@@ -141,7 +148,7 @@ static func trace_planned(origin: Vector2, direction: Direction, plan_entries: A
 
 		var vis_start: Vector2 = frame.apply(ray.origin)
 		var vis_end: Vector2 = frame.apply(best.point)
-		path.steps.append(Step.new(vis_start, vis_end, frame.id, null))
+		path.steps.append(Step.new(vis_start, vis_end, frame.id, null, ray, frame))
 
 		var config: SideConfig = surf.active_side_config(entry.side, game_state)
 		if config != null and config.effect is TransformativeEffect:
@@ -154,7 +161,7 @@ static func trace_planned(origin: Vector2, direction: Direction, plan_entries: A
 
 	var vis_last: Vector2 = frame.apply(ray.origin)
 	if vis_last.distance_to(cursor) > 0.01:
-		path.steps.append(Step.new(vis_last, cursor, frame.id, null))
+		path.steps.append(Step.new(vis_last, cursor, frame.id, null, ray, frame))
 
 	return path
 

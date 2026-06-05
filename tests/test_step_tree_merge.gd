@@ -4,16 +4,22 @@ extends GutTest
 func _step(start: Vector2, end_v: Vector2, frame_id: int = 0) -> Tracer.Step:
 	return Tracer.Step.new(start, end_v, frame_id, null)
 
-func test_merge_empty_plan() -> void:
-	var physical: Array = [
-		_step(Vector2(0, 0), Vector2(100, 0)),
-		_step(Vector2(100, 0), Vector2(200, 0)),
+func test_merge_no_plan_synthetic() -> void:
+	# With no plan, a synthetic [origin→cursor] planned step is created
+	# Physical trace goes (0,0)→(100,0)→(200,0), cursor at (150,0)
+	var aim_ray := Ray.new(Vector2(0, 0), Direction.new(Vector2(0, 0), Vector2(200, 0)))
+	var identity := MobiusTransform.identity()
+	var planned: Array = [
+		Tracer.Step.new(Vector2(0, 0), Vector2(150, 0), identity.id, null, aim_ray, identity)
 	]
-	var merged := StepTreeMerge.merge([], physical, 0)
-	assert_eq(merged.size(), 2, "Should have 2 steps")
-	for i in merged.size():
-		var ms: StepTreeMerge.MergedStep = merged[i]
-		assert_eq(ms.type, StepTypes.Type.ALIGNED_POST_PLANNED, "Empty plan: all ALIGNED_POST_PLANNED")
+	var physical: Array = [
+		Tracer.Step.new(Vector2(0, 0), Vector2(100, 0), identity.id, null, aim_ray, identity),
+		Tracer.Step.new(Vector2(100, 0), Vector2(200, 0), identity.id, null, aim_ray, identity),
+	]
+	var merged := StepTreeMerge.merge(planned, physical, 1)
+	assert_gt(merged.size(), 0, "Should have steps")
+	# First step should be ALIGNED (partial — physical hits at 100, planned at 150)
+	assert_eq(merged[0].type, StepTypes.Type.ALIGNED, "First portion should be ALIGNED")
 
 func test_merge_fully_aligned() -> void:
 	var planned: Array = [

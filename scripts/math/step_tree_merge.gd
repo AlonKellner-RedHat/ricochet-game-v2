@@ -14,13 +14,6 @@ class MergedStep extends RefCounted:
 		frame_id = p_frame_id
 
 static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int) -> Array:
-	if planned_steps.size() == 0:
-		var result: Array = []
-		for i in physical_steps.size():
-			var step: Tracer.Step = physical_steps[i]
-			result.append(MergedStep.new(step.start, step.end, StepTypes.Type.ALIGNED_POST_PLANNED, step.frame_id))
-		return result
-
 	var merged: Array = []
 	var diverged := false
 	var max_idx: int = maxi(planned_steps.size(), physical_steps.size())
@@ -31,8 +24,8 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 		var past_cursor: bool = idx >= cursor_index
 
 		if not diverged:
-			if p != null and r != null and p.frame_id == r.frame_id:
-				if p.end.distance_to(r.end) < 1.0:
+			if _is_aligned_start(p, r):
+				if p.end == r.end:
 					var step_type: StepTypes.Type
 					if past_cursor:
 						step_type = StepTypes.Type.ALIGNED_POST_PLANNED
@@ -40,46 +33,51 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 						step_type = StepTypes.Type.ALIGNED
 					merged.append(MergedStep.new(p.start, p.end, step_type, p.frame_id))
 				else:
+					var aligned_type: StepTypes.Type = StepTypes.Type.ALIGNED if not past_cursor else StepTypes.Type.ALIGNED_POST_PLANNED
 					var p_len: float = p.start.distance_to(p.end)
 					var r_len: float = r.start.distance_to(r.end)
 					var shorter_end: Vector2 = r.end if r_len <= p_len else p.end
-					var aligned_type: StepTypes.Type = StepTypes.Type.ALIGNED if not past_cursor else StepTypes.Type.ALIGNED_POST_PLANNED
 					merged.append(MergedStep.new(p.start, shorter_end, aligned_type, p.frame_id))
 					diverged = true
 					if p_len > r_len:
-						if not past_cursor:
-							merged.append(MergedStep.new(r.end, p.end, StepTypes.Type.DIVERGED_PLANNED, p.frame_id))
-						else:
-							merged.append(MergedStep.new(r.end, p.end, StepTypes.Type.DIVERGED_POST_PLANNED, p.frame_id))
+						var div_type: StepTypes.Type = StepTypes.Type.DIVERGED_PLANNED if not past_cursor else StepTypes.Type.DIVERGED_POST_PLANNED
+						merged.append(MergedStep.new(r.end, p.end, div_type, p.frame_id))
 					elif r_len > p_len:
 						merged.append(MergedStep.new(p.end, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id))
-					for remaining_idx in range(idx + 1, physical_steps.size()):
-						var rem: Tracer.Step = physical_steps[remaining_idx]
-						merged.append(MergedStep.new(rem.start, rem.end, StepTypes.Type.DIVERGED_PHYSICAL, rem.frame_id))
-					for remaining_idx in range(idx + 1, planned_steps.size()):
-						var rem: Tracer.Step = planned_steps[remaining_idx]
-						var rem_past: bool = remaining_idx >= cursor_index
-						if not rem_past:
-							merged.append(MergedStep.new(rem.start, rem.end, StepTypes.Type.DIVERGED_PLANNED, rem.frame_id))
-						else:
-							merged.append(MergedStep.new(rem.start, rem.end, StepTypes.Type.DIVERGED_POST_PLANNED, rem.frame_id))
+					_append_remaining(merged, planned_steps, physical_steps, idx + 1, cursor_index)
 					break
 			else:
 				diverged = true
-				if p != null:
-					if not past_cursor:
-						merged.append(MergedStep.new(p.start, p.end, StepTypes.Type.DIVERGED_PLANNED, p.frame_id))
-					else:
-						merged.append(MergedStep.new(p.start, p.end, StepTypes.Type.DIVERGED_POST_PLANNED, p.frame_id))
-				if r != null:
-					merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id))
+				_append_diverged_pair(merged, p, r, past_cursor)
 		else:
-			if p != null:
-				if not past_cursor:
-					merged.append(MergedStep.new(p.start, p.end, StepTypes.Type.DIVERGED_PLANNED, p.frame_id))
-				else:
-					merged.append(MergedStep.new(p.start, p.end, StepTypes.Type.DIVERGED_POST_PLANNED, p.frame_id))
-			if r != null:
-				merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id))
+			_append_diverged_pair(merged, p, r, past_cursor)
 
 	return merged
+
+static func _is_aligned_start(p: Tracer.Step, r: Tracer.Step) -> bool:
+	if p == null or r == null:
+		return false
+	if p.ray != null and r.ray != null and p.ray != r.ray:
+		return false
+	if p.frame_id != r.frame_id:
+		return false
+	if p.start != r.start:
+		return false
+	return true
+
+static func _append_diverged_pair(merged: Array, p: Tracer.Step, r: Tracer.Step, past_cursor: bool) -> void:
+	if p != null:
+		var div_type: StepTypes.Type = StepTypes.Type.DIVERGED_PLANNED if not past_cursor else StepTypes.Type.DIVERGED_POST_PLANNED
+		merged.append(MergedStep.new(p.start, p.end, div_type, p.frame_id))
+	if r != null:
+		merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id))
+
+static func _append_remaining(merged: Array, planned_steps: Array, physical_steps: Array, from_idx: int, cursor_index: int) -> void:
+	for i in range(from_idx, physical_steps.size()):
+		var rem: Tracer.Step = physical_steps[i]
+		merged.append(MergedStep.new(rem.start, rem.end, StepTypes.Type.DIVERGED_PHYSICAL, rem.frame_id))
+	for i in range(from_idx, planned_steps.size()):
+		var rem: Tracer.Step = planned_steps[i]
+		var rem_past: bool = i >= cursor_index
+		var div_type: StepTypes.Type = StepTypes.Type.DIVERGED_PLANNED if not rem_past else StepTypes.Type.DIVERGED_POST_PLANNED
+		merged.append(MergedStep.new(rem.start, rem.end, div_type, rem.frame_id))

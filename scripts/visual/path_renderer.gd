@@ -44,15 +44,17 @@ func _compute_trace() -> void:
 	var aim_dir: Direction = Planner.compute_aim_direction(
 		player_pos, _cursor_pos, plan_entries, surfaces, GameState.new())
 
-	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds)
+	var aim_ray := Ray.new(player_pos, aim_dir)
+	var identity_frame := MobiusTransform.identity()
+	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray)
 
 	var planned_steps: Array = []
 	if plan_entries.size() > 0:
 		var planned_path := Tracer.trace_planned(
-			player_pos, aim_dir, plan_entries, surfaces, GameState.new(), _cursor_pos)
+			player_pos, aim_dir, plan_entries, surfaces, GameState.new(), _cursor_pos, aim_ray)
 		planned_steps = planned_path.steps
 	else:
-		planned_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null)]
+		planned_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
 
 	var cursor_index: int = planned_steps.size()
 	_merged_steps = StepTreeMerge.merge(planned_steps, _traced_path.steps, cursor_index)
