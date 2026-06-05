@@ -253,6 +253,48 @@ func test_post_cursor_copied_from_physical_is_wrong() -> void:
 	# With the copy approach, no DIVERGED_PHYSICAL — proving the bug
 	assert_false(has_div_physical, "Copy approach: no DIVERGED_PHYSICAL (bug demonstration)")
 
+func test_post_cursor_ray_mismatch_no_obstacles() -> void:
+	# Simplest case: no plan, no obstacles between player and cursor.
+	# Post-planned trace creates a NEW ray, physical trace uses aim_ray.
+	# The merge sees different ray refs → diverged (BUG).
+	var w_top := RoomBuilder.create_block_surface(Vector2(0, 240), Vector2(1920, 240), Vector2(960, 240))
+	var surfaces: Array[Surface] = [w_top]
+
+	var player := Vector2(960, 828)
+	var cursor := Vector2(963, 463)
+	var target_dist: float = player.distance_to(cursor)
+	var aim_dir := Direction.new(player, cursor)
+	var aim_ray := Ray.new(player, aim_dir)
+	var identity_frame := MobiusTransform.identity()
+
+	var physical := Tracer.trace(player, aim_dir, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, aim_ray, target_dist)
+
+	# Use the physical trace's target step endpoint as the cursor-on-path point
+	var cursor_on_path: Vector2 = cursor
+	for i in physical.steps.size():
+		var step: Tracer.Step = physical.steps[i]
+		if step.hit == null and i < physical.steps.size() - 1:
+			cursor_on_path = step.end
+			break
+
+	var planned_steps: Array = [Tracer.Step.new(player, cursor_on_path, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
+	var cursor_index: int = 1
+
+	# Post-planned: trace from cursor_on_path using SAME ray
+	var last_planned: Tracer.Step = planned_steps[0]
+	var post_trace := Tracer.trace(cursor_on_path, last_planned.ray.direction, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, last_planned.ray)
+	for i in post_trace.steps.size():
+		planned_steps.append(post_trace.steps[i])
+
+	# Merge
+	var merged := StepTreeMerge.merge(planned_steps, physical.steps, cursor_index)
+
+	var has_post_planned := false
+	for i in merged.size():
+		if merged[i].type == StepTypes.Type.ALIGNED_POST_PLANNED:
+			has_post_planned = true
+	assert_true(has_post_planned, "Post-cursor should be ALIGNED_POST_PLANNED (no divergence)")
+
 func test_merge_diverged_different_start() -> void:
 	var ray := Ray.new(Vector2(0, 0), Direction.new(Vector2(0, 0), Vector2(100, 0)))
 	var frame := MobiusTransform.identity()

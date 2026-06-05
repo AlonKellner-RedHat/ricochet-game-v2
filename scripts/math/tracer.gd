@@ -36,7 +36,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 	var state_copy := game_state.copy()
 	var frame := MobiusTransform.identity()
 	var provenance_ray: Ray = shared_ray if shared_ray != null else Ray.new(origin, direction)
-	var ray := provenance_ray
+	var ray := Ray.new(origin, direction)
 	var excluded: Array = []
 	var target_passed := target_dist < 0.0
 	var accumulated_dist := 0.0
@@ -134,7 +134,7 @@ static func trace_planned(origin: Vector2, direction: Direction, plan_entries: A
 
 	var frame := MobiusTransform.identity()
 	var provenance_ray: Ray = shared_ray if shared_ray != null else Ray.new(origin, direction)
-	var ray := provenance_ray
+	var ray := Ray.new(origin, direction)
 	for entry_idx in plan_entries.size():
 		var entry: PlanManager.PlanEntry = plan_entries[entry_idx]
 		var surf := _find_surface_by_id(entry.surface_id, surfaces)
