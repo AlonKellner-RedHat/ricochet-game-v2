@@ -108,9 +108,10 @@ func check_PREVIEW_GREEN_FROM_PLAYER(player_pos: Vector2, cursor_pos: Vector2) -
 	var typed: Array = _renderer.get_typed_steps()
 	if typed.size() == 0:
 		return violations
-	var first: PreviewBuilder.TypedStep = typed[0]
-	if first.type != StepTypes.Type.ALIGNED:
-		violations.append("PREVIEW-GREEN-FROM-PLAYER: First step type=%d, expected ALIGNED(0)" % first.type)
+	var first: StepTreeMerge.MergedStep = typed[0]
+	var is_green: bool = first.type == StepTypes.Type.ALIGNED or first.type == StepTypes.Type.ALIGNED_POST_PLANNED
+	if not is_green:
+		violations.append("PREVIEW-GREEN-FROM-PLAYER: First step type=%d, expected green (ALIGNED or ALIGNED_POST_PLANNED)" % first.type)
 	return violations
 
 func check_PREVIEW_SOLID_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -120,11 +121,15 @@ func check_PREVIEW_SOLID_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> 
 	var typed: Array = _renderer.get_typed_steps()
 	if typed.size() == 0:
 		return violations
+	var has_solid := false
 	var last_solid_end := Vector2.ZERO
 	for i in typed.size():
-		var step: PreviewBuilder.TypedStep = typed[i]
+		var step: StepTreeMerge.MergedStep = typed[i]
 		if StepTypes.is_solid(step.type):
+			has_solid = true
 			last_solid_end = step.end
+	if not has_solid:
+		return violations
 	var dist_to_cursor: float = last_solid_end.distance_to(cursor_pos)
 	if dist_to_cursor > 1.0:
 		violations.append("PREVIEW-SOLID-TO-CURSOR: Solid path ends at %s, cursor at %s (dist=%f)" % [last_solid_end, cursor_pos, dist_to_cursor])

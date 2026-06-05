@@ -7,7 +7,7 @@ const DASH_OFF := 5.0
 var _player: CharacterBody2D
 var _cursor: Node2D
 var _traced_path: Tracer.TracedPath = null
-var _typed_steps: Array = []
+var _merged_steps: Array = []
 var _cursor_pos := Vector2.ZERO
 
 func _ready() -> void:
@@ -24,34 +24,49 @@ func _process(_delta: float) -> void:
 func _compute_trace() -> void:
 	if not _player or not _cursor:
 		_traced_path = null
-		_typed_steps = []
+		_merged_steps = []
 		return
 	_cursor_pos = _cursor.global_position
 	var player_pos := _player.global_position
 	if player_pos == _cursor_pos:
 		_traced_path = null
-		_typed_steps = []
+		_merged_steps = []
 		return
 
 	var surfaces := _get_surfaces()
 	var plan := _get_plan()
 	var bounds := _get_bounds()
 
-	var trace_dir: Direction
-	var planned_path: Planner.PlannedPath = null
+	var plan_entries: Array = []
 	if plan and not plan.is_empty():
-		planned_path = Planner.plan_transformative_subchain(
-			player_pos, _cursor_pos, plan.entries, surfaces, GameState.new())
-		if planned_path.steps.size() > 0:
-			var first_step: Tracer.Step = planned_path.steps[0]
-			trace_dir = Direction.new(player_pos, first_step.end)
-		else:
-			trace_dir = Direction.new(player_pos, _cursor_pos)
-	else:
-		trace_dir = Direction.new(player_pos, _cursor_pos)
+		plan_entries = plan.entries
 
-	_traced_path = Tracer.trace(player_pos, trace_dir, surfaces, GameState.new(), bounds)
-	_typed_steps = PreviewBuilder.build(_traced_path, player_pos, _cursor_pos, surfaces, bounds, planned_path)
+	var aim_dir: Direction = Planner.compute_aim_direction(
+		player_pos, _cursor_pos, plan_entries, surfaces, GameState.new())
+
+	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds)
+
+	if plan_entries.size() > 0:
+		var planned_path := Tracer.trace_planned(
+			player_pos, aim_dir, plan_entries, surfaces, GameState.new(), _cursor_pos)
+
+		var cursor_index: int = planned_path.steps.size()
+		_merged_steps = StepTreeMerge.merge(planned_path.steps, _traced_path.steps, cursor_index)
+
+		var last_planned_point := _cursor_pos
+		if planned_path.steps.size() > 0:
+			var last_step: Tracer.Step = planned_path.steps[planned_path.steps.size() - 1]
+			last_planned_point = last_step.end
+
+		var post_dir := Direction.new(last_planned_point, last_planned_point + aim_dir.to_vector().normalized())
+		if not post_dir.is_zero_length():
+			var post_trace := Tracer.trace(last_planned_point, post_dir, surfaces, GameState.new(), bounds)
+			for i in post_trace.steps.size():
+				var step: Tracer.Step = post_trace.steps[i]
+				_merged_steps.append(StepTreeMerge.MergedStep.new(
+					step.start, step.end, StepTypes.Type.DIVERGED_POST_PLANNED, step.frame_id))
+	else:
+		_merged_steps = StepTreeMerge.merge([], _traced_path.steps, 0)
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
@@ -69,17 +84,17 @@ func _get_plan() -> PlanManager:
 	return null
 
 func _draw() -> void:
-	if _typed_steps.size() == 0:
+	if _merged_steps.size() == 0:
 		return
 
-	for i in _typed_steps.size():
-		var step: PreviewBuilder.TypedStep = _typed_steps[i]
-		var from: Vector2 = step.start - global_position
-		var to: Vector2 = step.end - global_position
-		if from == to:
+	for i in _merged_steps.size():
+		var ms: StepTreeMerge.MergedStep = _merged_steps[i]
+		var from: Vector2 = ms.start - global_position
+		var to: Vector2 = ms.end - global_position
+		if from.distance_to(to) < 0.01:
 			continue
-		var col: Color = StepTypes.color(step.type)
-		if StepTypes.is_solid(step.type):
+		var col: Color = StepTypes.color(ms.type)
+		if StepTypes.is_solid(ms.type):
 			draw_line(from, to, col, LINE_WIDTH)
 		else:
 			_draw_dashed(from, to, col)
@@ -113,21 +128,21 @@ func _draw_hit_points() -> void:
 			draw_circle(pos, 5.0, hit_color)
 
 func has_line() -> bool:
-	return _typed_steps.size() > 0
+	return _merged_steps.size() > 0
 
 func get_line_from() -> Vector2:
-	if _typed_steps.size() > 0:
-		return _typed_steps[0].start
+	if _merged_steps.size() > 0:
+		return _merged_steps[0].start
 	return Vector2.ZERO
 
 func get_line_direction() -> Vector2:
-	if _typed_steps.size() > 0:
-		var step: PreviewBuilder.TypedStep = _typed_steps[0]
-		return (step.end - step.start).normalized()
+	if _merged_steps.size() > 0:
+		var ms: StepTreeMerge.MergedStep = _merged_steps[0]
+		return (ms.end - ms.start).normalized()
 	return Vector2.ZERO
 
 func get_traced_path() -> Tracer.TracedPath:
 	return _traced_path
 
 func get_typed_steps() -> Array:
-	return _typed_steps
+	return _merged_steps

@@ -145,13 +145,8 @@ func _on_flight_completed() -> void:
 		_path_renderer.modulate.a = 1.0
 
 func _compute_aim_direction(player_pos: Vector2, cursor_pos: Vector2, surfaces: Array) -> Direction:
-	if not plan.is_empty():
-		var planned := Planner.plan_transformative_subchain(
-			player_pos, cursor_pos, plan.entries, surfaces, GameState.new())
-		if planned.steps.size() > 0:
-			var first_step: Tracer.Step = planned.steps[0]
-			return Direction.new(player_pos, first_step.end)
-	return Direction.new(player_pos, cursor_pos)
+	var entries: Array = plan.entries if not plan.is_empty() else []
+	return Planner.compute_aim_direction(player_pos, cursor_pos, entries, surfaces, GameState.new())
 
 func _get_surfaces() -> Array:
 	if _level_settings and "surfaces" in _level_settings:
