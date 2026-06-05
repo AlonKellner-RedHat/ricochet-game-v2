@@ -82,10 +82,8 @@ func _split_steps_at_cursor(steps: Array, player_pos: Vector2, cursor_pos: Vecto
 		var dist_at_end: float = accumulated + step_len
 
 		if accumulated < cursor_dist and dist_at_end > cursor_dist + 0.01:
-			var t: float = (cursor_dist - accumulated) / step_len
-			var split: Vector2 = step.start.lerp(step.end, t)
-			result.append(Tracer.Step.new(step.start, split, step.frame_id, step.hit, aim_ray, step.frame))
-			result.append(Tracer.Step.new(split, step.end, step.frame_id, step.hit, aim_ray, step.frame))
+			result.append(Tracer.Step.new(step.start, cursor_pos, step.frame_id, step.hit, aim_ray, step.frame))
+			result.append(Tracer.Step.new(cursor_pos, step.end, step.frame_id, step.hit, aim_ray, step.frame))
 		else:
 			result.append(step)
 
