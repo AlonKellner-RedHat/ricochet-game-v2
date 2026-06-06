@@ -16,23 +16,33 @@ func _make_wall(x: float) -> Surface:
 func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> Array:
 	var aim: Direction = Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
 	var aim_ray := Ray.new(player, aim)
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, aim_ray)
-	var planned_steps: Array = []
-	if plan_entries.size() > 0:
-		var planned := Tracer.trace_planned(player, aim, plan_entries, surfaces, GameState.new(), cursor, aim_ray)
-		planned_steps = planned.steps
-	else:
-		var identity := MobiusTransform.identity()
-		planned_steps = [Tracer.Step.new(player, cursor, identity.id, null, aim_ray, identity)]
-	return StepTreeMerge.merge(planned_steps, physical.steps, planned_steps.size())
+	var target_dist: float = player.distance_to(cursor)
+	var bounds := Tracer.DEFAULT_BOUNDS
+
+	var physical := Tracer.trace(player, aim, surfaces, GameState.new(), bounds, aim_ray, target_dist, Tracer.TraceMode.PHYSICAL)
+
+	var planned_full := Tracer.trace(player, aim, surfaces, GameState.new(), bounds, aim_ray, target_dist, Tracer.TraceMode.PLANNED, plan_entries)
+
+	var ci: int = planned_full.cursor_index
+	var cursor_reached: bool = ci >= 0
+	if not cursor_reached:
+		ci = planned_full.steps.size()
+	var combined: Array = planned_full.steps.slice(0, ci)
+
+	if cursor_reached and ci > 0 and ci <= planned_full.steps.size():
+		var last: Tracer.Step = combined[ci - 1]
+		var post := Tracer.trace(last.end, aim, surfaces, GameState.new(), bounds, aim_ray, -1.0, Tracer.TraceMode.PHYSICAL, [], last.frame)
+		for i in post.steps.size():
+			combined.append(post.steps[i])
+
+	return StepTreeMerge.merge(combined, physical.steps, ci)
 
 func test_divergence_no_obstacle_has_aligned() -> void:
-	# No surfaces — physical escapes to edge, planned goes to cursor
-	# Should have ALIGNED portion from player toward cursor
 	var surfaces: Array[Surface] = []
 	var steps := _build_merged(Vector2(300, 300), Vector2(500, 300), surfaces)
 	assert_gt(steps.size(), 0, "Should have steps")
-	assert_eq(steps[0].type, StepTypes.Type.ALIGNED, "First step should be ALIGNED")
+	var first: StepTreeMerge.MergedStep = steps[0]
+	assert_eq(first.type, StepTypes.Type.ALIGNED, "First step should be ALIGNED")
 
 func test_divergence_cursor_beyond_mirror() -> void:
 	var mirror := _make_mirror(400)
@@ -49,21 +59,22 @@ func test_divergence_cursor_beyond_mirror() -> void:
 			has_post_planned = true
 	assert_true(has_aligned or has_post_planned, "No-plan trace should be aligned types")
 
-func test_divergence_cursor_beyond_wall() -> void:
-	# Wall between player and cursor — physical hits wall, planned goes straight to cursor
+func test_wall_between_player_and_cursor_both_stop() -> void:
+	# Wall between player and cursor: both modes stop at wall (terminal is mode-independent)
+	# No divergence — both traces are identical
 	var wall := _make_wall(400)
 	var surfaces: Array[Surface] = [wall]
 	var steps := _build_merged(Vector2(300, 300), Vector2(500, 300), surfaces)
 	var has_aligned := false
-	var has_div_planned := false
+	var has_diverged := false
 	for i in steps.size():
 		var step: StepTreeMerge.MergedStep = steps[i]
-		if step.type == StepTypes.Type.ALIGNED:
+		if step.type == StepTypes.Type.ALIGNED or step.type == StepTypes.Type.ALIGNED_POST_PLANNED:
 			has_aligned = true
-		if step.type == StepTypes.Type.DIVERGED_PLANNED:
-			has_div_planned = true
-	assert_true(has_aligned, "Should have ALIGNED portion before wall")
-	assert_true(has_div_planned, "Should have DIVERGED_PLANNED past wall to cursor")
+		if step.type == StepTypes.Type.DIVERGED_PHYSICAL or step.type == StepTypes.Type.DIVERGED_PLANNED:
+			has_diverged = true
+	assert_true(has_aligned, "Should have ALIGNED steps")
+	assert_false(has_diverged, "No divergence — both modes stop at wall")
 
 func test_divergence_green_from_player() -> void:
 	var mirror := _make_mirror(400)

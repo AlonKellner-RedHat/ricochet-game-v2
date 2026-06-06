@@ -26,6 +26,9 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	violations.append_array(check_ORIGIN_NOT_REHIT(player_pos, cursor_pos))
 	violations.append_array(check_NO_DUPLICATE_GEOMETRY(player_pos, cursor_pos))
 	violations.append_array(check_NO_FALSE_DIVERGENCE(player_pos, cursor_pos))
+	violations.append_array(check_HITPOINT_ALIGNMENT(player_pos, cursor_pos))
+	violations.append_array(check_CURSOR_INDEX_MATCH(player_pos, cursor_pos))
+	violations.append_array(check_FRAME_DIVERGENCE_MONOTONIC(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -123,18 +126,29 @@ func check_PREVIEW_SOLID_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> 
 	var typed: Array = _renderer.get_typed_steps()
 	if typed.size() == 0:
 		return violations
-	var has_solid := false
-	var last_solid_end := Vector2.ZERO
+	# Only check when no divergence exists. With divergence, the solid path
+	# includes DIVERGED_PLANNED (red) steps which may extend past cursor.
 	for i in typed.size():
 		var step: StepTreeMerge.MergedStep = typed[i]
-		if StepTypes.is_solid(step.type):
-			has_solid = true
-			last_solid_end = step.end
-	if not has_solid:
+		if step.type == StepTypes.Type.DIVERGED_PLANNED or step.type == StepTypes.Type.DIVERGED_PHYSICAL or step.type == StepTypes.Type.DIVERGED_POST_PLANNED:
+			return violations
+	# No divergence: the last ALIGNED step should end near cursor.
+	var last_aligned_end := Vector2.ZERO
+	var has_aligned := false
+	for i in typed.size():
+		var step: StepTreeMerge.MergedStep = typed[i]
+		if step.type == StepTypes.Type.ALIGNED:
+			has_aligned = true
+			last_aligned_end = step.end
+	if not has_aligned:
 		return violations
-	var dist_to_cursor: float = last_solid_end.distance_to(cursor_pos)
+	# Also check if cursor was actually reached (cursor_index set)
+	var physical_path: Tracer.TracedPath = _renderer.get_traced_path()
+	if physical_path and physical_path.cursor_index < 0:
+		return violations
+	var dist_to_cursor: float = last_aligned_end.distance_to(cursor_pos)
 	if dist_to_cursor > 1.0:
-		violations.append("PREVIEW-SOLID-TO-CURSOR: Solid path ends at %s, cursor at %s (dist=%f)" % [last_solid_end, cursor_pos, dist_to_cursor])
+		violations.append("PREVIEW-SOLID-TO-CURSOR: Solid path ends at %s, cursor at %s (dist=%f)" % [last_aligned_end, cursor_pos, dist_to_cursor])
 	return violations
 
 func check_ORIGIN_NOT_REHIT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -184,6 +198,68 @@ func check_NO_FALSE_DIVERGENCE(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 				var other_aligned: bool = other.type == StepTypes.Type.ALIGNED or other.type == StepTypes.Type.ALIGNED_POST_PLANNED
 				if other_aligned:
 					violations.append("NO-FALSE-DIVERGENCE: step %d (type=%d) diverged but step %d (type=%d) has same geometry and is aligned" % [i, ms.type, j, other.type])
+	return violations
+
+func check_HITPOINT_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var physical: Tracer.TracedPath = _renderer.get_traced_path()
+	var planned: Tracer.TracedPath = _renderer.get_planned_path()
+	if physical == null or planned == null:
+		return violations
+	var max_idx: int = mini(physical.steps.size(), planned.steps.size())
+	for i in max_idx:
+		var p: Tracer.Step = physical.steps[i]
+		var r: Tracer.Step = planned.steps[i]
+		if p.frame_id != r.frame_id:
+			break
+		if p.start != r.start:
+			violations.append("HITPOINT-ALIGNMENT: step %d start differs: physical=%s planned=%s" % [i, p.start, r.start])
+		if p.end != r.end:
+			violations.append("HITPOINT-ALIGNMENT: step %d end differs: physical=%s planned=%s" % [i, p.end, r.end])
+	return violations
+
+func check_CURSOR_INDEX_MATCH(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var physical: Tracer.TracedPath = _renderer.get_traced_path()
+	var planned: Tracer.TracedPath = _renderer.get_planned_path()
+	if physical == null or planned == null:
+		return violations
+	if physical.cursor_index < 0 or planned.cursor_index < 0:
+		return violations
+	var diverged_before_cursor := false
+	var check_up_to: int = mini(mini(physical.steps.size(), planned.steps.size()), planned.cursor_index)
+	for i in check_up_to:
+		var p: Tracer.Step = physical.steps[i]
+		var r: Tracer.Step = planned.steps[i]
+		if p.frame_id != r.frame_id:
+			diverged_before_cursor = true
+			break
+	if not diverged_before_cursor:
+		if physical.cursor_index != planned.cursor_index:
+			violations.append("CURSOR-INDEX-MATCH: physical=%d planned=%d" % [physical.cursor_index, planned.cursor_index])
+	return violations
+
+func check_FRAME_DIVERGENCE_MONOTONIC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var physical: Tracer.TracedPath = _renderer.get_traced_path()
+	var planned: Tracer.TracedPath = _renderer.get_planned_path()
+	if physical == null or planned == null:
+		return violations
+	var diverged := false
+	var max_idx: int = mini(physical.steps.size(), planned.steps.size())
+	for i in max_idx:
+		var p: Tracer.Step = physical.steps[i]
+		var r: Tracer.Step = planned.steps[i]
+		if p.frame_id != r.frame_id:
+			diverged = true
+		elif diverged:
+			violations.append("FRAME-DIVERGENCE-MONOTONIC: Re-convergence at step %d after divergence" % i)
 	return violations
 
 static func check_S11(segment: Segment) -> Array[String]:

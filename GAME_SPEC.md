@@ -822,80 +822,106 @@ Identical to `intersect_line_with_gcircle` (§11.1) but **without the segment-bo
 
 ### 12.1 The tracing loop
 
+The tracer uses a **unified hitpoint model**: it intersects the shared ray with ALL surface carriers (ignoring `is_on_segment`), producing mode-independent step boundaries. The two modes (PHYSICAL and PLANNED, §14.1) differ ONLY in which effects are applied at each hitpoint — they produce the same hitpoints.
+
 The initial ray is constructed from the player and cursor positions:
 ```
 initial_direction = Direction(player_position, cursor_position)
-initial_ray = Ray(player_position, initial_direction)
+shared_ray = Ray(player_position, initial_direction)
 ```
 
 ```
-func trace(initial_ray: Ray, scene: Scene, game_state: GameState) → TracedPath:
-    # IMPORTANT: trace() operates on a COPY of game_state.
-    # Mutations within the trace affect subsequent steps (e.g., wall broken
-    # by hit 1, hit 2 passes through) but do NOT affect the caller's state.
-    # After the shot completes, the caller promotes the copy's final state.
+enum TraceMode { PHYSICAL, PLANNED }
+
+func trace(shared_ray: Ray, surfaces: Array, mode: TraceMode,
+           plan_queue: Array = [], target_dist: float = -1.0,
+           game_state: GameState, bounds: Rect2) → TracedPath:
     game_state = game_state.copy()
-    ray = initial_ray
     frame = MobiusTransform.IDENTITY
+    ray = shared_ray   # working copy — origin advances, direction unchanged
     steps = []
     hit_count = 0
-    excluded_surfaces = Set()    # for pass-through exclusion
+    excluded_surfaces = Set()
     targets_hit = Set()
+    target_passed = (target_dist < 0.0)
+    accumulated_dist = 0.0
+    plan_index = 0
+    frame_dirty = true
+    normalized_surfaces = []
 
     while hit_count < 256:
-        # Transform all surfaces into the current normalized frame.
-        # Optimization: only re-transform surfaces when the frame changed since the last step.
-        normalized_surfaces = transform_all(scene.surfaces, frame.inverse())
+        if frame_dirty:
+            normalized_surfaces = transform_all(surfaces, frame.inverse())
+            frame_dirty = false
 
-        # Exclude the surface the ray is currently sitting on (if any).
-        hit = find_earliest_hit(ray, normalized_surfaces, exclude=excluded_surfaces)
-        excluded_surfaces = Set()  # reset after use
-        # Only pass-through hits add to excluded_surfaces. Non-pass-through effects clear it here.
+        # Find ALL carrier intersections with the working ray, ignoring is_on_segment.
+        # This uses intersect_line_with_carrier for EVERY surface carrier.
+        hit = find_earliest_carrier_hit(ray, normalized_surfaces, exclude=excluded_surfaces)
+
+        # Virtual hitpoint: target_dist competes with carrier hits via t-sorting.
+        if not target_passed:
+            ... (inject target as virtual hit if it's nearer)
 
         if hit == null:
-            # Ray escapes — no hit anywhere on the great circle.
-            # End point is Vector2(INF, INF). The visual layer renders this
-            # as a line extending to the viewport edge. Per Principle 7,
-            # levels should have boundary surfaces making escape rare.
-            steps.append(Step(ray.origin, Vector2(INF, INF), frame, null))
+            steps.append(Step(vis_origin, escape_end, frame, null, shared_ray, frame))
             break
 
-        steps.append(Step(ray.origin, hit.point, frame, hit))
-        hit_count += 1    # ALL hits count toward the 256 limit, including pass-through
+        steps.append(Step(vis_start, vis_end, frame, hit, shared_ray, frame))
+        hit_count += 1
 
-        # Track target hits (separate from game state).
         if hit.surface.is_target:
             targets_hit.add(hit.surface.id)
 
-        side_config = hit.surface.active_side_config(hit.side, game_state)
-
-        if side_config.state_change:
-            game_state = apply_state_change(side_config.state_change, game_state)
-
-        match side_config.effect:
-            TransformativeEffect(effect):
-                frame = frame.compose(effect.get_mobius())
-                ray = Ray(
-                    origin = effect.get_inverse_mobius().apply(hit.point),
-                    direction = ray.direction    # unchanged
-                )
-
-            ProjectiveEffect(effect):
-                visual_hit = frame.apply(hit.point)
-                visual_ray = effect.apply_forward(visual_hit, hit.surface, hit.side)
-                frame = MobiusTransform.IDENTITY
-                ray = visual_ray    # new Direction
-
-            TerminalEffect:
+        # --- MODE-INDEPENDENT: terminal effects ---
+        # Terminal effects (walls, blocks) ALWAYS stop the trace when on-segment,
+        # regardless of mode. This ensures both traces stop at the same walls.
+        if hit.is_on_segment:
+            side_config = hit.surface.active_side_config(hit.side, game_state)
+            if side_config.effect is TerminalEffect:
                 break
 
-            null:
-                # Pass-through: track this surface for exclusion on the next cast.
-                excluded_surfaces.add(hit.surface)
-                ray = Ray(origin = hit.point, direction = ray.direction)
+        # --- MODE-DEPENDENT: transformative effects ---
+        # The hitpoint is the same in both modes. The difference is whether
+        # a transformative effect is applied:
+        #
+        #   PHYSICAL: apply only if hitpoint is_on_segment.
+        #   PLANNED:  apply only if surface is next in plan_queue.
+
+        apply_effect = false
+        side_config = null
+
+        if mode == PHYSICAL:
+            if hit.is_on_segment:
+                side_config = hit.surface.active_side_config(hit.side, game_state)
+                if side_config and side_config.effect is TransformativeEffect:
+                    apply_effect = true
+        elif mode == PLANNED:
+            if plan_index < plan_queue.size():
+                if hit.surface.id == plan_queue[plan_index].surface_id:
+                    side_config = hit.surface.active_side_config(
+                        plan_queue[plan_index].side, game_state)
+                    if side_config and side_config.effect is TransformativeEffect:
+                        apply_effect = true
+                    plan_index += 1
+
+        if not apply_effect:
+            excluded_surfaces.add(hit.segment)
+            ray = Ray(origin = hit.point, direction = ray.direction)
+            continue
+
+        # Apply the transformative effect
+        frame = frame.compose(side_config.effect.get_mobius())
+        ray = Ray(
+            origin = side_config.effect.get_inverse_mobius().apply(hit.point),
+            direction = ray.direction    # unchanged
+        )
+        excluded_surfaces = Set()
+        frame_dirty = true
 
     return TracedPath(steps, targets_hit)
 ```
+
+**Key invariant:** Both PHYSICAL and PLANNED modes produce steps at the SAME hitpoints (same start/end in visual coords). Divergence occurs ONLY when they apply different effects — i.e., different frames at a step (§14.2).
 
 ### 12.2 Step record
 
@@ -1214,57 +1240,38 @@ The temporary state is discarded after planning — it does not affect the actua
 
 ### 13.9 Planned trace as Steps
 
-The planning algorithm produces **Steps** directly — the same data structure used by the physical trace (§14.7). Each planned leg becomes a Step with:
+The planned trace uses the same `trace()` function as the physical trace (§12.1), with `mode = PLANNED`. It produces **Steps** with the same structure — same hitpoints, same `start`/`end` coordinates. The only difference is which effects are applied (plan-queue-based rather than `is_on_segment`-based), which affects the `frame` field.
 
-- `start`: the bounce point (or origin for the first leg).
-- `end`: the next bounce point (or cursor for the last leg).
-- `frame`: the accumulated Möbius frame transform at that leg.
-- `hit`: a `HitRecord` constructed from the planned intersection (parameter, point, surface, side, provenance).
-- `type`: initially unset — classified during the step tree merge (§14.5).
-
-This makes the planned trace and physical trace **structurally identical** — both are `Array[Step]`. The step tree merge algorithm (§14.5) can walk them in parallel without conversion.
+Both traces are `Array[Step]` with 1:1 index correspondence by construction. The step tree merge (§14.5) compares frames at each index.
 
 ---
 
 ## 14. Step system
 
-### 14.1 Two trace modes
+### 14.1 Two trace modes — unified hitpoints
 
-Hit-point computation has exactly **two modes**:
+Hit-point computation uses a **unified hitpoint model**: both modes intersect the shared ray with ALL surface carriers (ignoring `is_on_segment`), producing the **same hitpoints** (same step boundaries). The modes differ ONLY in which effects are applied at each hitpoint.
 
-| Mode | How surfaces are selected | When it runs |
-|------|--------------------------|-------------|
-| **PLANNED** | Fixed by the plan — each step targets a specific planned surface. Uses image chains / back-propagation. May use infinite carrier geometry. | From origin to cursor, following the plan. |
-| **PHYSICAL** | Discovered — earliest obstruction among all surfaces wins. Only finite segments produce hits. | Always runs from origin to end. Also used as the **continuation** of the planned path after reaching the cursor. |
+| Mode | Effect application rule | When it runs |
+|------|------------------------|-------------|
+| **PHYSICAL** | Effect applied ONLY if the hitpoint `is_on_segment`. Off-segment carrier intersections are pass-throughs (no effect, no frame change). | Always runs from origin to escape/block. |
+| **PLANNED** | Effect applied ONLY if the surface is the NEXT entry in the plan queue, regardless of `is_on_segment`. | Always runs from origin to escape/block. |
 
-The physical trace runs from origin to escape/block in one full pass — it does NOT stop at the cursor. The planned trace terminates at the cursor. 'Past cursor' in the step tree means past the last planned step's end point.
+Both modes run the full trace from origin to escape/block — neither stops at the cursor. The cursor is a **virtual hitpoint** (§12.1) that competes with carrier intersections via t-sorting. `cursor_index` is the step index where the cursor falls.
 
-The PLANNED trace output is the **concatenation** of: (a) pre-cursor steps from the image-chain/back-propagation algorithm, and (b) post-cursor continuation steps from a physical trace run from the cursor position in the planned frame (§14.10). `cursor_index = len(pre_cursor_steps)` marks the boundary.
+Because both modes produce the same hitpoints, their step arrays have **1:1 index correspondence by construction**. Step `i` in the planned trace and step `i` in the physical trace have the same `start` and `end` in visual coords — they differ only in `frame` when different effects were applied.
 
-Both traces produce steps for pass-through surfaces. Bypassed entries produce NO steps in either trace. This ensures 1:1 index correspondence between planned and physical steps for the merge algorithm (§14.5).
-
-The 1:1 index correspondence holds up to the divergence point. After divergence, the traces may hit different surfaces — index-matching is moot (all post-divergence steps are classified as diverged regardless).
-
-Both modes use the same intersection pipeline, the same effects, and the same scene state. **Caching is shared** between modes — any intersection, transform, or carrier derivation computed by one mode is available to the other.
+Both modes use the same intersection pipeline, the same carriers, and the same scene state. **Caching is shared** between modes — any intersection, transform, or carrier derivation computed by one mode is available to the other.
 
 ### 14.2 Divergence: exact definition
 
-Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. Two steps are compared using four fields from the Step record (§14.7):
+Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. Since both modes produce the **same hitpoints** (§14.1), steps at the same index always have the same `start` and `end` coordinates. The ONLY field that can differ is the **frame** (the accumulated Möbius transform).
 
-**Fully aligned** — two steps at the same index are aligned if ALL of:
-- Same **ray** (reference identity — same Ray object, guaranteeing same normalized-frame intersection line)
-- Same **frame** (ID equality — same accumulated Möbius transform)
-- Same **start point** (exact equality)
-- Same **end point** (exact equality)
+**Aligned** — step `i` is aligned if the planned and physical traces have the same **frame ID** at that step. This means both modes applied the same effects up to and including step `i`.
 
-**Partially aligned** — sub-segmentation required if:
-- Same **ray**, same **frame**, same **start point**
-- DIFFERENT **end point** (one path hits a surface before the other)
-- The shared portion — from the common start to the nearer endpoint — is **aligned**. The remainder of the longer step is **diverged**.
+**Diverged** — step `i` is diverged if the frame IDs differ. This means a surface effect was applied in one mode but not the other (e.g., physical hit was on-segment but planned didn't have it in the queue, or vice versa).
 
-**Diverged** — if any of ray, frame, or start point differ, the steps are immediately diverged. No alignment is possible.
-
-Once divergence occurs, the traces never re-converge — divergence is permanent for the remainder of the shot. *(Principle 12.)*
+Once divergence occurs, the traces never re-converge — divergence is permanent for the remainder of the shot. *(Principle 12.)* Different frames cause different normalized surfaces, so subsequent carrier intersections will differ — but the hitpoints are still computed identically within each mode's frame.
 
 ### 14.3 Divergence examples (non-exhaustive)
 
@@ -1290,48 +1297,39 @@ StepTree:
 
 ### 14.5 Step tree merge algorithm
 
-The merge walks both traces **by index**. Steps at the same index are compared using the alignment rules from §14.2: same ray (reference), same frame (ID), same start (exact), then check end.
+The merge walks both traces **by index**. Since both modes produce the same hitpoints (§14.1), steps at the same index have identical `start` and `end`. The merge compares only the **frame ID** at each step.
 
 ```
-func merge(planned_steps, physical_steps, cursor_index) → Array[Step]:
+func merge(planned_steps, physical_steps, cursor_index) → Array[MergedStep]:
     merged = []
     diverged = false
     
-    for idx in range(max(len(planned_steps), len(physical_steps))):
-        p = planned_steps[idx] if idx < len(planned_steps) else null
-        r = physical_steps[idx] if idx < len(physical_steps) else null
+    # Both arrays have the same length (same hitpoints).
+    for idx in range(len(planned_steps)):
+        p = planned_steps[idx]
+        r = physical_steps[idx]
         past_cursor = (idx >= cursor_index)
         
         if not diverged:
-            if p != null and r != null and p.ray == r.ray and p.frame.id == r.frame.id and p.start == r.start:
-                if p.end == r.end:
-                    # Fully aligned.
-                    merged.append(step(p, ALIGNED if not past_cursor else ALIGNED_POST_PLANNED))
-                else:
-                    # Partially aligned — split at the nearer endpoint.
-                    nearer = p.end if dist(p.start, p.end) <= dist(r.start, r.end) else r.end
-                    merged.append(step(p.start, nearer, ALIGNED if not past_cursor else ALIGNED_POST_PLANNED))
-                    diverged = true
-                    # Append remainders and all subsequent steps as diverged
-                    ...
+            if p.frame.id == r.frame.id:
+                # Aligned — same effect was applied (or both passed through).
+                merged.append(MergedStep(p, ALIGNED if not past_cursor else ALIGNED_POST_PLANNED))
             else:
-                # Different ray, frame, or start — immediate divergence.
+                # Diverged — different effects applied at this hitpoint.
                 diverged = true
-                ...
+                merged.append(MergedStep(p, DIVERGED_PLANNED if not past_cursor else DIVERGED_POST_PLANNED))
+                merged.append(MergedStep(r, DIVERGED_PHYSICAL))
         else:
-            # Already diverged.
-            ...
+            # Already diverged — all subsequent steps are diverged.
+            merged.append(MergedStep(p, DIVERGED_PLANNED if not past_cursor else DIVERGED_POST_PLANNED))
+            merged.append(MergedStep(r, DIVERGED_PHYSICAL))
     
     return merged
 ```
 
-Alignment is checked by **ray reference identity** and **exact start equality** — not approximate coordinate comparison. This guarantees that aligned steps were computed from the same normalized-frame intersection, ensuring numerical stability. *(Principle 22, §14.8.)*
+The merge is trivial because hitpoints are mode-independent. No partial alignment or sub-segmentation is needed — steps always have the same geometry. *(Principle 22, §14.8.)*
 
-After divergence, the planned and physical traces may be in different frames with different origins. Index-matching past the divergence point no longer implies geometric correspondence — all post-divergence steps are classified as diverged regardless of coincidental coordinate matches.
-
-The cursor boundary for step classification is determined by the planned trace's step count. Physical trace steps at index < cursor_index are compared with the corresponding planned step. Physical trace steps at index >= cursor_index are post-cursor.
-
-The planned continuation past the cursor starts in the **planned** frame (the frame at the end of the last planned step). If the planned and physical traces have diverged, they are in different frames — the post-cursor planned continuation uses the planned frame, not the physical frame.
+After divergence, the planned and physical traces are in different frames, so their subsequent hitpoints will differ (different normalized surfaces produce different carrier intersections). Both traces continue independently; the merge emits both as diverged steps.
 
 ### 14.6 Five step types
 
@@ -1361,10 +1359,9 @@ Step:
                                # DIVERGED_PLANNED, DIVERGED_POST_PLANNED
 ```
 
-**Ray provenance:** Every step stores a reference to the normalized-frame ray used for its intersection computation. Since Direction never changes through transformative effects (§10.7), all steps within a transformative sub-chain share the same Ray object by reference identity. This guarantees:
-1. The original ray is always available for re-computation and re-intersection (numerical stability — avoids recomputing a ray from step endpoints which may accumulate floating-point drift).
-2. Alignment checking can use ray reference identity — if two steps share the same Ray, they were computed from the same intersection line.
-3. Any system that needs to re-intersect a step's ray with surfaces (e.g., splitting at a cursor distance, computing visibility) should use `step.ray`, not construct a new ray from `step.start` and `step.end`.
+**Shared ray:** Every step stores the `shared_ray` — the original ray from the player in the aim direction. Both PHYSICAL and PLANNED modes use the same shared ray, guaranteeing all steps share the same Ray object by reference identity. This provides:
+1. The original ray is always available for re-computation (numerical stability — avoids accumulating floating-point drift).
+2. Any system that needs to re-intersect a step's ray with surfaces should use `step.ray`, not construct a new ray from endpoints.
 
 ```
 TracedPath:
@@ -1383,19 +1380,19 @@ The step tree is the **single source of truth** for what happens on a shot. *(Pr
 
 ### 14.8 Mode interaction and caching
 
-The PLANNED and PHYSICAL traces share the computation cache. When the planned trace computes an intersection or transform, the result is cached. When the physical trace encounters the same computation (same ray, same surface, same frame), it retrieves the cached result. This guarantees that aligned sections produce **bit-identical** results in both modes — alignment is checked by identity, not approximate comparison.
+The PLANNED and PHYSICAL traces share the computation cache. When one trace computes an intersection or transform, the result is cached. The other trace retrieves cached results for identical computations.
 
-Frame comparison for alignment is by **Möbius transform ID** (§17.3). Since both traces share the computation cache, identical compositions through the same effects produce the same cached transform IDs. **Invariant:** the planned and physical traces must construct frames through the same cached computation path. This guarantees that aligned steps produce identical transform IDs. Violating this invariant (e.g., computing a transform outside the cache) is a bug.
+Frame comparison for alignment is by **Möbius transform ID** (§17.3). Since both traces share the cache, identical compositions through the same effects produce the same cached transform IDs. Aligned steps (same effects applied) have identical frame IDs by construction.
 
-**Precondition:** the planned and physical traces must share the same `TransformCache` instance and both start with the global identity transform (ID 0).
+**Precondition:** both traces must start with the global identity transform (ID 0) and use the same shared ray.
 
 ### 14.9 Empty-plan step tree
 
-With an empty plan, `planned_steps` is empty and `cursor_index = 0`. The merge algorithm's empty-plan guard (§14.5) classifies all physical trace steps as **ALIGNED_POST_PLANNED**.
+With an empty plan, the PLANNED trace has no plan queue entries, so no effects are ever applied — every hitpoint is a pass-through. The PHYSICAL trace applies effects normally. Since both produce the same hitpoints, the merge compares frames: in the empty-plan case, every frame matches (both are identity), so all steps are **ALIGNED** (before cursor) or **ALIGNED_POST_PLANNED** (after cursor).
 
 ### 14.10 Post-cursor computation
 
-The post-cursor continuation is computed by running a physical trace from the cursor position in the **planned** frame (the frame at the end of the last planned step). These steps are **appended** to the pre-cursor planned steps to form the complete `planned_steps` array before merging. `cursor_index` marks the boundary between pre-cursor (planned) and post-cursor (physical continuation) steps.
+There is no separate post-cursor computation. Both traces run the full path from origin to escape/block in a single pass. The cursor is a virtual hitpoint (§12.1) that creates a step boundary. `cursor_index` is the step index at the cursor position. Steps before `cursor_index` are pre-cursor; steps at or after are post-cursor. The step type (ALIGNED vs ALIGNED_POST_PLANNED, or DIVERGED_PLANNED vs DIVERGED_POST_PLANNED) is determined by comparing against `cursor_index`.
 
 ---
 

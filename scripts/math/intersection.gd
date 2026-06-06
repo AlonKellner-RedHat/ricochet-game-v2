@@ -16,12 +16,14 @@ class HitRecord extends RefCounted:
 	var point: Vector2
 	var segment: Segment
 	var side: Side.Value
+	var on_segment: bool
 
-	func _init(p_t: float, p_point: Vector2, p_segment: Segment, p_side: Side.Value) -> void:
+	func _init(p_t: float, p_point: Vector2, p_segment: Segment, p_side: Side.Value, p_on_segment: bool = true) -> void:
 		t = p_t
 		point = p_point
 		segment = p_segment
 		side = p_side
+		on_segment = p_on_segment
 
 static func find_earliest_hit(ray: Ray, segments: Array, excluded_segments: Array = []) -> RefCounted:
 	var excluded_set: Dictionary = {}
@@ -41,6 +43,38 @@ static func find_earliest_hit(ray: Ray, segments: Array, excluded_segments: Arra
 			var side := _determine_side_at_hit(ray, candidate)
 			var record := HitRecord.new(candidate.t, candidate.point, candidate.segment, side)
 			if candidate.t > 0.0:
+				forward.append(record)
+			else:
+				beyond.append(record)
+
+	if forward.size() > 0:
+		return _select_winner(forward, true)
+	elif beyond.size() > 0:
+		return _select_winner(beyond, false)
+	return null
+
+static func find_earliest_carrier_hit(ray: Ray, segments: Array, excluded_segments: Array = []) -> RefCounted:
+	var excluded_set: Dictionary = {}
+	for seg in excluded_segments:
+		excluded_set[seg] = true
+
+	var forward: Array = []
+	var beyond: Array = []
+
+	for seg in segments:
+		if excluded_set.has(seg):
+			continue
+		var carrier: GeneralizedCircle = seg.get_carrier()
+		var hits := intersect_line_with_carrier(ray, carrier)
+		for hit_dict in hits:
+			var point: Vector2 = hit_dict["point"]
+			if point == ray.origin:
+				continue
+			var on_seg := _is_on_segment(point, seg)
+			var candidate := HitCandidate.new(hit_dict["t"], point, seg)
+			var side := _determine_side_at_hit(ray, candidate)
+			var record := HitRecord.new(hit_dict["t"], point, seg, side, on_seg)
+			if hit_dict["t"] > 0.0:
 				forward.append(record)
 			else:
 				beyond.append(record)

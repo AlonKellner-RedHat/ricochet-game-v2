@@ -7,6 +7,7 @@ const DASH_OFF := 5.0
 var _player: CharacterBody2D
 var _cursor: Node2D
 var _traced_path: Tracer.TracedPath = null
+var _planned_path: Tracer.TracedPath = null
 var _merged_steps: Array = []
 var _cursor_pos := Vector2.ZERO
 
@@ -24,12 +25,14 @@ func _process(_delta: float) -> void:
 func _compute_trace() -> void:
 	if not _player or not _cursor:
 		_traced_path = null
+		_planned_path = null
 		_merged_steps = []
 		return
 	_cursor_pos = _cursor.global_position
 	var player_pos := _player.global_position
 	if player_pos == _cursor_pos:
 		_traced_path = null
+		_planned_path = null
 		_merged_steps = []
 		return
 
@@ -45,30 +48,36 @@ func _compute_trace() -> void:
 		player_pos, _cursor_pos, plan_entries, surfaces, GameState.new())
 
 	var aim_ray := Ray.new(player_pos, aim_dir)
-	var identity_frame := MobiusTransform.identity()
 	var target_dist: float = player_pos.distance_to(_cursor_pos)
-	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray, target_dist)
 
-	var physical_steps: Array = _traced_path.steps
+	# 1. Physical trace — full path
+	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray, target_dist, Tracer.TraceMode.PHYSICAL)
 
-	var planned_steps: Array = []
-	if plan_entries.size() > 0:
-		var planned_path := Tracer.trace_planned(
-			player_pos, aim_dir, plan_entries, surfaces, GameState.new(), _cursor_pos, aim_ray)
-		planned_steps = planned_path.steps
-	else:
-		planned_steps = [Tracer.Step.new(player_pos, _cursor_pos, MobiusTransform.IDENTITY_ID, null, aim_ray, identity_frame)]
+	# 2. Planned trace — full path (sliced to cursor below)
+	var planned_full := Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), bounds, aim_ray, target_dist, Tracer.TraceMode.PLANNED, plan_entries)
 
-	var cursor_index: int = planned_steps.size()
+	# 3. Extract planned steps up to cursor
+	var ci: int = planned_full.cursor_index
+	var cursor_reached: bool = ci >= 0
+	if not cursor_reached:
+		ci = planned_full.steps.size()
+	var combined_steps: Array = planned_full.steps.slice(0, ci)
 
-	if planned_steps.size() > 0:
-		var last_planned: Tracer.Step = planned_steps[planned_steps.size() - 1]
-		var post_start: Vector2 = last_planned.end
-		var post_trace := Tracer.trace(post_start, last_planned.ray.direction, surfaces, GameState.new(), bounds, aim_ray)
+	# 4. Post-planned trace — from cursor, PHYSICAL mode, in planned frame
+	# Only if cursor was actually reached (not blocked by a wall before cursor)
+	if cursor_reached and ci > 0 and ci <= planned_full.steps.size():
+		var last_step: Tracer.Step = combined_steps[ci - 1]
+		var post_trace := Tracer.trace(last_step.end, aim_dir, surfaces, GameState.new(), bounds, aim_ray, -1.0, Tracer.TraceMode.PHYSICAL, [], last_step.frame)
 		for i in post_trace.steps.size():
-			planned_steps.append(post_trace.steps[i])
+			combined_steps.append(post_trace.steps[i])
 
-	_merged_steps = StepTreeMerge.merge(planned_steps, physical_steps, cursor_index)
+	# 5. Store planned path for invariant checking
+	_planned_path = Tracer.TracedPath.new()
+	_planned_path.steps = combined_steps
+	_planned_path.cursor_index = ci
+
+	# 6. Merge (planned+post-planned) vs physical
+	_merged_steps = StepTreeMerge.merge(combined_steps, _traced_path.steps, ci)
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
@@ -145,6 +154,9 @@ func get_line_direction() -> Vector2:
 
 func get_traced_path() -> Tracer.TracedPath:
 	return _traced_path
+
+func get_planned_path() -> Tracer.TracedPath:
+	return _planned_path
 
 func get_typed_steps() -> Array:
 	return _merged_steps
