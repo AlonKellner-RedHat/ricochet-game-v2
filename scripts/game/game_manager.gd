@@ -70,6 +70,14 @@ func _input(event: InputEvent) -> void:
 		_dump_debug_state()
 		return
 
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_G:
+		if _level_settings:
+			if _level_settings.gravity.length_squared() > 0.0:
+				_level_settings.gravity = Vector2.ZERO
+			else:
+				_level_settings.gravity = Vector2(0, 980)
+		return
+
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_C:
 		plan.clear()
 		_update_hud()
