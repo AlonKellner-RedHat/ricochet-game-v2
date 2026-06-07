@@ -56,6 +56,30 @@ func test_clear_empties_caches() -> void:
 
 # --- Stage 2: Shared cache between traces ---
 
+# --- Stage 3: Normalized surface caching ---
+
+func test_norm_cache_returns_null_initially() -> void:
+	var cache := TransformCache.new()
+	assert_null(cache.get_normalized(0), "No cached value initially")
+
+func test_norm_cache_stores_and_retrieves() -> void:
+	var cache := TransformCache.new()
+	var surfaces: Array = [1, 2, 3]
+	var mapping: Dictionary = {"a": "b"}
+	cache.set_normalized(42, surfaces, mapping)
+	var result = cache.get_normalized(42)
+	assert_not_null(result, "Should retrieve cached value")
+	assert_eq(result.surfaces, surfaces, "Same surfaces")
+
+func test_norm_cache_different_frame_ids() -> void:
+	var cache := TransformCache.new()
+	cache.set_normalized(1, [1], {})
+	cache.set_normalized(2, [2], {})
+	assert_eq(cache.get_normalized(1).surfaces, [1], "Frame 1 cached")
+	assert_eq(cache.get_normalized(2).surfaces, [2], "Frame 2 cached")
+
+# --- Stage 2: Shared cache between traces ---
+
 func test_shared_cache_same_frame_ids() -> void:
 	var cache := TransformCache.new()
 	var seg := Segment.new(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))

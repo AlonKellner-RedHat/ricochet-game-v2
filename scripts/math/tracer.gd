@@ -55,7 +55,13 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	for _i in MAX_HITS:
 		if frame_dirty:
-			norm_surfaces = _build_normalized(surfaces, frame, norm_to_surface, cache)
+			var cached_norm = cache.get_normalized(frame.id)
+			if cached_norm != null:
+				norm_surfaces = cached_norm.surfaces
+				norm_to_surface = cached_norm.mapping
+			else:
+				norm_surfaces = _build_normalized(surfaces, frame, norm_to_surface, cache)
+				cache.set_normalized(frame.id, norm_surfaces, norm_to_surface.duplicate())
 			frame_dirty = false
 
 		var norm_segments: Array = []

@@ -5,6 +5,7 @@ var _carrier_cache: Dictionary = {}
 var _via_cache: Dictionary = {}
 var _compose_cache: Dictionary = {}
 var _inverse_cache: Dictionary = {}
+var _norm_cache: Dictionary = {}
 
 func derive_carrier_cached(start: Point, end_pt: Point, via: Point) -> GeneralizedCircle:
 	var key := Vector3i(start.id, end_pt.id, via.id)
@@ -42,8 +43,17 @@ func invert_cached(t: MobiusTransform) -> MobiusTransform:
 	_inverse_cache[result.id] = t
 	return result
 
+func get_normalized(frame_id: int) -> Variant:
+	if _norm_cache.has(frame_id):
+		return _norm_cache[frame_id]
+	return null
+
+func set_normalized(frame_id: int, surfaces: Array, mapping: Dictionary) -> void:
+	_norm_cache[frame_id] = {"surfaces": surfaces, "mapping": mapping}
+
 func clear() -> void:
 	_carrier_cache.clear()
 	_via_cache.clear()
 	_compose_cache.clear()
 	_inverse_cache.clear()
+	_norm_cache.clear()
