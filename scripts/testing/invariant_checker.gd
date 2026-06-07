@@ -26,6 +26,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	violations.append_array(check_SINGLE_DIVERGENCE(player_pos, cursor_pos))
 	violations.append_array(check_PHYSICAL_PREVIEW_MATCH(player_pos, cursor_pos))
 	violations.append_array(check_PHYSICAL_CONTINUITY(player_pos, cursor_pos))
+	violations.append_array(check_SOLID_PATH_TO_CURSOR(player_pos, cursor_pos))
+	violations.append_array(check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -183,6 +185,88 @@ func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 		if prev.end.distance_to(curr.start) > 0.01:
 			violations.append("PHYSICAL-CONTINUITY: gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
+
+func check_SOLID_PATH_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var typed: Array = _renderer.get_typed_steps()
+	if typed.size() == 0:
+		return violations
+	var solid_steps: Array = []
+	for i in typed.size():
+		var ms: StepTreeMerge.MergedStep = typed[i]
+		if StepTypes.is_solid(ms.type):
+			solid_steps.append(ms)
+	if solid_steps.size() == 0:
+		return violations
+	var first: StepTreeMerge.MergedStep = solid_steps[0]
+	if first.start != player_pos:
+		violations.append("SOLID-PATH-TO-CURSOR: first solid step starts at %s, not player %s" % [first.start, player_pos])
+	var bounds := Tracer.DEFAULT_BOUNDS
+	for i in range(1, solid_steps.size()):
+		var prev: StepTreeMerge.MergedStep = solid_steps[i - 1]
+		var curr: StepTreeMerge.MergedStep = solid_steps[i]
+		if prev.end != curr.start:
+			# Skip gaps at escape/return boundaries (ray wraps through infinity)
+			var at_bounds := (prev.end.x <= bounds.position.x + 1.0 or prev.end.x >= bounds.end.x - 1.0 or
+				prev.end.y <= bounds.position.y + 1.0 or prev.end.y >= bounds.end.y - 1.0)
+			if not at_bounds:
+				violations.append("SOLID-PATH-TO-CURSOR: gap between solid step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
+	return violations
+
+func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var bounds := Tracer.DEFAULT_BOUNDS
+	var surfaces: Array = []
+	var parent := _renderer.get_parent()
+	if parent and "surfaces" in parent:
+		surfaces = parent.surfaces
+
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath
+		if trace_name == "physical":
+			path = _renderer.get_traced_path()
+		else:
+			path = _renderer.get_planned_path()
+		if path == null or path.steps.size() == 0:
+			continue
+		var last: Tracer.Step = path.steps[path.steps.size() - 1]
+		var end_pos: Vector2 = last.end
+		var valid := false
+		if end_pos.distance_to(player_pos) < 2.0:
+			valid = true
+		if end_pos.x <= bounds.position.x + 2.0 or end_pos.x >= bounds.end.x - 2.0:
+			valid = true
+		if end_pos.y <= bounds.position.y + 2.0 or end_pos.y >= bounds.end.y - 2.0:
+			valid = true
+		for surf in surfaces:
+			var s: Surface = surf
+			var dist := _point_to_segment_dist(end_pos, s.segment.start, s.segment.end)
+			if dist < 2.0:
+				valid = true
+				break
+		# Also check if endpoint is on any surface's carrier (off-segment but on carrier line)
+		if not valid:
+			for surf in surfaces:
+				var s: Surface = surf
+				var carrier := s.segment.get_carrier()
+				if absf(carrier.evaluate(end_pos)) < 1.0:
+					valid = true
+					break
+		if not valid:
+			violations.append("TRACE-ENDS: %s trace ends mid-air at %s" % [trace_name, end_pos])
+	return violations
+
+func _point_to_segment_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var len_sq := ab.length_squared()
+	if len_sq == 0.0:
+		return p.distance_to(a)
+	var t := clampf((p - a).dot(ab) / len_sq, 0.0, 1.0)
+	return p.distance_to(a + t * ab)
 
 func _position_nodes(player_pos: Vector2, cursor_pos: Vector2) -> void:
 	if _player:
