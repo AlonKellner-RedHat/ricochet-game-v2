@@ -5,16 +5,22 @@ var _scene: Node
 var _player: CharacterBody2D
 var _cursor: Node2D
 var _renderer: Node2D
+var _game_mgr: Node
 
 func setup(scene: Node) -> void:
 	_scene = scene
 	_player = scene.get_node_or_null("Player")
 	_cursor = scene.get_node_or_null("Cursor")
 	_renderer = scene.get_node_or_null("PathRenderer")
+	_game_mgr = scene.get_node_or_null("GameManager")
 
-func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = []) -> Array[String]:
 	var violations: Array[String] = []
 	_position_nodes(player_pos, cursor_pos)
+	if _game_mgr and "plan" in _game_mgr:
+		_game_mgr.plan.clear()
+		for entry in plan_entries:
+			_game_mgr.plan.add_entry(entry.surface_id, entry.side)
 	if _renderer:
 		_renderer._compute_trace()
 	violations.append_array(check_UX7(player_pos, cursor_pos))
@@ -40,10 +46,13 @@ func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 		else:
 			if _renderer.get_line_from() != player_pos:
 				violations.append("UX7: Line start %s != player %s" % [_renderer.get_line_from(), player_pos])
-			var expected_dir := (cursor_pos - player_pos).normalized()
-			var actual_dir: Vector2 = _renderer.get_line_direction()
-			if expected_dir.dot(actual_dir) < 0.99:
-				violations.append("UX7: Direction %s not toward cursor %s" % [actual_dir, expected_dir])
+			# Direction check only valid for empty plan — with a plan, aim is back-propagated
+			var has_plan: bool = _game_mgr != null and "plan" in _game_mgr and not _game_mgr.plan.is_empty()
+			if not has_plan:
+				var expected_dir := (cursor_pos - player_pos).normalized()
+				var actual_dir: Vector2 = _renderer.get_line_direction()
+				if expected_dir.dot(actual_dir) < 0.99:
+					violations.append("UX7: Direction %s not toward cursor %s" % [actual_dir, expected_dir])
 	else:
 		if _renderer.has_line():
 			violations.append("UX7: Line present when cursor == player")
