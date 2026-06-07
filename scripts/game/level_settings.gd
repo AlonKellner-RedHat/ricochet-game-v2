@@ -57,6 +57,22 @@ func _ready() -> void:
 		node.name = "MirrorR_%d" % surf.id
 		add_child(node)
 		node.setup(surf)
+	# Screen boundary pass-throughs — ensure off-screen steps split at screen edge
+	var screen_bounds: Array[Vector4] = [
+		Vector4(0, 0, 1920, 0),
+		Vector4(1920, 0, 1920, 1080),
+		Vector4(1920, 1080, 0, 1080),
+		Vector4(0, 1080, 0, 0),
+	]
+	for line_def in screen_bounds:
+		var seg := Segment.new(
+			Vector2(line_def.x, line_def.y),
+			Vector2(line_def.z, line_def.w),
+			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))
+		var config := SideConfig.new(null, false)
+		var surf := Surface.new(seg, config, config, false, false)
+		surfaces.append(surf)
+
 	for line_def in passthrough_lines:
 		var seg := Segment.new(
 			Vector2(line_def.x, line_def.y),
