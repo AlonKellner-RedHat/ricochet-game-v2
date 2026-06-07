@@ -34,6 +34,7 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_PHYSICAL_CONTINUITY(player_pos, cursor_pos))
 	violations.append_array(check_SOLID_PATH_TO_CURSOR(player_pos, cursor_pos))
 	violations.append_array(check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos, cursor_pos))
+	violations.append_array(check_PLAN_EFFECTS_APPLIED(player_pos, cursor_pos, plan_entries))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -267,6 +268,25 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 					break
 		if not valid:
 			violations.append("TRACE-ENDS: %s trace ends mid-air at %s" % [trace_name, end_pos])
+	return violations
+
+func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos or plan_entries.size() == 0:
+		return violations
+	var planned_path = _renderer.get_planned_path()
+	if planned_path == null or planned_path.steps.size() < 2:
+		return violations
+	# Count frame changes in the planned trace (before cursor)
+	var ci: int = planned_path.cursor_index if planned_path.cursor_index >= 0 else planned_path.steps.size()
+	var frame_changes := 0
+	for i in range(1, mini(ci, planned_path.steps.size())):
+		var prev: Tracer.Step = planned_path.steps[i - 1]
+		var curr: Tracer.Step = planned_path.steps[i]
+		if prev.frame_id != curr.frame_id:
+			frame_changes += 1
+	if frame_changes < plan_entries.size():
+		violations.append("PLAN-EFFECTS: expected %d frame changes for %d plan entries, got %d" % [plan_entries.size(), plan_entries.size(), frame_changes])
 	return violations
 
 func _point_to_segment_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
