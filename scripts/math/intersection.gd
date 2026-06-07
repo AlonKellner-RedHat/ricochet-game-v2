@@ -115,9 +115,16 @@ static func _intersect_ray_carrier(ray: Ray, carrier: GeneralizedCircle) -> Arra
 	return results
 
 static func _determine_side(ray: Ray, point: Vector2, seg: Segment) -> Side.Value:
+	var carrier: GeneralizedCircle = seg.get_carrier()
 	var dir := ray.direction.to_vector().normalized()
-	var approach_point := point - dir * 0.001
-	return seg.determine_side(approach_point)
+	var grad := Vector2(2.0 * carrier.a * point.x + carrier.b,
+						2.0 * carrier.a * point.y + carrier.c)
+	var approach_f_sign := -dir.dot(grad)
+	var winding := seg._compute_winding()
+	if winding >= 0.0:
+		return Side.Value.LEFT if approach_f_sign > 0.0 else Side.Value.RIGHT
+	else:
+		return Side.Value.RIGHT if approach_f_sign > 0.0 else Side.Value.LEFT
 
 static func _pick_nearest(hits: Array) -> HitRecord:
 	var winner: HitRecord = hits[0]

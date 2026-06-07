@@ -77,7 +77,7 @@ func _draw() -> void:
 		var ms: StepTreeMerge.MergedStep = _merged_steps[i]
 		var from := ms.start - global_position
 		var to := ms.end - global_position
-		if from.distance_to(to) < 0.01:
+		if from == to:
 			continue
 		var col := StepTypes.color(ms.type)
 		if StepTypes.is_solid(ms.type):

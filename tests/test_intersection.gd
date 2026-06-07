@@ -107,3 +107,33 @@ func test_is_on_segment_inf() -> void:
 	assert_true(Intersection.is_on_segment(Vector2(15, 0), seg), "Beyond end on INF segment")
 	assert_true(Intersection.is_on_segment(Vector2(-5, 0), seg), "Before start on INF segment")
 	assert_false(Intersection.is_on_segment(Vector2(5, 0), seg), "Finite portion excluded for INF via")
+
+# --- Side determination (analytical, no epsilon) ---
+
+func test_side_opposite_from_each_direction() -> void:
+	var seg := Segment.new(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var ray_from_left := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(600, 300)))
+	var ray_from_right := Ray.new(Vector2(600, 300), Direction.new(Vector2(600, 300), Vector2(200, 300)))
+	var hit_left := Intersection.find_nearest_hit(ray_from_left, [seg])
+	var hit_right := Intersection.find_nearest_hit(ray_from_right, [seg])
+	assert_not_null(hit_left, "Should hit from left")
+	assert_not_null(hit_right, "Should hit from right")
+	assert_ne(hit_left.side, hit_right.side, "Opposite directions must give opposite sides")
+
+func test_side_near_tangent() -> void:
+	# Ray nearly parallel to segment — side should still be deterministic
+	var seg := Segment.new(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var ray := Ray.new(Vector2(399, 0), Direction.new(Vector2(399, 0), Vector2(401, 600)))
+	var hit := Intersection.find_nearest_hit(ray, [seg])
+	assert_not_null(hit, "Should hit even near-tangent")
+	assert_true(hit.side == Side.Value.LEFT or hit.side == Side.Value.RIGHT, "Side should be deterministic")
+
+func test_side_consistent_with_determine_side() -> void:
+	# Analytical side should match determine_side with a large offset
+	var seg := Segment.new(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var ray := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(600, 300)))
+	var hit := Intersection.find_nearest_hit(ray, [seg])
+	var dir := ray.direction.to_vector().normalized()
+	var far_approach := hit.point - dir * 100.0
+	var expected := seg.determine_side(far_approach)
+	assert_eq(hit.side, expected, "Analytical side should match determine_side with large offset")
