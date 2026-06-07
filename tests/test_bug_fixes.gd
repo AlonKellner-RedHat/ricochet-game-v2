@@ -286,6 +286,30 @@ func test_multi_surface_plan_both_effects_applied() -> void:
 	assert_ne(s1.frame_id, 0,
 		"Step 1 frame should not be identity (two effects applied)")
 
+# --- Player block mid-air in planned trace with non-identity frame ---
+
+func test_planned_trace_no_midair_player_block() -> void:
+	# Plan with 2 entries. After cursor, planned trace has non-identity frame.
+	# Player block should NOT fire (non-identity frame) — only waypoint.
+	# Last step should end at a surface or bounds, not mid-air.
+	var surfaces := _setup_three_mirrors()
+	var m1: Surface = surfaces[3]
+	var m3: Surface = surfaces[5]
+	var player := Vector2(1143.334, 827.9978)
+	var cursor := Vector2(292.3045, 236.4379)
+	var plan: Array = [PlanManager.PlanEntry.new(m1.id, Side.Value.LEFT), PlanManager.PlanEntry.new(m3.id, Side.Value.RIGHT)]
+	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
+	var ray := Ray.new(player, aim)
+	var cache := TransformCache.new()
+	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache)
+	var last := _step(planned, planned.steps.size() - 1)
+	# Should end at a surface hit, not mid-air at the player image
+	var near_player_image := last.end.distance_to(Vector2(1543, 828)) < 10.0
+	assert_false(near_player_image,
+		"Should NOT end at player image mid-air (got %s)" % last.end)
+
 # --- Player block fires mid-air after reflections ---
 
 func test_no_midair_end_after_reflections() -> void:

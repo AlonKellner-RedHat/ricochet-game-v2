@@ -106,10 +106,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var t_player := Intersection.project_point_on_ray(ray, origin)
 			if t_player > 0.0 and t_player < best_t:
 				best_t = t_player
-				best_type = "player_block" if plan_matched else "player_waypoint"
+				best_type = "player_block" if (plan_matched and frame.id == MobiusTransform.IDENTITY_ID) else "player_waypoint"
 			elif t_player == 0.0 and best_type == "":
 				best_t = t_player
-				best_type = "player_block" if plan_matched else "player_waypoint"
+				best_type = "player_block" if (plan_matched and frame.id == MobiusTransform.IDENTITY_ID) else "player_waypoint"
 
 		# Beyond carrier hit as fallback
 		if best_type == "" and hit != null:
