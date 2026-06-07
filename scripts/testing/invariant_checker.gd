@@ -24,6 +24,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	violations.append_array(check_GREEN_FROM_PLAYER(player_pos, cursor_pos))
 	violations.append_array(check_ORIGIN_NOT_REHIT(player_pos, cursor_pos))
 	violations.append_array(check_SINGLE_DIVERGENCE(player_pos, cursor_pos))
+	violations.append_array(check_PHYSICAL_PREVIEW_MATCH(player_pos, cursor_pos))
+	violations.append_array(check_PHYSICAL_CONTINUITY(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -132,6 +134,50 @@ func check_SINGLE_DIVERGENCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[
 			diverged = true
 		elif diverged and is_aligned:
 			violations.append("SINGLE-DIVERGENCE: Re-convergence at step %d after divergence" % i)
+	return violations
+
+func check_PHYSICAL_PREVIEW_MATCH(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var typed: Array = _renderer.get_typed_steps()
+	var physical: Tracer.TracedPath = _renderer.get_traced_path()
+	if physical == null:
+		return violations
+	var non_red: Array = []
+	for i in typed.size():
+		var ms: StepTreeMerge.MergedStep = typed[i]
+		if ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED or ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
+			non_red.append(ms)
+	if non_red.size() != physical.steps.size():
+		violations.append("PHYSICAL-PREVIEW-MATCH: non-red count=%d != physical count=%d" % [non_red.size(), physical.steps.size()])
+		return violations
+	for i in non_red.size():
+		var ms: StepTreeMerge.MergedStep = non_red[i]
+		var ps: Tracer.Step = physical.steps[i]
+		if ms.start.distance_to(ps.start) > 0.01:
+			violations.append("PHYSICAL-PREVIEW-MATCH: step %d start mismatch: preview=%s physical=%s" % [i, ms.start, ps.start])
+		if ms.end.distance_to(ps.end) > 0.01:
+			violations.append("PHYSICAL-PREVIEW-MATCH: step %d end mismatch: preview=%s physical=%s" % [i, ms.end, ps.end])
+	return violations
+
+func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var physical: Tracer.TracedPath = _renderer.get_traced_path()
+	if physical == null or physical.steps.size() < 2:
+		return violations
+	for i in range(1, physical.steps.size()):
+		var prev: Tracer.Step = physical.steps[i - 1]
+		var curr: Tracer.Step = physical.steps[i]
+		# Only skip gaps at escape/return boundaries (beyond-hit with t < 0)
+		var prev_is_escape: bool = (prev.hit == null) or (prev.hit != null and prev.hit.t < 0.0)
+		var curr_is_return: bool = (curr.hit != null and curr.hit.t < 0.0)
+		if prev_is_escape or curr_is_return:
+			continue
+		if prev.end.distance_to(curr.start) > 0.01:
+			violations.append("PHYSICAL-CONTINUITY: gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
 
 func _position_nodes(player_pos: Vector2, cursor_pos: Vector2) -> void:
