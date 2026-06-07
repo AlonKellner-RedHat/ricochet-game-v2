@@ -259,3 +259,67 @@ func test_reflection_direction_after_frame_change() -> void:
 		var dir3_x := s3.end.x - s3.start.x  # should be negative (going left)
 		assert_gt(dir2_x, 0.0, "Step 2 should go right (toward x=1000)")
 		assert_lt(dir3_x, 0.0, "Step 3 should go left (reflected back from x=1000)")
+
+# --- Player block fires mid-air after reflections ---
+
+func test_no_midair_end_after_reflections() -> void:
+	# Trace bounces between mirrors, then loops through infinity.
+	# Should NOT end mid-air at the player's image — should reach a surface or bounds.
+	var surfaces := _setup_three_mirrors()
+	var player := Vector2(942.1896, 449.0703)
+	var cursor := Vector2(877.9145, 441.8182)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	# Last step should end at a surface hit or bounds edge, not mid-air
+	var last := _step(path, path.steps.size() - 1)
+	# Check: last step end should be near a surface or bounds edge
+	var bounds := Tracer.DEFAULT_BOUNDS
+	var near_surface := false
+	for surf in surfaces:
+		var s: Surface = surf
+		var dist_start := _point_to_segment_dist(last.end, s.segment.start, s.segment.end)
+		if dist_start < 2.0:
+			near_surface = true
+			break
+	var near_bounds := (last.end.x <= bounds.position.x + 2.0 or
+		last.end.x >= bounds.end.x - 2.0 or
+		last.end.y <= bounds.position.y + 2.0 or
+		last.end.y >= bounds.end.y - 2.0)
+	var near_player := last.end.distance_to(player) < 2.0
+	assert_true(near_surface or near_bounds or near_player,
+		"Trace should end at surface, bounds, or player — not mid-air at %s" % last.end)
+
+func _point_to_segment_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var ap := p - a
+	var t := clampf(ap.dot(ab) / ab.length_squared(), 0.0, 1.0)
+	var closest := a + t * ab
+	return p.distance_to(closest)
+
+func test_player_block_in_identity_frame() -> void:
+	# No reflections, trace loops. Player block should prevent infinite loop.
+	var player := Vector2(500, 300)
+	var cursor := Vector2(700, 300)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	assert_lt(path.steps.size(), 256, "Should terminate before MAX_HITS")
+
+func test_player_waypoint_after_reflection() -> void:
+	# After reflection, player image is a waypoint, trace continues past it.
+	var surfaces := _setup_three_mirrors()
+	var player := Vector2(942.1896, 449.0703)
+	var cursor := Vector2(877.9145, 441.8182)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	# The trace should continue past the player image (after reflections)
+	# and reach an actual surface hit
+	var has_hit_after_escape := false
+	for i in path.steps.size():
+		var s := _step(path, i)
+		if s.hit != null and s.hit.on_segment and i > 5:
+			has_hit_after_escape = true
+	assert_true(has_hit_after_escape,
+		"After reflections + escape, trace should hit a real surface")

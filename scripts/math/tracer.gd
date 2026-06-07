@@ -101,15 +101,15 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 					best_t = 0.0
 					best_type = "cursor"
 
-		# Player block — only after cursor is reached or unreachable
+		# Player — waypoint or block depending on plan state
 		if not cursor_reachable:
 			var t_player := Intersection.project_point_on_ray(ray, origin)
 			if t_player > 0.0 and t_player < best_t:
 				best_t = t_player
-				best_type = "player"
+				best_type = "player_block" if plan_matched else "player_waypoint"
 			elif t_player == 0.0 and best_type == "":
 				best_t = t_player
-				best_type = "player"
+				best_type = "player_block" if plan_matched else "player_waypoint"
 
 		# Beyond carrier hit as fallback
 		if best_type == "" and hit != null:
@@ -140,11 +140,18 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			ray = Ray.new(aim_point, ray.direction)
 			continue
 
-		if best_type == "player":
+		if best_type == "player_block":
 			path.steps.append(Step.new(
 				frame.apply(ray.origin), frame.apply(origin),
 				frame.id, null, shared_ray, frame))
 			break
+
+		if best_type == "player_waypoint":
+			path.steps.append(Step.new(
+				frame.apply(ray.origin), frame.apply(origin),
+				frame.id, null, shared_ray, frame))
+			ray = Ray.new(origin, ray.direction)
+			continue
 
 		if best_type == "":
 			var vis_origin := frame.apply(ray.origin)
