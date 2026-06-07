@@ -214,10 +214,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if orig_surf and plan_index < plan_entries.size():
 				var entry: PlanManager.PlanEntry = plan_entries[plan_index]
 				if orig_surf.id == entry.surface_id:
-					var plan_lookup_side: Side.Value = entry.side
-					if frame.conjugating:
-						plan_lookup_side = Side.Value.RIGHT if entry.side == Side.Value.LEFT else Side.Value.LEFT
-					effect_config = norm_surf.active_side_config(plan_lookup_side, state_copy) if norm_surf else null
+					effect_config = norm_surf.active_side_config(entry.side, state_copy) if norm_surf else null
 					if effect_config != null and effect_config.effect is TransformativeEffect:
 						apply_effect = true
 					plan_index += 1

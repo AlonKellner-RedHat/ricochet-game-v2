@@ -260,6 +260,32 @@ func test_reflection_direction_after_frame_change() -> void:
 		assert_gt(dir2_x, 0.0, "Step 2 should go right (toward x=1000)")
 		assert_lt(dir3_x, 0.0, "Step 3 should go left (reflected back from x=1000)")
 
+# --- Multi-surface plan: second entry ignored ---
+
+func test_multi_surface_plan_both_effects_applied() -> void:
+	# Plan: [m1/LEFT, m3/RIGHT]. Both effects should be applied in PLANNED mode.
+	var surfaces := _setup_three_mirrors()
+	var player := Vector2(968.1862, 784.5909)
+	var cursor := Vector2(881.9186, 614.1374)
+	var m1: Surface = surfaces[3]  # id=4, x=800, L=reflect
+	var m3: Surface = surfaces[5]  # id=6, x=1000, R=reflect
+	var plan: Array = [PlanManager.PlanEntry.new(m1.id, Side.Value.LEFT), PlanManager.PlanEntry.new(m3.id, Side.Value.RIGHT)]
+	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
+	var ray := Ray.new(player, aim)
+	var cache := TransformCache.new()
+	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache)
+	# Step 0: hits m1 → frame changes (effect applied)
+	# Step 1: hits m3 → frame should change AGAIN (second effect applied)
+	var s0 := _step(planned, 0)
+	var s1 := _step(planned, 1)
+	assert_ne(s0.frame_id, s1.frame_id,
+		"Step 1 should have different frame from step 0 (m3 effect applied)")
+	# Step 1's frame should differ from step 0 AND from identity
+	assert_ne(s1.frame_id, 0,
+		"Step 1 frame should not be identity (two effects applied)")
+
 # --- Player block fires mid-air after reflections ---
 
 func test_no_midair_end_after_reflections() -> void:
