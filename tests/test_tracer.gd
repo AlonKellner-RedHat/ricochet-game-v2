@@ -52,9 +52,9 @@ func test_cursor_injected() -> void:
 	var w := _wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
-	var ray := Ray.new(player, Direction.new(player, Vector2(800, 300)))
-	var path := Tracer.trace(player, ray.direction, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	assert_gte(path.steps.size(), 2, "Should have cursor step + post-cursor")
 	var cursor_step := _step(path, 0)
 	assert_almost_eq(cursor_step.end.x, cursor.x, 1.0, "Cursor step ends at cursor")
@@ -63,18 +63,18 @@ func test_cursor_index_set() -> void:
 	var w := _wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
-	var ray := Ray.new(player, Direction.new(player, Vector2(800, 300)))
-	var path := Tracer.trace(player, ray.direction, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	assert_eq(path.cursor_index, 1, "cursor_index should be 1 (first post-cursor step)")
 
 func test_cursor_not_reached_wall_blocks() -> void:
 	var w := _wall(250)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(500, 300)
-	var ray := Ray.new(player, Direction.new(player, Vector2(800, 300)))
-	var path := Tracer.trace(player, ray.direction, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	assert_eq(path.cursor_index, -1, "Cursor not reached when wall blocks first")
 
 # --- Mirror reflection ---

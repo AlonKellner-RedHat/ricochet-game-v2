@@ -30,7 +30,7 @@ const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS) -> TracedPath:
 	return trace(initial_ray.origin, initial_ray.direction, surfaces, game_state, bounds, initial_ray)
 
-static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, _target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = [], cursor_pos: Vector2 = Vector2.ZERO) -> TracedPath:
+static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, _target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = []) -> TracedPath:
 	var path := TracedPath.new()
 	if direction.is_zero_length():
 		return path
@@ -47,6 +47,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 	var frame_dirty := true
 	var norm_surfaces: Array = []
 	var norm_to_surface: Dictionary = {}
+	var cursor_image: Vector2 = direction.end
 
 	for _i in MAX_HITS:
 		if frame_dirty:
@@ -58,21 +59,39 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			norm_segments.append(ns.segment)
 
 		var hit: Intersection.HitRecord = Intersection.find_nearest_hit(ray, norm_segments, excluded)
+		var dir_vec := ray.direction.to_vector()
+		var dir_len_sq := dir_vec.length_squared()
 
-		if not cursor_injected and cursor_pos != Vector2.ZERO:
-			var cursor_norm := frame.invert().apply(cursor_pos)
-			var dir_vec := ray.direction.to_vector()
-			var to_cursor := cursor_norm - ray.origin
-			var t_cursor := to_cursor.dot(dir_vec) / dir_vec.length_squared() if dir_vec.length_squared() > 0.0 else -1.0
-			if t_cursor > 0.001 and (hit == null or hit.t < 0.0 or t_cursor < hit.t):
+		if not cursor_injected and cursor_image != origin:
+			var to_cursor := cursor_image - ray.origin
+			var t_cursor := to_cursor.dot(dir_vec) / dir_len_sq if dir_len_sq > 0.0 else -1.0
+			var cursor_wins := false
+			if t_cursor > 0.0:
+				cursor_wins = (hit == null or hit.t <= 0.0 or t_cursor < hit.t)
+			elif t_cursor == 0.0:
+				cursor_wins = (hit == null)
+			if cursor_wins:
 				path.steps.append(Step.new(
-					frame.apply(ray.origin), frame.apply(cursor_norm),
+					frame.apply(ray.origin), frame.apply(cursor_image),
 					frame.id, null, shared_ray, frame))
 				path.cursor_index = path.steps.size()
 				cursor_injected = true
 				current_mode = post_cursor_mode
-				ray = Ray.new(cursor_norm, ray.direction)
+				ray = Ray.new(cursor_image, ray.direction)
 				continue
+
+		var to_player := origin - ray.origin
+		var t_player := to_player.dot(dir_vec) / dir_len_sq if dir_len_sq > 0.0 else -1.0
+		var player_wins := false
+		if t_player > 0.0:
+			player_wins = (hit == null or hit.t <= 0.0 or t_player < hit.t)
+		elif t_player == 0.0:
+			player_wins = (hit == null)
+		if player_wins:
+			path.steps.append(Step.new(
+				frame.apply(ray.origin), frame.apply(origin),
+				frame.id, null, shared_ray, frame))
+			break
 
 		if hit == null:
 			var vis_origin := frame.apply(ray.origin)

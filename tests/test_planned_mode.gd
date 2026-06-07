@@ -24,10 +24,11 @@ func test_planned_empty_plan_no_effects() -> void:
 	var w := _wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
-	var ray := Ray.new(player, Direction.new(player, Vector2(800, 300)))
-	var path := Tracer.trace(player, ray.direction, [m, w], GameState.new(),
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
 	var first_fid: int = _step(path, 0).frame_id
 	for i in range(0, mini(path.cursor_index, path.steps.size())):
 		assert_eq(_step(path, i).frame_id, first_fid,
@@ -38,11 +39,11 @@ func test_planned_empty_plan_physical_after_cursor() -> void:
 	var w := _wall(100)
 	var player := Vector2(600, 300)
 	var cursor := Vector2(500, 300)
-	var ray := Ray.new(player, Direction.new(player, Vector2(200, 300)))
-	var path := Tracer.trace(player, ray.direction, [m, w], GameState.new(),
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
-	# Post-cursor should apply physical effects → mirror reflection
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
 	var found_frame_change := false
 	var cursor_fid: int = _step(path, 0).frame_id
 	for i in range(path.cursor_index, path.steps.size()):
@@ -73,30 +74,32 @@ func test_planned_mirror_in_plan() -> void:
 func test_planned_mirror_not_in_plan_passthrough() -> void:
 	var m := _mirror(400)
 	var w := _wall(700)
-	var ray := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(800, 300)))
-	# Mirror present but not in plan → carrier hit is pass-through pre-cursor
-	var path := Tracer.trace(ray.origin, ray.direction, [m, w], GameState.new(),
+	var player := Vector2(200, 300)
+	var cursor := Vector2(600, 300)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
-	# No cursor → all steps in initial mode (PLANNED). Mirror not in plan → no effects.
 	var first_fid: int = _step(path, 0).frame_id
 	for i in path.steps.size():
 		assert_eq(_step(path, i).frame_id, first_fid,
 			"Mirror not in plan should be pass-through at step %d" % i)
 
-# --- Both modes produce same hitpoints pre-divergence ---
+# --- Both modes same hitpoints pre-divergence ---
 
 func test_hitpoint_alignment_no_effects() -> void:
 	var w := _wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(400, 300)
-	var ray := Ray.new(player, Direction.new(player, Vector2(800, 300)))
-	var physical := Tracer.trace(player, ray.direction, [w], GameState.new(),
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	MobiusTransform.reset_id_counter()
+	var physical := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	MobiusTransform.reset_id_counter()
+	var planned := Tracer.trace(player, aim, [w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
-	var planned := Tracer.trace(player, ray.direction, [w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
 	assert_eq(physical.steps.size(), planned.steps.size(), "Same step count")
 	for i in physical.steps.size():
 		assert_eq(_step(physical, i).start, _step(planned, i).start, "Same start at %d" % i)
@@ -111,8 +114,11 @@ func test_plan_entries_order() -> void:
 		PlanManager.PlanEntry.new(m1.id, Side.Value.RIGHT),
 		PlanManager.PlanEntry.new(m2.id, Side.Value.LEFT),
 	]
-	var ray := Ray.new(Vector2(450, 300), Direction.new(Vector2(450, 300), Vector2(200, 300)))
-	var path := Tracer.trace(ray.origin, ray.direction, [m1, m2], GameState.new(),
+	var player := Vector2(450, 300)
+	var cursor := Vector2(200, 300)
+	var aim := Planner.compute_aim_direction(player, cursor, plan, [m1, m2], GameState.new())
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, [m1, m2], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
 	var frame_changes := 0
@@ -121,14 +127,16 @@ func test_plan_entries_order() -> void:
 			frame_changes += 1
 	assert_gte(frame_changes, 2, "Two plan entries → at least 2 frame changes")
 
-# --- Terminal stops both modes ---
+# --- Terminal stops physical not planned ---
 
 func test_terminal_stops_physical_not_planned() -> void:
 	var w := _wall(400)
-	var ray := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(600, 300)))
-	var physical := Tracer.trace(ray.origin, ray.direction, [w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray)
-	var planned := Tracer.trace(ray.origin, ray.direction, [w], GameState.new(),
+	var player := Vector2(200, 300)
+	var cursor := Vector2(600, 300)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var physical := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var planned := Tracer.trace(player, aim, [w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
 	assert_gt(planned.steps.size(), physical.steps.size(), "Planned passes through wall, physical stops")

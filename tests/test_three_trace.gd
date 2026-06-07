@@ -21,11 +21,11 @@ func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entri
 	MobiusTransform.reset_id_counter()
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [])
 	MobiusTransform.reset_id_counter()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cursor)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries)
 	var ci: int = planned.cursor_index
 	if ci < 0:
 		ci = planned.steps.size()
