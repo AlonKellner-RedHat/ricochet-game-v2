@@ -71,21 +71,21 @@ func test_cursor_image_is_direction_end() -> void:
 	assert_almost_eq(cs.end.y, cursor.y, 1.0, "Cursor step ends at cursor y")
 
 func test_cursor_with_plan_reachable() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
-	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
-	var player := Vector2(600, 300)
-	var cursor := Vector2(300, 250)
-	var aim := Planner.compute_aim_direction(player, cursor, plan, [m, w], GameState.new())
+	# Use full room so the ray can loop back
+	var surfaces := _setup_scene()
+	var plan: Array = [PlanManager.PlanEntry.new(surfaces[3].id, Side.Value.LEFT)]
+	var player := Vector2(960, 500)
+	var cursor := Vector2(700, 400)
+	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
 	var ray := Ray.new(player, aim)
 	MobiusTransform.reset_id_counter()
-	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
-	assert_gt(path.cursor_index, 0, "Planned trace should reach cursor image")
+	assert_gt(path.cursor_index, 1, "Planned trace should reach cursor after plan + loop")
 
-func test_cursor_always_on_ray() -> void:
-	# After a reflection, cursor image is still ahead (it's direction.end, fixed in norm frame)
+func test_cursor_not_reached_after_nonplan_reflection() -> void:
+	# No plan, mirror between player and cursor → physical reflects → diverged → cursor NOT reached
 	var m := _mirror(400)
 	var w := _wall(700)
 	var player := Vector2(200, 300)
@@ -94,9 +94,8 @@ func test_cursor_always_on_ray() -> void:
 	var ray := Ray.new(player, aim)
 	MobiusTransform.reset_id_counter()
 	var path := Tracer.trace(player, aim, [m, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
-	# cursor_image = cursor = (600,300). Mirror at x=400 reflects physical trace.
-	# But cursor_image is fixed at (600,300) in normalized frame — always ahead.
-	assert_gt(path.cursor_index, 0, "Cursor should always be reachable (fixed in norm frame)")
+	# Mirror reflects before aim point → non-plan effect → plan_matched=false → cursor NOT reached
+	assert_eq(path.cursor_index, -1, "Cursor not reached after non-plan reflection")
 
 # --- Physical preview matches physical trace ---
 
@@ -180,7 +179,8 @@ func test_repro_bug2_mirror_plan() -> void:
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
-	assert_gt(planned.cursor_index, 0, "Planned must reach cursor image")
+	# Cursor reached after plan completes and ray loops back
+	assert_gt(planned.cursor_index, 1, "Planned must reach cursor after plan + loop")
 
 func test_repro_bug3_off_segment() -> void:
 	var surfaces := _setup_scene()
@@ -193,4 +193,4 @@ func test_repro_bug3_off_segment() -> void:
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
-	assert_gt(planned.cursor_index, 0, "Planned must reach cursor image")
+	assert_gt(planned.cursor_index, 1, "Planned must reach cursor after plan + loop")

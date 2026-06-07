@@ -47,7 +47,8 @@ func _compute_trace() -> void:
 	var aim_ray := Ray.new(player_pos, aim_dir)
 	MobiusTransform.reset_id_counter()
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray)
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries)
 	MobiusTransform.reset_id_counter()
 	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,

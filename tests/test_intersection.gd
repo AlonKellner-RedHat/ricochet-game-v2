@@ -137,3 +137,31 @@ func test_side_consistent_with_determine_side() -> void:
 	var far_approach := hit.point - dir * 100.0
 	var expected := seg.determine_side(far_approach)
 	assert_eq(hit.side, expected, "Analytical side should match determine_side with large offset")
+
+# --- project_point_on_ray ---
+
+func test_project_direction_end_initial() -> void:
+	var player := Vector2(200, 300)
+	var cursor := Vector2(500, 400)
+	var dir := Direction.new(player, cursor)
+	var ray := Ray.new(player, dir)
+	var t := Intersection.project_point_on_ray(ray, dir.end)
+	assert_almost_eq(t, 1.0, 0.0001, "direction.end at t=1.0 on initial ray")
+
+func test_project_origin() -> void:
+	var player := Vector2(200, 300)
+	var dir := Direction.new(player, Vector2(500, 400))
+	var ray := Ray.new(player, dir)
+	var t := Intersection.project_point_on_ray(ray, player)
+	assert_almost_eq(t, 0.0, 0.0001, "origin at t=0.0")
+
+func test_project_direction_end_after_advance() -> void:
+	var player := Vector2(200, 300)
+	var cursor := Vector2(500, 400)
+	var dir := Direction.new(player, cursor)
+	# Advance ray to a point along the direction
+	var advanced := player + 0.3 * dir.to_vector()
+	var ray := Ray.new(advanced, dir)
+	var t := Intersection.project_point_on_ray(ray, dir.end)
+	assert_almost_eq(t, 0.7, 0.0001, "direction.end at t=0.7 after advancing 30%")
+	assert_gt(t, 0.0, "direction.end should be ahead after partial advance")

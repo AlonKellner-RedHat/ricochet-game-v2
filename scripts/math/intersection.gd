@@ -114,6 +114,13 @@ static func _intersect_ray_carrier(ray: Ray, carrier: GeneralizedCircle) -> Arra
 		results.append({"t": t, "point": point})
 	return results
 
+static func project_point_on_ray(ray: Ray, point: Vector2) -> float:
+	var dir := ray.direction.to_vector()
+	var dir_len_sq := dir.length_squared()
+	if dir_len_sq == 0.0:
+		return 0.0
+	return (point - ray.origin).dot(dir) / dir_len_sq
+
 static func _determine_side(ray: Ray, point: Vector2, seg: Segment) -> Side.Value:
 	var carrier: GeneralizedCircle = seg.get_carrier()
 	var dir := ray.direction.to_vector().normalized()

@@ -41,13 +41,15 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		shared_ray = Ray.new(origin, direction)
 	var ray := Ray.new(origin, direction)
 	var excluded: Array = []
-	var cursor_injected := false
 	var current_mode: int = mode
 	var plan_index := 0
+	var plan_matched := true
+	var aim_injected := false
+	var cursor_injected := false
 	var frame_dirty := true
 	var norm_surfaces: Array = []
 	var norm_to_surface: Dictionary = {}
-	var cursor_image: Vector2 = direction.end
+	var aim_point: Vector2 = direction.end
 
 	for _i in MAX_HITS:
 		if frame_dirty:
@@ -59,41 +61,84 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			norm_segments.append(ns.segment)
 
 		var hit: Intersection.HitRecord = Intersection.find_nearest_hit(ray, norm_segments, excluded)
-		var dir_vec := ray.direction.to_vector()
-		var dir_len_sq := dir_vec.length_squared()
 
-		if not cursor_injected and cursor_image != origin:
-			var to_cursor := cursor_image - ray.origin
-			var t_cursor := to_cursor.dot(dir_vec) / dir_len_sq if dir_len_sq > 0.0 else -1.0
-			var cursor_wins := false
-			if t_cursor > 0.0:
-				cursor_wins = (hit == null or hit.t <= 0.0 or t_cursor < hit.t)
-			elif t_cursor == 0.0:
-				cursor_wins = (hit == null)
-			if cursor_wins:
-				path.steps.append(Step.new(
-					frame.apply(ray.origin), frame.apply(cursor_image),
-					frame.id, null, shared_ray, frame))
+		# --- Virtual hitpoint competition ---
+		var best_t := INF
+		var best_type := ""
+
+		# Carrier hit (forward only for now; beyond handled as fallback)
+		if hit != null and hit.t > 0.0:
+			best_t = hit.t
+			best_type = "carrier"
+
+		# Aim point — construction-defined, always on ray
+		if not aim_injected:
+			var t_aim := Intersection.project_point_on_ray(ray, aim_point)
+			if t_aim > 0.0 and t_aim < best_t:
+				best_t = t_aim
+				best_type = "aim"
+			elif t_aim == 0.0 and best_type == "":
+				best_t = 0.0
+				best_type = "aim"
+
+		# Cursor — same position as aim, but only when plan complete + matched
+		var cursor_reachable := not cursor_injected and plan_index >= plan_entries.size() and plan_matched
+		if cursor_reachable and aim_injected:
+			if cursor_reachable:
+				var t_aim := Intersection.project_point_on_ray(ray, aim_point)
+				if t_aim > 0.0 and t_aim < best_t:
+					best_t = t_aim
+					best_type = "cursor"
+				elif t_aim == 0.0 and best_type == "":
+					best_t = 0.0
+					best_type = "cursor"
+
+		# Player block — only after cursor is reached or unreachable
+		if not cursor_reachable:
+			var t_player := Intersection.project_point_on_ray(ray, origin)
+			if t_player > 0.0 and t_player < best_t:
+				best_t = t_player
+				best_type = "player"
+			elif t_player == 0.0 and best_type == "":
+				best_t = t_player
+				best_type = "player"
+
+		# Beyond carrier hit as fallback
+		if best_type == "" and hit != null:
+			best_t = hit.t
+			best_type = "carrier"
+
+		# --- Process winner ---
+		if best_type == "aim":
+			path.steps.append(Step.new(
+				frame.apply(ray.origin), frame.apply(aim_point),
+				frame.id, null, shared_ray, frame))
+			aim_injected = true
+			# Check if cursor also reached (plan complete + matched at this point)
+			if not cursor_injected and plan_index >= plan_entries.size() and plan_matched:
 				path.cursor_index = path.steps.size()
 				cursor_injected = true
 				current_mode = post_cursor_mode
-				ray = Ray.new(cursor_image, ray.direction)
-				continue
+			ray = Ray.new(aim_point, ray.direction)
+			continue
 
-		var to_player := origin - ray.origin
-		var t_player := to_player.dot(dir_vec) / dir_len_sq if dir_len_sq > 0.0 else -1.0
-		var player_wins := false
-		if t_player > 0.0:
-			player_wins = (hit == null or hit.t <= 0.0 or t_player < hit.t)
-		elif t_player == 0.0:
-			player_wins = (hit == null)
-		if player_wins:
+		if best_type == "cursor":
+			path.steps.append(Step.new(
+				frame.apply(ray.origin), frame.apply(aim_point),
+				frame.id, null, shared_ray, frame))
+			path.cursor_index = path.steps.size()
+			cursor_injected = true
+			current_mode = post_cursor_mode
+			ray = Ray.new(aim_point, ray.direction)
+			continue
+
+		if best_type == "player":
 			path.steps.append(Step.new(
 				frame.apply(ray.origin), frame.apply(origin),
 				frame.id, null, shared_ray, frame))
 			break
 
-		if hit == null:
+		if best_type == "":
 			var vis_origin := frame.apply(ray.origin)
 			var vis_dir := (frame.apply(ray.origin + ray.direction.to_vector().normalized()) - vis_origin).normalized()
 			var escape_end := _clip_to_bounds(vis_origin, vis_dir, bounds)
@@ -104,6 +149,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame))
 			break
 
+		# best_type == "carrier"
 		var vis_start := frame.apply(ray.origin)
 		var vis_end := frame.apply(hit.point)
 		if hit.t < 0.0:
@@ -130,6 +176,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 						break
 					if effect_config.effect is TransformativeEffect:
 						apply_effect = true
+						# Track plan matching for cursor reachability
+						if plan_index < plan_entries.size():
+							if orig_surf.id == plan_entries[plan_index].surface_id:
+								plan_index += 1
+							else:
+								plan_matched = false
+						else:
+							plan_matched = false
 		elif current_mode == TraceMode.PLANNED:
 			if orig_surf and plan_index < plan_entries.size():
 				var entry: PlanManager.PlanEntry = plan_entries[plan_index]
