@@ -7,6 +7,7 @@ extends Node2D
 @export var passthrough_lines: Array[Vector4] = []
 @export var block_lines: Array[Vector4] = []
 @export var mirror_lines: Array[Vector4] = []
+@export var mirror_right_lines: Array[Vector4] = []
 
 var surfaces: Array[Surface] = []
 
@@ -38,6 +39,22 @@ func _ready() -> void:
 		var node := Node2D.new()
 		node.set_script(load("res://scripts/game/surface_node.gd"))
 		node.name = "Mirror_%d" % surf.id
+		add_child(node)
+		node.setup(surf)
+	for line_def in mirror_right_lines:
+		var seg := Segment.new(
+			Vector2(line_def.x, line_def.y),
+			Vector2(line_def.z, line_def.w),
+			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))
+		var carrier := seg.get_carrier()
+		var reflection := ReflectionEffect.new(carrier)
+		var left_config := SideConfig.new(null, false)
+		var right_config := SideConfig.new(reflection, true)
+		var surf := Surface.new(seg, left_config, right_config, false, false)
+		surfaces.append(surf)
+		var node := Node2D.new()
+		node.set_script(load("res://scripts/game/surface_node.gd"))
+		node.name = "MirrorR_%d" % surf.id
 		add_child(node)
 		node.setup(surf)
 	for line_def in passthrough_lines:
