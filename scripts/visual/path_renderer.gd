@@ -45,14 +45,13 @@ func _compute_trace() -> void:
 	var aim_dir: Direction = Planner.compute_aim_direction(
 		player_pos, cursor_pos, plan_entries, surfaces, GameState.new())
 	var aim_ray := Ray.new(player_pos, aim_dir)
-	MobiusTransform.reset_id_counter()
+	var cache := TransformCache.new()
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries)
-	MobiusTransform.reset_id_counter()
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
 	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
 
 	var ci: int = _planned_path.cursor_index
 	if ci < 0:

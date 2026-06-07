@@ -18,14 +18,13 @@ func _wall(x: float) -> Surface:
 func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> Array:
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
 	var aim_ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
+	var cache := TransformCache.new()
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [])
-	MobiusTransform.reset_id_counter()
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
 	var ci: int = planned.cursor_index
 	if ci < 0:
 		ci = planned.steps.size()

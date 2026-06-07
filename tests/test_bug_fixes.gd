@@ -2,7 +2,6 @@ extends GutTest
 
 func before_each() -> void:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 
 func _wall(x: float) -> Surface:
 	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
@@ -63,7 +62,6 @@ func test_cursor_image_is_direction_end() -> void:
 	var cursor := Vector2(400, 300)
 	var aim := Direction.new(player, cursor)
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var path := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	assert_gt(path.cursor_index, 0, "Cursor should be injected")
 	var cs := _step(path, path.cursor_index - 1)
@@ -78,7 +76,6 @@ func test_cursor_with_plan_reachable() -> void:
 	var cursor := Vector2(700, 400)
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
@@ -92,7 +89,6 @@ func test_cursor_not_reached_after_nonplan_reflection() -> void:
 	var cursor := Vector2(600, 300)
 	var aim := Direction.new(player, cursor)
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var path := Tracer.trace(player, aim, [m, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	# Mirror reflects before aim point → non-plan effect → plan_matched=false → cursor NOT reached
 	assert_eq(path.cursor_index, -1, "Cursor not reached after non-plan reflection")
@@ -106,10 +102,8 @@ func test_physical_preview_matches() -> void:
 	var aim := Direction.new(player, cursor)
 	var aim_ray := Ray.new(player, aim)
 
-	MobiusTransform.reset_id_counter()
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray)
-	MobiusTransform.reset_id_counter()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
@@ -135,7 +129,6 @@ func test_player_block_stops_loop() -> void:
 	var cursor := Vector2(700, 300)
 	var aim := Direction.new(player, cursor)
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var path := Tracer.trace(player, aim, [], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	# Should terminate (player block prevents infinite loop)
 	assert_gt(path.steps.size(), 0, "Should have steps")
@@ -148,7 +141,6 @@ func test_player_block_wall_stops_first() -> void:
 	var cursor := Vector2(400, 300)
 	var aim := Direction.new(player, cursor)
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var path := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	# Wall should stop the trace, not the player block
 	var last := _step(path, path.steps.size() - 1)
@@ -162,7 +154,6 @@ func test_repro_bug1_wall_between() -> void:
 	var cursor := Vector2(968.0083, 153.2839)
 	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
@@ -175,7 +166,6 @@ func test_repro_bug2_mirror_plan() -> void:
 	var plan: Array = [PlanManager.PlanEntry.new(surfaces[4].id, Side.Value.LEFT)]
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
@@ -189,7 +179,6 @@ func test_repro_bug3_off_segment() -> void:
 	var plan: Array = [PlanManager.PlanEntry.new(surfaces[3].id, Side.Value.LEFT)]
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)

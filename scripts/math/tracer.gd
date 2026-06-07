@@ -30,10 +30,12 @@ const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS) -> TracedPath:
 	return trace(initial_ray.origin, initial_ray.direction, surfaces, game_state, bounds, initial_ray)
 
-static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, _target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = []) -> TracedPath:
+static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, _target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = [], cache: TransformCache = null) -> TracedPath:
 	var path := TracedPath.new()
 	if direction.is_zero_length():
 		return path
+	if cache == null:
+		cache = TransformCache.new()
 
 	var state_copy := game_state.copy()
 	var frame := MobiusTransform.identity()
@@ -53,7 +55,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	for _i in MAX_HITS:
 		if frame_dirty:
-			norm_surfaces = _build_normalized(surfaces, frame, norm_to_surface)
+			norm_surfaces = _build_normalized(surfaces, frame, norm_to_surface, cache)
 			frame_dirty = false
 
 		var norm_segments: Array = []
@@ -196,7 +198,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if apply_effect:
 			var mobius: MobiusTransform = effect_config.effect.get_mobius()
 			var inv_mobius: MobiusTransform = effect_config.effect.get_inverse_mobius()
-			frame = frame.compose(mobius)
+			frame = cache.compose_cached(frame, mobius)
 			ray = Ray.new(inv_mobius.apply(hit.point), ray.direction)
 			excluded = []
 			frame_dirty = true
@@ -207,14 +209,18 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	return path
 
-static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary) -> Array:
+static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, cache: TransformCache = null) -> Array:
 	out_mapping.clear()
 	if frame.id == MobiusTransform.IDENTITY_ID:
 		for surf in surfaces:
 			out_mapping[surf.segment] = surf
 		return surfaces
 
-	var inv := frame.invert()
+	var inv: MobiusTransform
+	if cache:
+		inv = cache.invert_cached(frame)
+	else:
+		inv = frame.invert()
 	var result: Array = []
 	for surf in surfaces:
 		var s := inv.apply(surf.segment.start)

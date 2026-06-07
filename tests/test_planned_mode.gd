@@ -94,12 +94,12 @@ func test_hitpoint_alignment_no_effects() -> void:
 	var cursor := Vector2(400, 300)
 	var aim := Direction.new(player, cursor)
 	var ray := Ray.new(player, aim)
-	MobiusTransform.reset_id_counter()
-	var physical := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
-	MobiusTransform.reset_id_counter()
+	var cache := TransformCache.new()
+	var physical := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray,
+		-1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache)
 	var planned := Tracer.trace(player, aim, [w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cache)
 	assert_eq(physical.steps.size(), planned.steps.size(), "Same step count")
 	for i in physical.steps.size():
 		assert_eq(_step(physical, i).start, _step(planned, i).start, "Same start at %d" % i)

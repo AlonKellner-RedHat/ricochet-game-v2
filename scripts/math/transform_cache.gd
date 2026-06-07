@@ -3,6 +3,8 @@ extends RefCounted
 
 var _carrier_cache: Dictionary = {}
 var _via_cache: Dictionary = {}
+var _compose_cache: Dictionary = {}
+var _inverse_cache: Dictionary = {}
 
 func derive_carrier_cached(start: Point, end_pt: Point, via: Point) -> GeneralizedCircle:
 	var key := Vector3i(start.id, end_pt.id, via.id)
@@ -24,6 +26,24 @@ func derive_via_cached(start: Point, end_pt: Point, _carrier: GeneralizedCircle)
 		return _via_cache[reverse_key]
 	return null
 
+func compose_cached(a: MobiusTransform, b: MobiusTransform) -> MobiusTransform:
+	var key := Vector2i(a.id, b.id)
+	if _compose_cache.has(key):
+		return _compose_cache[key]
+	var result := a.compose(b)
+	_compose_cache[key] = result
+	return result
+
+func invert_cached(t: MobiusTransform) -> MobiusTransform:
+	if _inverse_cache.has(t.id):
+		return _inverse_cache[t.id]
+	var result := t.invert()
+	_inverse_cache[t.id] = result
+	_inverse_cache[result.id] = t
+	return result
+
 func clear() -> void:
 	_carrier_cache.clear()
 	_via_cache.clear()
+	_compose_cache.clear()
+	_inverse_cache.clear()
