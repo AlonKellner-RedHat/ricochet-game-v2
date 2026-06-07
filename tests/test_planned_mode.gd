@@ -22,27 +22,26 @@ func _step(path: Tracer.TracedPath, idx: int) -> Tracer.Step:
 func test_planned_empty_plan_no_effects() -> void:
 	var m := _mirror(400)
 	var w := _wall(700)
-	var ray := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(800, 300)))
-	var path := Tracer.trace(ray.origin, ray.direction, [m, w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, 100.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
-	# Pre-cursor: PLANNED mode, empty plan → no effects
-	# Carrier hit at mirror → pass-through (not in plan)
+	var player := Vector2(200, 300)
+	var cursor := Vector2(300, 300)
+	var ray := Ray.new(player, Direction.new(player, Vector2(800, 300)))
+	var path := Tracer.trace(player, ray.direction, [m, w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
 	var first_fid: int = _step(path, 0).frame_id
-	# Check pre-cursor steps have same frame (no effects)
 	for i in range(0, mini(path.cursor_index, path.steps.size())):
 		assert_eq(_step(path, i).frame_id, first_fid,
 			"Pre-cursor step %d should have no effect (empty plan)" % i)
 
 func test_planned_empty_plan_physical_after_cursor() -> void:
-	# After cursor, mode switches to PHYSICAL → should reflect off mirror
 	var m := _mirror(400)
 	var w := _wall(100)
-	var ray := Ray.new(Vector2(600, 300), Direction.new(Vector2(600, 300), Vector2(200, 300)))
-	# Cursor at dist=100 (at x=500), mirror at x=400 (post-cursor)
-	var path := Tracer.trace(ray.origin, ray.direction, [m, w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, 100.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
+	var player := Vector2(600, 300)
+	var cursor := Vector2(500, 300)
+	var ray := Ray.new(player, Direction.new(player, Vector2(200, 300)))
+	var path := Tracer.trace(player, ray.direction, [m, w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
 	# Post-cursor should apply physical effects → mirror reflection
 	var found_frame_change := false
 	var cursor_fid: int = _step(path, 0).frame_id
@@ -89,12 +88,15 @@ func test_planned_mirror_not_in_plan_passthrough() -> void:
 
 func test_hitpoint_alignment_no_effects() -> void:
 	var w := _wall(600)
-	var ray := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(800, 300)))
-	var physical := Tracer.trace(ray.origin, ray.direction, [w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, 100.0)
-	var planned := Tracer.trace(ray.origin, ray.direction, [w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, 100.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
+	var player := Vector2(200, 300)
+	var cursor := Vector2(400, 300)
+	var ray := Ray.new(player, Direction.new(player, Vector2(800, 300)))
+	var physical := Tracer.trace(player, ray.direction, [w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	var planned := Tracer.trace(player, ray.direction, [w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
 	assert_eq(physical.steps.size(), planned.steps.size(), "Same step count")
 	for i in physical.steps.size():
 		assert_eq(_step(physical, i).start, _step(planned, i).start, "Same start at %d" % i)

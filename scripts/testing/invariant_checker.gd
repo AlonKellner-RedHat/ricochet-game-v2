@@ -141,9 +141,13 @@ func check_PHYSICAL_PREVIEW_MATCH(player_pos: Vector2, cursor_pos: Vector2) -> A
 	if not _renderer or player_pos == cursor_pos:
 		return violations
 	var typed: Array = _renderer.get_typed_steps()
+	if typed.size() == 0:
+		return violations
+	# The physical trace from the renderer IS the arrow path (both use the same trace)
 	var physical: Tracer.TracedPath = _renderer.get_traced_path()
 	if physical == null:
 		return violations
+	# Extract non-red preview steps
 	var non_red: Array = []
 	for i in typed.size():
 		var ms: StepTreeMerge.MergedStep = typed[i]

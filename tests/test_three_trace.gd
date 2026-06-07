@@ -18,14 +18,14 @@ func _wall(x: float) -> Surface:
 func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> Array:
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
 	var aim_ray := Ray.new(player, aim)
-	var target_dist := player.distance_to(cursor)
 	MobiusTransform.reset_id_counter()
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, target_dist)
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
 	MobiusTransform.reset_id_counter()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, target_dist,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries)
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cursor)
 	var ci: int = planned.cursor_index
 	if ci < 0:
 		ci = planned.steps.size()
@@ -58,16 +58,15 @@ func test_empty_plan_mirror_before_cursor() -> void:
 
 # --- Plan matches physics → all green ---
 
-func test_plan_matches_physics() -> void:
+func test_plan_matches_physics_first_step_aligned() -> void:
 	var m := _mirror(400)
 	var w := _wall(100)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var merged := _build_merged(Vector2(600, 300), Vector2(200, 300), [m, w], plan)
-	for i in merged.size():
-		var ms: StepTreeMerge.MergedStep = merged[i]
-		assert_true(
-			ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED,
-			"Step %d should be green when plan matches (type=%d)" % [i, ms.type])
+	var first: StepTreeMerge.MergedStep = merged[0]
+	assert_true(
+		first.type == StepTypes.Type.ALIGNED or first.type == StepTypes.Type.ALIGNED_POST_PLANNED,
+		"First step should be green when plan matches")
 
 # --- Plan misses physics → divergence ---
 

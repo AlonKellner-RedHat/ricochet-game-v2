@@ -214,3 +214,117 @@ func test_no_gap_after_reflection_cursor() -> void:
 		"No gap: cursor step end == next step start (x)")
 	assert_almost_eq(cursor_step.end.y, post_step.start.y, 0.01,
 		"No gap: cursor step end == next step start (y)")
+
+# --- Direction-based cursor injection ---
+
+func test_cursor_not_injected_at_first_reflection() -> void:
+	# Mirror between player and cursor, no plan. Physical reflects.
+	# After first reflection, cursor is behind the ray → cursor NOT injected at step 1.
+	# (Cursor may be injected later after multiple bounces bring it back ahead.)
+	var m := _mirror(400)
+	var w := _wall(700)
+	var player := Vector2(200, 300)
+	var cursor := Vector2(500, 300)
+	var aim := Direction.new(player, cursor)
+	var aim_ray := Ray.new(player, aim)
+	MobiusTransform.reset_id_counter()
+	# Only one mirror, wall behind → after reflection, cursor is behind ray, no way back
+	var physical := Tracer.trace(player, aim, [m, w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	assert_eq(physical.cursor_index, -1,
+		"Cursor behind ray after reflection — should not be injected")
+
+func test_cursor_injected_when_ahead() -> void:
+	# No mirror between player and cursor → cursor ahead → inject
+	var w := _wall(600)
+	var player := Vector2(200, 300)
+	var cursor := Vector2(400, 300)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	MobiusTransform.reset_id_counter()
+	var path := Tracer.trace(player, aim, [w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	assert_gt(path.cursor_index, 0, "Cursor should be injected when ahead of ray")
+
+func test_cursor_injected_with_matching_plan() -> void:
+	# Mirror in plan, cursor past mirror → planned trace reflects correctly
+	var m := _mirror(400)
+	var w := _wall(100)
+	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
+	var player := Vector2(600, 300)
+	var cursor := Vector2(300, 250)
+	var aim := Planner.compute_aim_direction(player, cursor, plan, [m, w], GameState.new())
+	var ray := Ray.new(player, aim)
+	MobiusTransform.reset_id_counter()
+	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cursor)
+	assert_gt(path.cursor_index, 0, "Planned trace should reach cursor through plan")
+	var cs := _step(path, path.cursor_index - 1)
+	assert_almost_eq(cs.end.x, cursor.x, 2.0, "Cursor step at actual cursor x")
+	assert_almost_eq(cs.end.y, cursor.y, 2.0, "Cursor step at actual cursor y")
+
+func test_physical_preview_matches_physical_trace() -> void:
+	# Non-red preview steps must match physical trace steps 1:1
+	var surfaces := _setup_scene()
+	var player := Vector2(960.0, 827.9623)
+	var cursor := Vector2(689.7184, 640.1856)
+	var aim := Direction.new(player, cursor)
+	var aim_ray := Ray.new(player, aim)
+
+	MobiusTransform.reset_id_counter()
+	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	MobiusTransform.reset_id_counter()
+	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
+	var ci: int = planned.cursor_index
+	if ci < 0:
+		ci = planned.steps.size()
+	var merged := StepTreeMerge.merge(planned.steps, physical.steps, ci)
+
+	var non_red: Array = []
+	for i in merged.size():
+		var ms: StepTreeMerge.MergedStep = merged[i]
+		if ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED or ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
+			non_red.append(ms)
+
+	assert_eq(non_red.size(), physical.steps.size(),
+		"Non-red count (%d) must match physical count (%d)" % [non_red.size(), physical.steps.size()])
+	for i in mini(non_red.size(), physical.steps.size()):
+		var ms: StepTreeMerge.MergedStep = non_red[i]
+		var ps: Tracer.Step = physical.steps[i]
+		assert_almost_eq(ms.start.distance_to(ps.start), 0.0, 0.01,
+			"Step %d start: preview=%s physical=%s" % [i, ms.start, ps.start])
+		assert_almost_eq(ms.end.distance_to(ps.end), 0.0, 0.01,
+			"Step %d end: preview=%s physical=%s" % [i, ms.end, ps.end])
+
+func test_physical_preview_matches_no_mirror() -> void:
+	var w := _wall(600)
+	var player := Vector2(200, 300)
+	var cursor := Vector2(400, 300)
+	var aim := Direction.new(player, cursor)
+	var aim_ray := Ray.new(player, aim)
+
+	MobiusTransform.reset_id_counter()
+	var physical := Tracer.trace(player, aim, [w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	MobiusTransform.reset_id_counter()
+	var planned := Tracer.trace(player, aim, [w], GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cursor)
+	var ci: int = planned.cursor_index
+	if ci < 0:
+		ci = planned.steps.size()
+	var merged := StepTreeMerge.merge(planned.steps, physical.steps, ci)
+	var non_red: Array = []
+	for i in merged.size():
+		var ms: StepTreeMerge.MergedStep = merged[i]
+		if ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED or ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
+			non_red.append(ms)
+	assert_eq(non_red.size(), physical.steps.size(), "Non-red count must match physical count")
