@@ -82,8 +82,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var vis_dir := (frame.apply(ray.origin + ray.direction.to_vector().normalized()) - vis_origin).normalized()
 			var escape_end := _clip_to_bounds(vis_origin, vis_dir, bounds)
 			var return_start := _clip_to_bounds(vis_origin, -vis_dir, bounds)
-			path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, shared_ray, frame))
-			path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame))
+			if vis_origin != escape_end:
+				path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, shared_ray, frame))
+			if return_start != vis_origin:
+				path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame))
 			break
 
 		var vis_start := frame.apply(ray.origin)
@@ -92,8 +94,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		if hit.t < 0.0:
 			var vis_dir := (vis_end - vis_start).normalized()
-			path.steps.append(Step.new(vis_start, _clip_to_bounds(vis_start, -vis_dir, bounds), frame.id, null, shared_ray, frame))
-			path.steps.append(Step.new(_clip_to_bounds(vis_end, vis_dir, bounds), vis_end, frame.id, hit, shared_ray, frame))
+			var esc := _clip_to_bounds(vis_start, -vis_dir, bounds)
+			var ret := _clip_to_bounds(vis_end, vis_dir, bounds)
+			path.steps.append(Step.new(vis_start, esc, frame.id, null, shared_ray, frame))
+			path.steps.append(Step.new(ret, vis_end, frame.id, hit, shared_ray, frame))
 		else:
 			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit, shared_ray, frame))
 
