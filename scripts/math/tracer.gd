@@ -43,6 +43,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		shared_ray = Ray.new(origin, direction)
 	var ray := Ray.new(origin, direction)
 	var last_hit_segment: Segment = null
+	var last_hit_orig_surf: Surface = null
 	var current_mode: int = mode
 	var plan_index := 0
 	var plan_matched := true
@@ -63,6 +64,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				norm_surfaces = _build_normalized(surfaces, frame, norm_to_surface, cache)
 				cache.set_normalized(frame.id, norm_surfaces, norm_to_surface.duplicate())
 			frame_dirty = false
+			# Restore last_hit_segment for the re-normalized surface
+			if last_hit_orig_surf != null:
+				for ns in norm_surfaces:
+					var ns_surf: Surface = ns
+					if norm_to_surface.get(ns_surf.segment) == last_hit_orig_surf:
+						last_hit_segment = ns_surf.segment
+						break
+				last_hit_orig_surf = null
 
 		var norm_segments: Array = []
 		for ns in norm_surfaces:
@@ -224,11 +233,13 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var inv_mobius: MobiusTransform = effect_config.effect.get_inverse_mobius()
 			frame = cache.compose_cached(frame, mobius)
 			ray = Ray.new(inv_mobius.apply(hit.point), ray.direction)
+			last_hit_orig_surf = orig_surf
 			last_hit_segment = null
 			frame_dirty = true
 			continue
 
 		last_hit_segment = hit.segment
+		last_hit_orig_surf = null
 		ray = Ray.new(hit.point, ray.direction)
 
 	return path
