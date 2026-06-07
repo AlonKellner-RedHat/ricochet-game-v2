@@ -186,3 +186,31 @@ func test_repro_bug3() -> void:
 	var cs := _step(planned, planned.cursor_index - 1)
 	assert_almost_eq(cs.end.x, cursor.x, 2.0, "Bug3: Cursor at actual x")
 	assert_almost_eq(cs.end.y, cursor.y, 2.0, "Bug3: Cursor at actual y")
+
+# --- Fix: No gap after reflection + cursor ---
+
+func test_no_gap_after_reflection_cursor() -> void:
+	# Mirror between player and cursor. Physical reflects, then cursor injected.
+	# The step AFTER cursor must start at the cursor position, not the reflected image.
+	var surfaces := _setup_scene()
+	var player := Vector2(960.0, 827.9623)
+	var cursor := Vector2(706.7361, 508.9425)
+	var aim := Direction.new(player, cursor)
+	var aim_ray := Ray.new(player, aim)
+	var td := player.distance_to(cursor)
+	MobiusTransform.reset_id_counter()
+	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, td,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor)
+	assert_gt(physical.cursor_index, 0, "Should reach cursor")
+	assert_lt(physical.cursor_index, physical.steps.size(), "Should have post-cursor step")
+	var post_step := _step(physical, physical.cursor_index)
+	var cursor_step := _step(physical, physical.cursor_index - 1)
+	assert_almost_eq(post_step.start.x, cursor.x, 2.0,
+		"Post-cursor step must start at cursor x, not reflected image")
+	assert_almost_eq(post_step.start.y, cursor.y, 2.0,
+		"Post-cursor step must start at cursor y, not reflected image")
+	assert_almost_eq(cursor_step.end.x, post_step.start.x, 0.01,
+		"No gap: cursor step end == next step start (x)")
+	assert_almost_eq(cursor_step.end.y, post_step.start.y, 0.01,
+		"No gap: cursor step end == next step start (y)")

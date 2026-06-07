@@ -66,16 +66,19 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var remaining := target_dist - accumulated_dist
 			var t_target := remaining / dir_len if dir_len > 0.0 else -1.0
 			if remaining > 0.01 and t_target > 0.0 and (hit == null or hit.t < 0.0 or t_target < hit.t):
-				var target_point := ray.origin + dir_vec.normalized() * remaining
-				var cursor_vis := cursor_pos if cursor_pos != Vector2.ZERO else frame.apply(target_point)
+				var norm_cursor: Vector2
+				if cursor_pos != Vector2.ZERO:
+					norm_cursor = frame.invert().apply(cursor_pos)
+				else:
+					norm_cursor = ray.origin + dir_vec.normalized() * remaining
 				path.steps.append(Step.new(
-					frame.apply(ray.origin), cursor_vis,
+					frame.apply(ray.origin), frame.apply(norm_cursor),
 					frame.id, null, shared_ray, frame))
 				path.cursor_index = path.steps.size()
 				accumulated_dist = target_dist
 				target_passed = true
 				current_mode = post_cursor_mode
-				ray = Ray.new(target_point, ray.direction)
+				ray = Ray.new(norm_cursor, ray.direction)
 				continue
 
 		if hit == null:
