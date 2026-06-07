@@ -173,16 +173,23 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if orig_surf and orig_surf.is_target and hit.on_segment:
 			path.targets_hit[orig_surf.id] = true
 
+		# Find the NORMALIZED surface for effect lookup (has normalized carrier Möbius)
+		var norm_surf: Surface = null
+		for ns in norm_surfaces:
+			if ns.segment == hit.segment:
+				norm_surf = ns
+				break
+
 		var apply_effect := false
 		var effect_config: SideConfig = null
-		# Anti-conformal frame (odd reflections) reverses orientation → flip side for original surface lookup
+		# Anti-conformal frame (odd reflections) reverses orientation → flip side for config lookup
 		var lookup_side: Side.Value = hit.side
 		if frame.conjugating:
 			lookup_side = Side.Value.RIGHT if hit.side == Side.Value.LEFT else Side.Value.LEFT
 
 		if current_mode == TraceMode.PHYSICAL:
-			if orig_surf and hit.on_segment:
-				effect_config = orig_surf.active_side_config(lookup_side, state_copy)
+			if norm_surf and hit.on_segment:
+				effect_config = norm_surf.active_side_config(lookup_side, state_copy)
 				if effect_config != null:
 					if effect_config.effect is TerminalEffect:
 						break
@@ -200,7 +207,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if orig_surf and plan_index < plan_entries.size():
 				var entry: PlanManager.PlanEntry = plan_entries[plan_index]
 				if orig_surf.id == entry.surface_id:
-					effect_config = orig_surf.active_side_config(entry.side, state_copy)
+					var plan_lookup_side: Side.Value = entry.side
+					if frame.conjugating:
+						plan_lookup_side = Side.Value.RIGHT if entry.side == Side.Value.LEFT else Side.Value.LEFT
+					effect_config = norm_surf.active_side_config(plan_lookup_side, state_copy) if norm_surf else null
 					if effect_config != null and effect_config.effect is TransformativeEffect:
 						apply_effect = true
 					plan_index += 1
@@ -242,12 +252,20 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 			v = inv.apply(surf.segment.via)
 		var new_seg := Segment.new(s, e, v)
 		var state := GameState.new()
-		var left: SideConfig = surf.active_side_config(Side.Value.LEFT, state)
-		var right: SideConfig = surf.active_side_config(Side.Value.RIGHT, state)
+		var left := _normalize_config(surf.active_side_config(Side.Value.LEFT, state), new_seg)
+		var right := _normalize_config(surf.active_side_config(Side.Value.RIGHT, state), new_seg)
 		var new_surf := Surface.new(new_seg, left, right, surf.is_target, surf.player_solid)
 		out_mapping[new_surf.segment] = surf
 		result.append(new_surf)
 	return result
+
+static func _normalize_config(config: SideConfig, norm_seg: Segment) -> SideConfig:
+	if config == null or config.effect == null:
+		return config
+	if config.effect is ReflectionEffect:
+		var norm_effect := ReflectionEffect.new(norm_seg.get_carrier())
+		return SideConfig.new(norm_effect, config.interactive)
+	return config
 
 static func _clip_to_bounds(origin: Vector2, dir: Vector2, bounds: Rect2) -> Vector2:
 	var min_t := INF

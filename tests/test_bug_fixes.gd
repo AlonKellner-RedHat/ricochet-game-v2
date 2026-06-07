@@ -213,3 +213,49 @@ func test_side_correct_after_odd_reflections() -> void:
 	if step1 and step2:
 		assert_ne(step1.frame_id, step2.frame_id,
 			"Step 2 should reflect — side must be flipped after odd reflection")
+
+# --- Wrong carrier reflection bug ---
+
+func test_repro_wrong_carrier_reflection() -> void:
+	# WRONG case: cursor at y=736.364. After reflecting off x=800, the hit at
+	# x=1000 uses the ORIGINAL carrier Möbius (x=1000) instead of the NORMALIZED
+	# carrier (x=600). This produces a backtracking ray instead of proper reflection.
+	var surfaces := _setup_three_mirrors()
+	var player := Vector2(960.0, 827.9623)
+	var cursor := Vector2(820.855, 736.3637)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	# Should bounce between mirrors ≥5 steps (not backtrack to x=560 at step 3)
+	assert_gte(path.steps.size(), 5,
+		"Should bounce between mirrors, not backtrack (got %d steps)" % path.steps.size())
+
+func test_repro_correct_carrier_reflection() -> void:
+	# CORRECT case: cursor at y=737.366. Very close angle. Should also bounce ≥5 steps.
+	var surfaces := _setup_three_mirrors()
+	var player := Vector2(960.0, 827.9623)
+	var cursor := Vector2(820.855, 737.3656)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	assert_gte(path.steps.size(), 5,
+		"Regression: correct case should still bounce ≥5 steps (got %d steps)" % path.steps.size())
+
+func test_reflection_direction_after_frame_change() -> void:
+	# After reflecting off x=800 (going left→right), hitting x=1000 should
+	# reflect back to the left (x reverses). The y-slope should be preserved.
+	var surfaces := _setup_three_mirrors()
+	var player := Vector2(960.0, 827.9623)
+	var cursor := Vector2(820.855, 736.3637)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	if path.steps.size() >= 4:
+		# Step 2: (800, ~723) → (1000, ~591) — going RIGHT
+		# Step 3: should go LEFT (reflected at x=1000)
+		var s2 := _step(path, 2)
+		var s3 := _step(path, 3)
+		var dir2_x := s2.end.x - s2.start.x  # positive (going right)
+		var dir3_x := s3.end.x - s3.start.x  # should be negative (going left)
+		assert_gt(dir2_x, 0.0, "Step 2 should go right (toward x=1000)")
+		assert_lt(dir3_x, 0.0, "Step 3 should go left (reflected back from x=1000)")
