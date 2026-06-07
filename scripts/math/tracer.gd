@@ -22,13 +22,15 @@ class TracedPath extends RefCounted:
 	var targets_hit: Dictionary = {}
 	var cursor_index: int = -1
 
+enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
+
 const MAX_HITS := 256
 const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 
 static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS) -> TracedPath:
 	return trace(initial_ray.origin, initial_ray.direction, surfaces, game_state, bounds, initial_ray)
 
-static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, target_dist: float = -1.0) -> TracedPath:
+static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = []) -> TracedPath:
 	var path := TracedPath.new()
 	if direction.is_zero_length():
 		return path
@@ -41,6 +43,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 	var excluded: Array = []
 	var target_passed := target_dist < 0.0
 	var accumulated_dist := 0.0
+	var current_mode: int = mode
+	var plan_index := 0
 	var frame_dirty := true
 	var norm_surfaces: Array = []
 	var norm_to_surface: Dictionary = {}
@@ -69,6 +73,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				path.cursor_index = path.steps.size()
 				accumulated_dist = target_dist
 				target_passed = true
+				current_mode = post_cursor_mode
 				ray = Ray.new(target_point, ray.direction)
 				continue
 
@@ -100,18 +105,38 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if orig_surf and orig_surf.is_target and hit.on_segment:
 			path.targets_hit[orig_surf.id] = true
 
+		# Terminal effects: mode-independent, always stop when on-segment
 		if orig_surf and hit.on_segment:
-			var config: SideConfig = orig_surf.active_side_config(hit.side, state_copy)
-			if config != null and config.effect is TerminalEffect:
+			var term_config: SideConfig = orig_surf.active_side_config(hit.side, state_copy)
+			if term_config != null and term_config.effect is TerminalEffect:
 				break
-			if config != null and config.effect is TransformativeEffect:
-				var mobius: MobiusTransform = config.effect.get_mobius()
-				var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
-				frame = frame.compose(mobius)
-				ray = Ray.new(inv_mobius.apply(hit.point), ray.direction)
-				excluded = []
-				frame_dirty = true
-				continue
+
+		# Mode-dependent transformative effect application
+		var apply_effect := false
+		var effect_config: SideConfig = null
+
+		if current_mode == TraceMode.PHYSICAL:
+			if orig_surf and hit.on_segment:
+				effect_config = orig_surf.active_side_config(hit.side, state_copy)
+				if effect_config != null and effect_config.effect is TransformativeEffect:
+					apply_effect = true
+		elif current_mode == TraceMode.PLANNED:
+			if orig_surf and plan_index < plan_entries.size():
+				var entry: PlanManager.PlanEntry = plan_entries[plan_index]
+				if orig_surf.id == entry.surface_id:
+					effect_config = orig_surf.active_side_config(entry.side, state_copy)
+					if effect_config != null and effect_config.effect is TransformativeEffect:
+						apply_effect = true
+					plan_index += 1
+
+		if apply_effect:
+			var mobius: MobiusTransform = effect_config.effect.get_mobius()
+			var inv_mobius: MobiusTransform = effect_config.effect.get_inverse_mobius()
+			frame = frame.compose(mobius)
+			ray = Ray.new(inv_mobius.apply(hit.point), ray.direction)
+			excluded = []
+			frame_dirty = true
+			continue
 
 		excluded.append(hit.segment)
 		ray = Ray.new(hit.point, ray.direction)
