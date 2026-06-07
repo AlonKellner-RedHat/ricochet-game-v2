@@ -85,6 +85,13 @@ func _draw() -> void:
 		else:
 			_draw_dashed(from, to, col)
 
+	for i in _merged_steps.size():
+		var ms: StepTreeMerge.MergedStep = _merged_steps[i]
+		var col := StepTypes.color(ms.type)
+		col.a = 0.4
+		draw_circle(ms.start - global_position, 4.0, col)
+		draw_circle(ms.end - global_position, 4.0, col)
+
 func _draw_dashed(from: Vector2, to: Vector2, col: Color) -> void:
 	var dir := to - from
 	var total_len := dir.length()
