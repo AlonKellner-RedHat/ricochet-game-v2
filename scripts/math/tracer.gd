@@ -175,10 +175,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		var apply_effect := false
 		var effect_config: SideConfig = null
+		# Anti-conformal frame (odd reflections) reverses orientation → flip side for original surface lookup
+		var lookup_side: Side.Value = hit.side
+		if frame.conjugating:
+			lookup_side = Side.Value.RIGHT if hit.side == Side.Value.LEFT else Side.Value.LEFT
 
 		if current_mode == TraceMode.PHYSICAL:
 			if orig_surf and hit.on_segment:
-				effect_config = orig_surf.active_side_config(hit.side, state_copy)
+				effect_config = orig_surf.active_side_config(lookup_side, state_copy)
 				if effect_config != null:
 					if effect_config.effect is TerminalEffect:
 						break

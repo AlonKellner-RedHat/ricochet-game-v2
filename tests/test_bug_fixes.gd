@@ -183,3 +183,33 @@ func test_repro_bug3_off_segment() -> void:
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
 	assert_gt(planned.cursor_index, 1, "Planned must reach cursor after plan + loop")
+
+# --- Side flip after odd reflections ---
+
+func _setup_three_mirrors() -> Array:
+	var w_top := RoomBuilder.create_block_surface(Vector2(560, 240), Vector2(1360, 240), Vector2(960, 240))
+	var w_bot := RoomBuilder.create_block_surface(Vector2(1360, 840), Vector2(560, 840), Vector2(960, 840))
+	var w_left := RoomBuilder.create_block_surface(Vector2(560, 840), Vector2(560, 240), Vector2(560, 540))
+	var m1_seg := Segment.new(Vector2(800, 300), Vector2(800, 780), Vector2(800, 540))
+	var m1 := Surface.new(m1_seg, SideConfig.new(ReflectionEffect.new(m1_seg.get_carrier()), true), SideConfig.new(null, false), false, false)
+	var m2_seg := Segment.new(Vector2(1200, 300), Vector2(1200, 780), Vector2(1200, 540))
+	var m2 := Surface.new(m2_seg, SideConfig.new(ReflectionEffect.new(m2_seg.get_carrier()), true), SideConfig.new(null, false), false, false)
+	var m3_seg := Segment.new(Vector2(1000, 400), Vector2(1000, 700), Vector2(1000, 550))
+	var m3 := Surface.new(m3_seg, SideConfig.new(null, false), SideConfig.new(ReflectionEffect.new(m3_seg.get_carrier()), true), false, false)
+	return [w_top, w_bot, w_left, m1, m2, m3]
+
+func test_side_correct_after_odd_reflections() -> void:
+	var surfaces := _setup_three_mirrors()
+	var player := Vector2(960.0, 827.9623)
+	var cursor := Vector2(857.8936, 783.4509)
+	var aim := Direction.new(player, cursor)
+	var ray := Ray.new(player, aim)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	# Step 2 hits mirror at x=1000 (R=reflect). After 1 reflection, frame conjugating.
+	# Side must be flipped → R=reflect applied → frame changes.
+	var step1: Tracer.Step = path.steps[1] if path.steps.size() > 1 else null
+	var step2: Tracer.Step = path.steps[2] if path.steps.size() > 2 else null
+	assert_not_null(step2, "Should have step 2")
+	if step1 and step2:
+		assert_ne(step1.frame_id, step2.frame_id,
+			"Step 2 should reflect — side must be flipped after odd reflection")
