@@ -49,11 +49,12 @@ func _compute_trace() -> void:
 
 	MobiusTransform.reset_id_counter()
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, target_dist)
+		Tracer.DEFAULT_BOUNDS, aim_ray, target_dist,
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cursor_pos)
 	MobiusTransform.reset_id_counter()
 	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, target_dist,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cursor_pos)
 
 	var ci: int = _planned_path.cursor_index
 	if ci < 0:

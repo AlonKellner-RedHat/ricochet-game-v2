@@ -30,7 +30,7 @@ const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS) -> TracedPath:
 	return trace(initial_ray.origin, initial_ray.direction, surfaces, game_state, bounds, initial_ray)
 
-static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = []) -> TracedPath:
+static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = [], cursor_pos: Vector2 = Vector2.ZERO) -> TracedPath:
 	var path := TracedPath.new()
 	if direction.is_zero_length():
 		return path
@@ -67,8 +67,9 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var t_target := remaining / dir_len if dir_len > 0.0 else -1.0
 			if remaining > 0.01 and t_target > 0.0 and (hit == null or hit.t < 0.0 or t_target < hit.t):
 				var target_point := ray.origin + dir_vec.normalized() * remaining
+				var cursor_vis := cursor_pos if cursor_pos != Vector2.ZERO else frame.apply(target_point)
 				path.steps.append(Step.new(
-					frame.apply(ray.origin), frame.apply(target_point),
+					frame.apply(ray.origin), cursor_vis,
 					frame.id, null, shared_ray, frame))
 				path.cursor_index = path.steps.size()
 				accumulated_dist = target_dist
@@ -109,21 +110,17 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if orig_surf and orig_surf.is_target and hit.on_segment:
 			path.targets_hit[orig_surf.id] = true
 
-		# Terminal effects: mode-independent, always stop when on-segment
-		if orig_surf and hit.on_segment:
-			var term_config: SideConfig = orig_surf.active_side_config(hit.side, state_copy)
-			if term_config != null and term_config.effect is TerminalEffect:
-				break
-
-		# Mode-dependent transformative effect application
 		var apply_effect := false
 		var effect_config: SideConfig = null
 
 		if current_mode == TraceMode.PHYSICAL:
 			if orig_surf and hit.on_segment:
 				effect_config = orig_surf.active_side_config(hit.side, state_copy)
-				if effect_config != null and effect_config.effect is TransformativeEffect:
-					apply_effect = true
+				if effect_config != null:
+					if effect_config.effect is TerminalEffect:
+						break
+					if effect_config.effect is TransformativeEffect:
+						apply_effect = true
 		elif current_mode == TraceMode.PLANNED:
 			if orig_surf and plan_index < plan_entries.size():
 				var entry: PlanManager.PlanEntry = plan_entries[plan_index]

@@ -87,16 +87,21 @@ func test_plan_misses_physics() -> void:
 	assert_true(has_div_physical, "Should have DIVERGED_PHYSICAL")
 	assert_true(has_div_planned, "Should have DIVERGED_PLANNED")
 
-# --- Wall blocks both → aligned ---
+# --- Wall blocks physical, planned continues → divergence at wall ---
 
-func test_wall_blocks_both() -> void:
+func test_wall_blocks_physical_planned_continues() -> void:
 	var w := _wall(400)
 	var merged := _build_merged(Vector2(300, 300), Vector2(500, 300), [w])
+	var has_aligned := false
+	var has_div_planned := false
 	for i in merged.size():
 		var ms: StepTreeMerge.MergedStep = merged[i]
-		assert_true(
-			ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED,
-			"Step %d should be aligned when wall blocks both (type=%d)" % [i, ms.type])
+		if ms.type == StepTypes.Type.ALIGNED:
+			has_aligned = true
+		if ms.type == StepTypes.Type.DIVERGED_PLANNED:
+			has_div_planned = true
+	assert_true(has_aligned, "Should have ALIGNED before wall")
+	assert_true(has_div_planned, "Planned continues through wall → DIVERGED_PLANNED to cursor")
 
 # --- Physical reflects, never reaches cursor ---
 

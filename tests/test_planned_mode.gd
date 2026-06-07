@@ -121,7 +121,7 @@ func test_plan_entries_order() -> void:
 
 # --- Terminal stops both modes ---
 
-func test_terminal_stops_planned() -> void:
+func test_terminal_stops_physical_not_planned() -> void:
 	var w := _wall(400)
 	var ray := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(600, 300)))
 	var physical := Tracer.trace(ray.origin, ray.direction, [w], GameState.new(),
@@ -129,4 +129,4 @@ func test_terminal_stops_planned() -> void:
 	var planned := Tracer.trace(ray.origin, ray.direction, [w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
-	assert_eq(physical.steps.size(), planned.steps.size(), "Both stop at terminal wall")
+	assert_gt(planned.steps.size(), physical.steps.size(), "Planned passes through wall, physical stops")
