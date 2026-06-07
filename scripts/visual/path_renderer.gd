@@ -7,6 +7,7 @@ const DASH_OFF := 5.0
 var _player: CharacterBody2D
 var _cursor: Node2D
 var _traced_path: Tracer.TracedPath = null
+var _planned_path: Tracer.TracedPath = null
 var _merged_steps: Array = []
 
 func _ready() -> void:
@@ -23,6 +24,7 @@ func _process(_delta: float) -> void:
 func _compute_trace() -> void:
 	if not _player or not _cursor:
 		_traced_path = null
+		_planned_path = null
 		_merged_steps = []
 		return
 
@@ -30,16 +32,39 @@ func _compute_trace() -> void:
 	var cursor_pos := _cursor.global_position
 	if player_pos == cursor_pos:
 		_traced_path = null
+		_planned_path = null
 		_merged_steps = []
 		return
 
 	var surfaces := _get_surfaces()
-	var aim_dir := Direction.new(player_pos, cursor_pos)
+	var plan := _get_plan()
+	var plan_entries: Array = []
+	if plan and not plan.is_empty():
+		plan_entries = plan.entries
+
+	var aim_dir: Direction = Planner.compute_aim_direction(
+		player_pos, cursor_pos, plan_entries, surfaces, GameState.new())
 	var aim_ray := Ray.new(player_pos, aim_dir)
 	var target_dist := player_pos.distance_to(cursor_pos)
 
-	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, aim_ray, target_dist)
-	_merged_steps = StepTreeMerge.classify_physical(_traced_path)
+	MobiusTransform.reset_id_counter()
+	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, target_dist)
+	MobiusTransform.reset_id_counter()
+	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
+		Tracer.DEFAULT_BOUNDS, aim_ray, target_dist,
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries)
+
+	var ci: int = _planned_path.cursor_index
+	if ci < 0:
+		ci = _planned_path.steps.size()
+	_merged_steps = StepTreeMerge.merge(_planned_path.steps, _traced_path.steps, ci)
+
+func _get_plan() -> PlanManager:
+	var game_mgr := get_node_or_null("../GameManager")
+	if game_mgr and "plan" in game_mgr:
+		return game_mgr.plan
+	return null
 
 func _get_surfaces() -> Array:
 	var parent := get_parent()
