@@ -47,8 +47,11 @@ func _process(delta: float) -> void:
 	var distance := ARROW_SPEED * _speed_multiplier * delta
 	while distance > 0.0 and _current_step_index < _path.steps.size():
 		var step: Tracer.Step = _path.steps[_current_step_index]
+		var step_length: float = step.start.distance_to(step.end)
+		var remaining_in_step: float = step_length - _progress_along_step
 
-		if not screen.has_point(step.start) and not screen.has_point(step.end):
+		# If arrow is currently off-screen, skip to end of step instantly
+		if not screen.has_point(_arrow_position):
 			_arrow_position = step.end
 			_current_step_index += 1
 			_progress_along_step = 0.0
@@ -56,9 +59,6 @@ func _process(delta: float) -> void:
 				var next_step: Tracer.Step = _path.steps[_current_step_index]
 				_arrow_direction = (next_step.end - next_step.start).normalized()
 			continue
-
-		var step_length: float = step.start.distance_to(step.end)
-		var remaining_in_step: float = step_length - _progress_along_step
 
 		if distance < remaining_in_step:
 			_progress_along_step += distance
