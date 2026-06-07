@@ -27,3 +27,34 @@ static func classify_physical(path: Tracer.TracedPath) -> Array:
 			step_type = StepTypes.Type.ALIGNED_POST_PLANNED
 		result.append(MergedStep.new(s.start, s.end, step_type, s.frame_id))
 	return result
+
+static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int) -> Array:
+	var merged: Array = []
+	var diverged := false
+	var max_len: int = maxi(planned_steps.size(), physical_steps.size())
+
+	for idx in max_len:
+		var p: Tracer.Step = planned_steps[idx] if idx < planned_steps.size() else null
+		var r: Tracer.Step = physical_steps[idx] if idx < physical_steps.size() else null
+		var past_cursor: bool = idx >= cursor_index
+
+		if not diverged and p != null and r != null and p.frame_id == r.frame_id:
+			var step_type: StepTypes.Type
+			if past_cursor:
+				step_type = StepTypes.Type.ALIGNED_POST_PLANNED
+			else:
+				step_type = StepTypes.Type.ALIGNED
+			merged.append(MergedStep.new(p.start, p.end, step_type, p.frame_id))
+		else:
+			diverged = true
+			if p != null:
+				var div_type: StepTypes.Type
+				if past_cursor:
+					div_type = StepTypes.Type.DIVERGED_POST_PLANNED
+				else:
+					div_type = StepTypes.Type.DIVERGED_PLANNED
+				merged.append(MergedStep.new(p.start, p.end, div_type, p.frame_id))
+			if r != null:
+				merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id))
+
+	return merged
