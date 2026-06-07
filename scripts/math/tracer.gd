@@ -42,7 +42,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 	if shared_ray == null:
 		shared_ray = Ray.new(origin, direction)
 	var ray := Ray.new(origin, direction)
-	var excluded: Array = []
+	var last_hit_segment: Segment = null
 	var current_mode: int = mode
 	var plan_index := 0
 	var plan_matched := true
@@ -68,7 +68,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		for ns in norm_surfaces:
 			norm_segments.append(ns.segment)
 
-		var hit: Intersection.HitRecord = Intersection.find_nearest_hit(ray, norm_segments, excluded)
+		var hit: Intersection.HitRecord = Intersection.find_nearest_hit(ray, norm_segments, last_hit_segment)
 
 		# --- Virtual hitpoint competition ---
 		var best_t := INF
@@ -227,11 +227,11 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var inv_mobius: MobiusTransform = effect_config.effect.get_inverse_mobius()
 			frame = cache.compose_cached(frame, mobius)
 			ray = Ray.new(inv_mobius.apply(hit.point), ray.direction)
-			excluded = []
+			last_hit_segment = null
 			frame_dirty = true
 			continue
 
-		excluded.append(hit.segment)
+		last_hit_segment = hit.segment
 		ray = Ray.new(hit.point, ray.direction)
 
 	return path

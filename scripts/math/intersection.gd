@@ -15,16 +15,12 @@ class HitRecord extends RefCounted:
 		side = p_side
 		on_segment = p_on_segment
 
-static func find_nearest_hit(ray: Ray, segments: Array, excluded: Array = []) -> HitRecord:
-	var excluded_set: Dictionary = {}
-	for seg in excluded:
-		excluded_set[seg] = true
-
+static func find_nearest_hit(ray: Ray, segments: Array, skip_segment: Segment = null) -> HitRecord:
 	var forward: Array = []
 	var beyond: Array = []
 
 	for seg in segments:
-		if excluded_set.has(seg):
+		if seg == skip_segment:
 			continue
 		var carrier: GeneralizedCircle = seg.get_carrier()
 		var hits := _intersect_ray_carrier(ray, carrier)
