@@ -122,28 +122,24 @@ func _find_reflective_surfaces(scene: Node) -> Array:
 
 func _generate_plans(mirrors: Array) -> Array:
 	var plans: Array = []
-	# Single entries
+	# Single entries (each mirror × its reflective side)
 	for m in mirrors:
 		var s: Surface = m.surface
 		if m.left_reflects:
 			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
 		if m.right_reflects:
 			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.RIGHT)])
-	# Pairs (each combination)
-	for i in mirrors.size():
-		for j in mirrors.size():
-			if i == j:
-				continue
-			var si: Surface = mirrors[i].surface
-			var sj: Surface = mirrors[j].surface
-			var side_i: Side.Value = Side.Value.LEFT if mirrors[i].left_reflects else Side.Value.RIGHT
-			var side_j: Side.Value = Side.Value.LEFT if mirrors[j].left_reflects else Side.Value.RIGHT
-			plans.append([PlanManager.PlanEntry.new(si.id, side_i), PlanManager.PlanEntry.new(sj.id, side_j)])
-	# Same surface repeated (consecutive)
-	for m in mirrors:
-		var s: Surface = m.surface
-		if m.left_reflects:
-			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT), PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
+	# One pair (first two mirrors) and one repeated (first mirror twice)
+	if mirrors.size() >= 2:
+		var s0: Surface = mirrors[0].surface
+		var s1: Surface = mirrors[1].surface
+		var side0: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
+		var side1: Side.Value = Side.Value.LEFT if mirrors[1].left_reflects else Side.Value.RIGHT
+		plans.append([PlanManager.PlanEntry.new(s0.id, side0), PlanManager.PlanEntry.new(s1.id, side1)])
+	if mirrors.size() >= 1:
+		var s0: Surface = mirrors[0].surface
+		var side0: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
+		plans.append([PlanManager.PlanEntry.new(s0.id, side0), PlanManager.PlanEntry.new(s0.id, side0)])
 	return plans
 
 func _plan_to_str(plan: Array) -> String:
