@@ -93,20 +93,22 @@ func test_shared_cache_same_frame_ids() -> void:
 	var aim := Direction.new(player, cursor)
 	var ray := Ray.new(player, aim)
 
+	# PLANNED mode needs a plan entry to apply the mirror's effect
+	var plan_entries: Array = [PlanManager.PlanEntry.new(mirror.id, Side.Value.LEFT)]
+
 	# Both traces use the SAME cache — no ID counter reset needed
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache)
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cache)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
 
-	# Both should have the same frame ID after reflecting off the same mirror
-	var phys_step1: Tracer.Step = physical.steps[1] if physical.steps.size() > 1 else null
-	var plan_step1: Tracer.Step = planned.steps[1] if planned.steps.size() > 1 else null
-	if phys_step1 and plan_step1:
-		# If both reflected at the same mirror, their post-reflection frame IDs should match
-		# (because the cache returns the same composed transform)
-		if phys_step1.frame_id != 0 and plan_step1.frame_id != 0:
-			assert_eq(phys_step1.frame_id, plan_step1.frame_id,
-				"Shared cache: same composition = same frame ID")
+	assert_gt(physical.steps.size(), 1, "Physical trace should have >1 step after reflection")
+	assert_gt(planned.steps.size(), 1, "Planned trace should have >1 step after reflection")
+
+	var phys_step1: Tracer.Step = physical.steps[1]
+	var plan_step1: Tracer.Step = planned.steps[1]
+	assert_ne(phys_step1.frame_id, 0, "Physical trace should have non-identity frame after reflection")
+	assert_eq(phys_step1.frame_id, plan_step1.frame_id,
+		"Shared cache: same composition = same frame ID")

@@ -49,7 +49,7 @@ func test_line_direction_toward_cursor() -> void:
 	cursor.global_position = Vector2(1200, 540)
 	renderer._compute_trace()
 
-	var dir := renderer.get_line_direction()
+	var dir: Vector2 = renderer.get_line_direction()
 	assert_almost_eq(dir.x, 1.0, 0.01, "Should point right toward cursor")
 
 func test_no_line_when_cursor_equals_player() -> void:

@@ -6,21 +6,27 @@ class PlannedPath extends RefCounted:
 	var origin: Vector2
 	var target: Vector2
 
+static func _compute_image(target: Vector2, entries: Array, surfaces: Array, game_state: GameState) -> Variant:
+	var image := target
+	for i in range(entries.size() - 1, -1, -1):
+		var entry: PlanManager.PlanEntry = entries[i]
+		var surf := _find_surface(entry.surface_id, surfaces)
+		if surf == null:
+			return null
+		var config: SideConfig = surf.active_side_config(entry.side, game_state)
+		if config == null or config.effect == null or not config.effect.is_transformative():
+			return null
+		var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
+		image = inv_mobius.apply(image)
+	return image
+
 static func compute_aim_direction(origin: Vector2, cursor: Vector2, plan_entries: Array, surfaces: Array, game_state: GameState) -> Direction:
 	if plan_entries.size() == 0:
 		return Direction.new(origin, cursor)
 
-	var image := cursor
-	for i in range(plan_entries.size() - 1, -1, -1):
-		var entry: PlanManager.PlanEntry = plan_entries[i]
-		var surf := _find_surface(entry.surface_id, surfaces)
-		if surf == null:
-			return Direction.new(origin, cursor)
-		var config: SideConfig = surf.active_side_config(entry.side, game_state)
-		if config == null or not config.effect is TransformativeEffect:
-			return Direction.new(origin, cursor)
-		var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
-		image = inv_mobius.apply(image)
+	var image = _compute_image(cursor, plan_entries, surfaces, game_state)
+	if image == null:
+		return Direction.new(origin, cursor)
 
 	var dir := Direction.new(origin, image)
 	if dir.is_zero_length():
@@ -41,17 +47,9 @@ static func plan_transformative_subchain(
 	if entries.size() == 0:
 		return path
 
-	var image := sub_target
-	for i in range(entries.size() - 1, -1, -1):
-		var entry: PlanManager.PlanEntry = entries[i]
-		var surf := _find_surface(entry.surface_id, surfaces)
-		if surf == null:
-			return path
-		var config: SideConfig = surf.active_side_config(entry.side, game_state)
-		if config == null or not config.effect is TransformativeEffect:
-			return path
-		var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
-		image = inv_mobius.apply(image)
+	var image = _compute_image(sub_target, entries, surfaces, game_state)
+	if image == null:
+		return path
 
 	var aim_dir := Direction.new(sub_origin, image)
 	if aim_dir.is_zero_length():

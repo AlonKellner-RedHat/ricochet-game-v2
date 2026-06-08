@@ -24,3 +24,6 @@ func get_mobius() -> MobiusTransform:
 
 func get_inverse_mobius() -> MobiusTransform:
 	return _mobius
+
+func normalized(carrier: GeneralizedCircle) -> Effect:
+	return ReflectionEffect.new(carrier)

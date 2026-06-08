@@ -1,8 +1,5 @@
 class_name TransformativeEffect
-extends RefCounted
+extends Effect
 
-func get_mobius() -> MobiusTransform:
-	return MobiusTransform.identity()
-
-func get_inverse_mobius() -> MobiusTransform:
-	return get_mobius().invert()
+func is_transformative() -> bool:
+	return true

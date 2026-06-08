@@ -90,35 +90,23 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		# Aim point — construction-defined, always on ray
 		if not aim_injected:
-			var t_aim := Intersection.project_point_on_ray(ray, aim_point)
-			if t_aim > 0.0 and t_aim < best_t:
-				best_t = t_aim
-				best_type = "aim"
-			elif t_aim == 0.0 and best_type == "":
-				best_t = 0.0
-				best_type = "aim"
+			var vh := _try_virtual_hit(ray, aim_point, "aim", best_t, best_type)
+			if not vh.is_empty():
+				best_t = vh["t"]; best_type = vh["type"]
 
 		# Cursor — same position as aim, but only when plan complete + matched
 		var cursor_reachable := not cursor_injected and plan_index >= plan_entries.size() and plan_matched
 		if cursor_reachable and aim_injected:
-			if cursor_reachable:
-				var t_aim := Intersection.project_point_on_ray(ray, aim_point)
-				if t_aim > 0.0 and t_aim < best_t:
-					best_t = t_aim
-					best_type = "cursor"
-				elif t_aim == 0.0 and best_type == "":
-					best_t = 0.0
-					best_type = "cursor"
+			var vh := _try_virtual_hit(ray, aim_point, "cursor", best_t, best_type)
+			if not vh.is_empty():
+				best_t = vh["t"]; best_type = vh["type"]
 
 		# Player — waypoint or block depending on plan state
 		if not cursor_reachable:
-			var t_player := Intersection.project_point_on_ray(ray, origin)
-			if t_player > 0.0 and t_player < best_t:
-				best_t = t_player
-				best_type = "player_block" if (plan_matched and frame.id == MobiusTransform.IDENTITY_ID) else "player_waypoint"
-			elif t_player == 0.0 and best_type == "":
-				best_t = t_player
-				best_type = "player_block" if (plan_matched and frame.id == MobiusTransform.IDENTITY_ID) else "player_waypoint"
+			var player_label := "player_block" if (plan_matched and frame.id == MobiusTransform.IDENTITY_ID) else "player_waypoint"
+			var vh := _try_virtual_hit(ray, origin, player_label, best_t, best_type)
+			if not vh.is_empty():
+				best_t = vh["t"]; best_type = vh["type"]
 
 		# Beyond carrier hit as fallback
 		if best_type == "" and hit != null:
@@ -206,10 +194,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if current_mode == TraceMode.PHYSICAL:
 			if norm_surf and hit.on_segment:
 				effect_config = norm_surf.active_side_config(lookup_side, state_copy)
-				if effect_config != null:
-					if effect_config.effect is TerminalEffect:
+				if effect_config != null and effect_config.effect != null:
+					if effect_config.effect.is_terminal():
 						break
-					if effect_config.effect is TransformativeEffect:
+					if effect_config.effect.is_transformative():
 						apply_effect = true
 						# Track plan matching for cursor reachability
 						if plan_index < plan_entries.size():
@@ -224,7 +212,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				var entry: PlanManager.PlanEntry = plan_entries[plan_index]
 				if orig_surf.id == entry.surface_id:
 					effect_config = norm_surf.active_side_config(entry.side, state_copy) if norm_surf else null
-					if effect_config != null and effect_config.effect is TransformativeEffect:
+					if effect_config != null and effect_config.effect != null and effect_config.effect.is_transformative():
 						apply_effect = true
 					plan_index += 1
 
@@ -243,6 +231,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		ray = Ray.new(hit.point, ray.direction)
 
 	return path
+
+static func _try_virtual_hit(ray: Ray, point: Vector2, label: String, best_t: float, best_type: String) -> Dictionary:
+	var t := Intersection.project_point_on_ray(ray, point)
+	if t > 0.0 and t < best_t:
+		return {"t": t, "type": label}
+	if t == 0.0 and best_type == "":
+		return {"t": 0.0, "type": label}
+	return {}
 
 static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, cache: TransformCache = null) -> Array:
 	out_mapping.clear()
@@ -277,8 +273,8 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 static func _normalize_config(config: SideConfig, norm_seg: Segment) -> SideConfig:
 	if config == null or config.effect == null:
 		return config
-	if config.effect is ReflectionEffect:
-		var norm_effect := ReflectionEffect.new(norm_seg.get_carrier())
+	var norm_effect: Effect = config.effect.normalized(norm_seg.get_carrier())
+	if norm_effect != config.effect:
 		return SideConfig.new(norm_effect, config.interactive)
 	return config
 

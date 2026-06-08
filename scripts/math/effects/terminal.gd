@@ -1,2 +1,5 @@
 class_name TerminalEffect
-extends RefCounted
+extends Effect
+
+func is_terminal() -> bool:
+	return true

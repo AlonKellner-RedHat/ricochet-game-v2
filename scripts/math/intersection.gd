@@ -45,6 +45,7 @@ static func find_nearest_hit(ray: Ray, segments: Array, skip_segment: Segment = 
 static func intersect_line_with_carrier(ray: Ray, carrier: GeneralizedCircle) -> Array:
 	return _intersect_ray_carrier(ray, carrier)
 
+# Cross-ratio containment: P is on arc S→V→E iff Re(cross_ratio(S,P;E,V)) >= 0
 static func is_on_segment(point: Vector2, segment: Segment) -> bool:
 	var zP := Vector2(point.x, point.y)
 	var wP := 1.0

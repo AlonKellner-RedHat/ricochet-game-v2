@@ -16,9 +16,11 @@ func is_line() -> bool:
 	return a == 0.0
 
 func center() -> Vector2:
+	assert(a != 0.0, "center() called on a line (a == 0)")
 	return Vector2(-b / (2.0 * a), -c / (2.0 * a))
 
 func radius() -> float:
+	assert(a != 0.0, "radius() called on a line (a == 0)")
 	return sqrt((b * b + c * c - 4.0 * a * d) / (4.0 * a * a))
 
 func evaluate(point: Vector2) -> float:
