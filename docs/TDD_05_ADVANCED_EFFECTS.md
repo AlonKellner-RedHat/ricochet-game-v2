@@ -2,6 +2,27 @@
 
 **Stages 40--51** | Circle inversion (arcs), rigid motion (portals), projective effects, mixed planning, compound effects
 
+### Stage Status
+
+| Stage | Topic | Status |
+|-------|-------|--------|
+| 40 | Circle Inversion Effect | Todo |
+| 41 | Arc Segment Rendering | Todo |
+| 42 | Circle Inversion in Physical Trace | Todo |
+| 42.5 | Arc Collision Shapes for Player Physics | Todo |
+| 43 | Circle Inversion in Planner | Todo |
+| 44 | Visibility with Circles | Todo |
+| 45 | Rigid Motion Effect (Portals) | Todo |
+| 46 | Rigid Motion in Trace/Planner/Visibility | Todo |
+| 47 | Line Normal Projection Effect | Todo |
+| 48 | Circle Normal Projection Effect | Todo |
+| 49 | Semi-Circle Directional Projection Effect | Todo |
+| 49.5 | Parallel-Source Visibility Mode | Todo |
+| 50 | Mixed Planning Chain | Todo |
+| 51 | Compound Transformative Effect | Todo |
+
+**Effect hierarchy note:** The effect hierarchy uses an Effect base class with `is_terminal()`, `is_transformative()`, `get_mobius()`, `get_inverse_mobius()`, and `normalized()` methods. All effects extend Effect. Dispatch uses method calls, not type checks.
+
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
 **Fractional stage ordering:** Stages 42.5 and 49.5 were inserted after the initial plan. They are ordered between their integer neighbors: Stage 42 → Stage 42.5 → Stage 43 and Stage 49 → Stage 49.5 → Stage 50.
@@ -89,7 +110,7 @@ Stages 1--38 (full math layer, intersection, surfaces, FixedResolver, TerminalEf
 | Interaction | Stage 3 | Cursor follows mouse | Move mouse |
 | Interaction | Stage 2 | Player moves with WASD | Press WASD |
 | Trace | Stages 11--14 | Physical trace with reflection/block | GUT tests |
-| Planning | Stages 21--27 | Plan construction, image chain, bypass | GUT tests |
+| Planning | Stages 21--27 | Plan construction, image chain | GUT tests |
 | Visibility | Stages 34--38 | Multi-step visibility computation | GUT tests |
 
 ### Expected Visual State
@@ -173,7 +194,7 @@ Stage 40 (CircleInversionEffect exists to motivate arc rendering, though not yet
 | Visual | Stages 34--38 | Visibility polygon | Visual inspection |
 | Interaction | Stage 3 | Cursor tracks mouse | Move mouse |
 | Trace | Stages 11--14 | Physical trace loop | GUT tests |
-| Planning | Stages 21--27 | Image chain, bypass | GUT tests |
+| Planning | Stages 21--27 | Image chain | GUT tests |
 
 ### Expected Visual State
 
@@ -398,7 +419,7 @@ Stage 42 (circle inversion wired to physical trace).
 3. **`test_stage43_S16_2_plan_physical_aligned`**: Full §16.2: player=(50,200), cursor=(400,200), plan=[{C,left}]. Run planned trace and physical trace. All steps ALIGNED (divergence_index == null). Validates: §16.2.
 4. **`test_stage43_planned_step_count`**: §16.2 setup produces exactly 2 planned steps (origin to bounce, bounce to cursor). Validates: step structure.
 5. **`test_stage43_planned_visual_path_has_arc`**: The visual conversion of the planned path produces at least one VisualArcSegment. Validates: arcs appear in planned preview.
-6. **`test_stage43_inversion_bypass_unreachable`**: Plan with inversion surface where the cursor is inside the circle (e.g., cursor at (200,200), which is the center). Image = infinity. Entry is bypassed. Validates: §13.5 bypass.
+6. **`test_stage43_inversion_unreachable`**: Plan with inversion surface where the cursor is inside the circle (e.g., cursor at (200,200), which is the center). Image = infinity. Entry is unreachable. Validates: §13.5 unreachable entry handling.
 7. **`test_stage43_double_inversion_plan`**: Plan=[{C,left},{C,left}] (same inversion twice). First inversion inverts, second un-inverts. Both should be reachable (unlike line reflection planned twice). Validates: §13.5 duplicate entry handling.
 8. **`test_stage43_S5_aligned_provenance`**: For aligned steps in §16.2, planned and physical steps share identical start.id and frame_id. Validates: S5.
 9. **`test_stage43_S6_aligned_match`**: Before divergence, same hit surface ID, side, and frame ID. Validates: S6.
@@ -412,7 +433,7 @@ Stage 42 (circle inversion wired to physical trace).
 - [ ] Verify the entire preview is solid green (ALIGNED) when the cursor is within the valid aim region.
 - [ ] Move the cursor to a position where divergence occurs. Verify the preview shows the appropriate red/yellow diverged segments.
 - [ ] Fire. The arrow follows the preview path exactly (solid green portions match flight).
-- [ ] Plan the same inversion surface twice. Verify both entries are active (not bypassed) and the preview shows a double-inversion path.
+- [ ] Plan the same inversion surface twice. Verify both entries are active and the preview shows a double-inversion path.
 
 ### Invariants That Must Hold
 
@@ -433,7 +454,7 @@ Stage 42 (circle inversion wired to physical trace).
 | Visual | Stages 5, 41 | Line preview, arc rendering | Move mouse |
 | Interaction | Stages 2--3 | Player movement, cursor | Press WASD, move mouse |
 | Trace | Stages 11--14, 42 | Physical trace with reflection/block/inversion | GUT tests |
-| Planning | Stages 21--27 | Image chain with reflection, bypass, divergence | GUT tests |
+| Planning | Stages 21--27 | Image chain with reflection, divergence | GUT tests |
 | Planning | Stage 43 | Image chain with inversion | GUT tests |
 | Visibility | Stages 34--38 | Visibility polygon (line surfaces) | Visual inspection |
 
@@ -1089,7 +1110,7 @@ When a projective surface is in the plan, the visibility region shape changes fr
 ## Stage 50: Mixed Planning Chain
 
 ### Overview
-Implement the full `plan_mixed` algorithm from §13.4, handling plans that contain both transformative and projective effects. The algorithm has three passes: Pass 0 (iterative state simulation with bypass convergence), Pass 1 (backward geometry -- walk plan in reverse, partition at projective break points), and Pass 2 (forward origin fill -- solve each transformative sub-chain). This stage reproduces the §16.4 worked example with mirrors and a line normal projection.
+Implement the full `plan_mixed` algorithm from §13.4, handling plans that contain both transformative and projective effects. The algorithm has three passes: Pass 0 (iterative state simulation), Pass 1 (backward geometry -- walk plan in reverse, partition at projective break points), and Pass 2 (forward origin fill -- solve each transformative sub-chain). This stage reproduces the §16.4 worked example with mirrors and a line normal projection.
 
 **Mid-project checkpoint:** After all effects are integrated, run a reduced sweep (5x5 player × 5x5 cursor = 625 combinations) on the §16.1 two-mirror test level. Check all currently-testable invariants. This catches integration bugs 15 stages before the full sweep at Stage 65.
 
@@ -1103,7 +1124,7 @@ Stages 47--49 (all three projective effects implemented).
 | Category | Item | Spec Reference |
 |----------|------|----------------|
 | Algorithm | `plan_mixed` -- full mixed planning algorithm | §13.3, §13.4 |
-| Algorithm | Pass 0: iterative state simulation with bypass convergence | §13.4 |
+| Algorithm | Pass 0: iterative state simulation | §13.4 |
 | Algorithm | Pass 1: backward geometry -- reverse walk, partition at projective break points | §13.4 |
 | Algorithm | Pass 2: forward origin fill -- solve each sub-chain with plan_transformative_subchain | §13.4 |
 | Behavior | Transformative entries added to buffer | §13.4 |
@@ -1118,9 +1139,9 @@ Stages 47--49 (all three projective effects implemented).
 3. **`test_stage50_S16_4_bounce_points`**: §16.4 full: sub-chain 2 (M2): image of cursor reflected across x=400 = (300,200). Sub-chain 1 (M1): image of back-propagated point (250,200) reflected across x=100 = (-50,200). Aim from (50,300) toward (-50,200). Bounce on M1 at intersection. Validates: §16.4 bounce computation.
 4. **`test_stage50_mixed_plan_all_aligned`**: Run planned and physical traces for §16.4 setup. All steps ALIGNED (divergence_index == null). Validates: plan-physical agreement.
 5. **`test_stage50_frame_reset_at_projective`**: After the projective break point, the frame is identity. Each sub-chain starts with identity frame. Validates: §10.7.
-6. **`test_stage50_bypass_convergence`**: Setup where bypass depends on state changes. Iterate until bypass set stabilizes. Verify convergence within 10 iterations. Validates: §13.4 Pass 0.
-7. **`test_stage50_projective_bypass`**: Plan with a projective entry whose back_propagate returns null. Entry is bypassed. Remaining sub-chains computed correctly. Validates: §13.5.
-8. **`test_stage50_terminal_in_mixed_plan`**: Plan=[{M1,left},{T,left},{M2,right}] where T is terminal (block). M2 is post-terminal and bypassed. Sub-chain before T targets the terminal hit point. Validates: §13.4 terminal handling.
+6. **`test_stage50_state_convergence`**: Setup where reachability depends on state changes. Iterate until reachable set stabilizes. Verify convergence within 10 iterations. Validates: §13.4 Pass 0.
+7. **`test_stage50_projective_unreachable`**: Plan with a projective entry whose back_propagate returns null. Entry is unreachable. Remaining sub-chains computed correctly. Validates: §13.5.
+8. **`test_stage50_terminal_in_mixed_plan`**: Plan=[{M1,left},{T,left},{M2,right}] where T is terminal (block). M2 is post-terminal and unreachable. Sub-chain before T targets the terminal hit point. Validates: §13.4 terminal handling.
 9. **`test_stage50_empty_plan_mixed`**: Empty plan. plan_mixed returns empty steps. Physical trace fires straight. Validates: §13.6.
 10. **`test_stage50_all_transformative_plan`**: Plan with only transformative entries (no projective). plan_mixed produces one sub-chain. Result matches plan_transformative_subchain. Validates: pure transformative case.
 11. **`test_stage50_S3_determinism`**: Run plan_mixed twice with identical inputs. Identical step trees. Validates: S3.
@@ -1145,7 +1166,7 @@ Stages 47--49 (all three projective effects implemented).
 - [ ] Fire. Arrow follows the planned path exactly through all three surfaces.
 - [ ] Move the cursor to cause divergence. Verify red/yellow divergence indicators.
 - [ ] Remove M2 from the plan. Verify the plan updates correctly (now just M1 and P).
-- [ ] Plan a terminal surface between two transformative ones. Verify post-terminal entries are bypassed.
+- [ ] Plan a terminal surface between two transformative ones. Verify post-terminal entries are unreachable.
 
 ### Invariants That Must Hold
 
@@ -1307,7 +1328,7 @@ These tests verify effect combinations beyond those covered by the worked exampl
 
 ---
 
-## Appendix A: Invariant Introduction Map (All 30 Invariants, Status After Stage 51)
+## Appendix A: Invariant Introduction Map (All 29 Invariants, Status After Stage 51)
 
 | Invariant | Full ID | Introduced | First Testable | Fully Testable | Status After Stage 51 |
 |-----------|---------|-----------|----------------|----------------|----------------------|
@@ -1337,7 +1358,6 @@ These tests verify effect combinations beyond those covered by the worked exampl
 | Undo fully restores | UX5 | Stage 32 | Stage 32 | Stage 65 | Tested |
 | All targets reachable | UX6 | Stage 55+ | Stage 55+ | Stage 65 | Not yet introduced |
 | Solid path to cursor | UX7 | Stage 5 | Stage 5 | Stage 65 | Tested (mixed plans with arcs) |
-| Bypassed entries visible | UX8 | Stage 29 | Stage 29 | Stage 65 | Tested |
 | Block stops arrow | UX9 | Stage 13 | Stage 13 | Stage 65 | Tested |
 | State changes visible | UX10 | Stage 57+ | Stage 57+ | Stage 65 | Not yet introduced |
 | Empty plan = fire straight | UX11 | Stage 5 | Stage 15 | Stage 65 | Tested |
@@ -1367,7 +1387,7 @@ These tests verify effect combinations beyond those covered by the worked exampl
 | Interactive test items (Stages 1--38, prior) | ~120 |
 | Interactive test items (Stages 40--51) | +60 |
 | **Total interactive test items after Stage 51** | **~180** |
-| Invariants actively tested | 22 (S1--S6, S8--S16, S17, S18, UX1--UX5, UX7--UX9, UX11) |
+| Invariants actively tested | 21 (S1--S6, S8--S16, S17, S18, UX1--UX5, UX7, UX9, UX11) |
 | Invariants reinforced this document | S2, S5, S6, S10, S13--S15, S16, S18, UX1--UX3, UX9 |
 | Invariants introduced this document | S10 (Stage 47) |
 | Invariants not yet introduced | 4 (S7, S19, UX6, UX10) |

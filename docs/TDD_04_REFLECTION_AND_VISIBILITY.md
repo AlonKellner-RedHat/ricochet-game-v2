@@ -2,6 +2,20 @@
 
 **Stages 31--38** | Arrow flight with plans, checkpoints, visibility polygon, visibility-plan integration
 
+### Stage Status
+
+| Stage | Topic | Status |
+|-------|-------|--------|
+| 31 | Arrow Flight with Plan | Done |
+| 32 | Checkpoint System | Done |
+| 33 | Plan Retained After Shot | Done |
+| 34a | Visibility Infrastructure | Done |
+| 34b | Visibility Rendering and Edge Cases | Done |
+| 35 | Visibility with Obstructing Surfaces | Done |
+| 36 | Visibility Predicts Non-Divergence (No Plan) | Todo |
+| 37 | Visibility After Planned Reflection | Todo |
+| 38 | Multi-Step Visibility | Todo |
+
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
 **Feedback Loop Protocol (applies to every stage):**
@@ -32,7 +46,7 @@ No stage is complete until the user has personally verified every interactive te
 When the player fires with a valid plan, the arrow follows the physical trace -- bouncing off planned mirrors as expected. If the plan is aligned with the physical outcome, the arrow faithfully reproduces the planned trajectory. The camera tracks the arrow tip during flight using Godot's built-in smoothing, clamped to level bounds, and smoothly returns to the player after the shot completes.
 
 ### Prerequisites
-Stages 1--30 (complete math layer, surfaces, physical trace loop, preview rendering, arrow shooting with freeze/animation/skip, room boundaries, plan construction/removal, planned trace with image chains, step tree merge with divergence detection, bypass computation).
+Stages 1--30 (complete math layer, surfaces, physical trace loop, preview rendering, arrow shooting with freeze/animation/skip, room boundaries, plan construction/removal, planned trace with image chains, step tree merge with divergence detection).
 
 ### What Is Introduced
 
@@ -89,7 +103,6 @@ Stages 1--30 (complete math layer, surfaces, physical trace loop, preview render
 | **Visual** | Stage 5 | Green solid preview line from player to cursor | Move mouse, observe |
 | **Visual** | Stages 21--24 | Preview: green solid to cursor, green dashed past cursor | Move mouse with/without plan |
 | **Visual** | Stages 25--30 | Step tree rendering with 5 step types in correct colors/styles | Create diverging plan, observe |
-| **Visual** | Stage 29 | Bypass indicator visible for bypassed entries | Create unreachable plan entry |
 | **Interaction** | Stage 3 | Cursor follows mouse | Move mouse |
 | **Interaction** | Stage 2 | Player moves with WASD | Press WASD |
 | **Interaction** | Stages 25--26 | Plan add (left-click) and remove (right-click/C) | Click surfaces |
@@ -241,8 +254,8 @@ Stage 32 (checkpoint system -- the retained plan is part of the checkpoint, and 
 3. **`test_stage33_preview_updates_post_shot`**: Fire a shot that moves the player (or use a shot where the player remains stationary but state changes). Expected: preview is recomputed from the new player position with the retained plan. The preview line endpoints differ from the pre-shot preview. Validates: preview recalculation.
 4. **`test_stage33_plan_survives_multiple_shots`**: Fire 3 shots without modifying the plan. Expected: plan unchanged after all 3 shots.
 5. **`test_stage33_cleared_plan_stays_cleared`**: Clear plan (C key). Fire. Expected: plan is still empty after shot. (The retention behavior preserves whatever the plan was, including empty.)
-6. **`test_stage33_plan_entry_changed_effect`**: Test the FULL lifecycle: (1) Plan entry added when surface has Reflection. (2) Shot fired that changes state → surface now resolves to null (pass-through). (3) State promoted. (4) Plan is retained. (5) Compute preview with retained plan. Expected: the entry is treated as pass-through/bypassed in the preview. (6) Fire again. Expected: the arrow ignores the now-null-effect entry. Validates: §3.4 plan retention through state changes, end to end.
-7. **`test_stage33_plan_entry_invalid_surface_id`**: Plan contains an entry referencing a surface ID that does not exist in the scene (simulating a destroyed or removed surface). Expected: the entry is treated as bypassed. The planned trace skips it. No crash. A debug warning is logged. Validates: graceful handling of invalid plan entries.
+6. **`test_stage33_plan_entry_changed_effect`**: Test the FULL lifecycle: (1) Plan entry added when surface has Reflection. (2) Shot fired that changes state → surface now resolves to null (pass-through). (3) State promoted. (4) Plan is retained. (5) Compute preview with retained plan. Expected: the entry is treated as pass-through in the preview. (6) Fire again. Expected: the arrow ignores the now-null-effect entry. Validates: §3.4 plan retention through state changes, end to end.
+7. **`test_stage33_plan_entry_invalid_surface_id`**: Plan contains an entry referencing a surface ID that does not exist in the scene (simulating a destroyed or removed surface). Expected: the entry is skipped. The planned trace ignores it. No crash. A debug warning is logged. Validates: graceful handling of invalid plan entries.
 8. **`test_stage33_plan_retained_after_skip`**: Set a plan (1+ entries), fire, skip animation (press key mid-flight). Expected: after skip completes and game unfreezes, the plan is still present (same entries). Validates: §3.4 plan retention works through the skip path, not just normal completion.
 
 ### Interactive User Tests
@@ -252,7 +265,7 @@ Stage 32 (checkpoint system -- the retained plan is part of the checkpoint, and 
 - [ ] Fire a shot that changes a surface's state (e.g., breaks a wall). The plan still shows the surface, but the preview may now show different behavior (e.g., the planned surface is now pass-through).
 - [ ] Clear the plan with C. Fire. After the shot, the plan is still empty (no spurious entries appear).
 - [ ] After firing with a retained plan, move the player with WASD. The preview updates in real time using the retained plan at the new position.
-- [ ] Fire a shot that breaks a planned mirror (state change → null). Observe the preview with the retained plan. The broken mirror's entry appears dimmed/bypassed. Fire again. The arrow ignores the broken mirror.
+- [ ] Fire a shot that breaks a planned mirror (state change → null). Observe the preview with the retained plan. The broken mirror's entry appears dimmed. Fire again. The arrow ignores the broken mirror.
 
 ### Invariants That Must Hold
 
@@ -769,7 +782,7 @@ Stage 37 (visibility after single planned reflection -- the iteration mechanism 
 8. **`test_stage38_S15_multi_step`**: Multi-step visibility regions do not overlap. Invariant validated: S15.
 9. **`test_stage38_each_iteration_uses_updated_frame`**: After each planned surface, the frame is updated via `compose`. Verify that iteration 2 uses the composed frame from iteration 1, not the identity. Validates: §15.2 frame propagation.
 10. **`test_stage38_truncating_segments_from_prior_iteration`**: After iteration 1, the truncating segments are the lit portion of planned surface 1. Iteration 2 uses these as its truncating boundary. Verify that POIs outside the truncating cone are filtered out.
-11. **`test_stage38_bypassed_entry_skipped`**: Plan with a bypassed entry (geometrically unreachable). The visibility loop skips the bypassed entry and continues with the next. Validates: bypass integration.
+11. **`test_stage38_unreachable_entry_skipped`**: Plan with an unreachable entry (geometrically unreachable). The visibility loop skips the unreachable entry and continues with the next. Validates: unreachable entry handling in visibility.
 12. **`test_stage38_empty_plan_falls_through`**: Plan is empty. Expected: visibility loop runs only iteration 0 (same as Stage 34a/36 results). Validates: backwards compatibility.
 13. **`test_stage38_multi_step_visibility_perf_smoke`**: Compute multi-step visibility (2 planned reflections) with 8 surfaces. Measure time. Expected: < 30ms. Validates: multi-step visibility doesn't blow up the per-frame budget.
 
@@ -834,7 +847,7 @@ See standard protocol at top of document.
 
 ---
 
-## Appendix A: Invariant Introduction Map (All 30 Invariants, Status After Stage 38)
+## Appendix A: Invariant Introduction Map (All 29 Invariants, Status After Stage 38)
 
 | Invariant | Full ID | Introduced | First Testable | Fully Testable | Status After Stage 38 |
 |-----------|---------|-----------|----------------|----------------|----------------------|
@@ -864,7 +877,6 @@ See standard protocol at top of document.
 | Undo fully restores | UX5 | Stage 32 | Stage 32 | Stage 65 | Tested (position, velocity, state, plan, targets_hit) |
 | All targets reachable | UX6 | -- | -- | Stage 55+ | Not yet introduced |
 | Solid path to cursor | UX7 | Stage 5 (partial) | Stage 5 | Stage 65 | Tested (line + reflection) |
-| Bypassed entries visible | UX8 | Stage 29 | Stage 29 | Stage 65 | Tested |
 | Block stops arrow | UX9 | Stage 13 | Stage 13 | Stage 65 | Tested |
 | State changes visible | UX10 | -- | -- | Stage 57+ | Not yet introduced |
 | Empty plan = fire straight | UX11 | Stage 5 (partial) | Stage 15 | Stage 65 | Tested |

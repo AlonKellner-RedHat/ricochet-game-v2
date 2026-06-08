@@ -2,6 +2,20 @@
 
 **Stages 9-18** | Intersection, ray tracing, room boundaries, blocking surfaces, arrow shooting, animation skip
 
+### Stage Status
+| Stage | Topic | Status |
+|-------|-------|--------|
+| 9 | Line-Line Intersection | Done |
+| 10 | Line-Circle Intersection | Done |
+| 11 | HitRecord and Earliest Hit Selection | Done |
+| 12 | Surface and SideConfig Data Classes | Done |
+| 13 | Room Boundary Surfaces (Block Effect) | Done |
+| 14 | Physical Trace (Single Step) | Done |
+| 15 | Full Preview (Player to Wall) | Done |
+| 16 | Multi-Hit Trace Loop | Done |
+| 17 | Arrow Shooting (Fire Button) | Done |
+| 18 | Animation Skip | Done |
+
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
 **Feedback Loop Protocol (applies to every stage):**
@@ -1261,7 +1275,6 @@ This table tracks all 30 invariants. Columns show when each was introduced, when
 | Undo fully restores | UX5 | -- | -- | Not yet introduced |
 | All targets reachable | UX6 | -- | -- | Not yet introduced |
 | Solid path to cursor | UX7 | Stage 5 (partial) | Stage 15 (enhanced) | Tested (trace-based) |
-| Bypassed entries visible | UX8 | -- | -- | Not yet introduced |
 | Block stops arrow | UX9 | Stage 13 | Stage 13 | Tested (player + arrow) |
 | State changes visible | UX10 | -- | -- | Not yet introduced |
 | Empty plan = fire straight | UX11 | Stage 5 (partial) | Stage 15 (enhanced) | Tested (trace-based) |

@@ -2,6 +2,20 @@
 
 **Stages 52--60** | State-conditional surfaces, multi-shot puzzles, targets, win condition, game loop, menus, HUD, save system
 
+### Stage Status
+
+| Stage | Topic | Status |
+|-------|-------|--------|
+| 52 | CategoricalResolver and State-Conditional Surfaces | Todo |
+| 53 | State Changes on Hit | Todo |
+| 54 | State Simulation During Planning | Todo |
+| 55 | Target Surfaces and Hit Detection | Todo |
+| 56 | Win Condition and Multi-Shot Puzzles | Todo |
+| 57 | Game Loop and Level Loading | Todo |
+| 58 | Menus (Main, Level Select, Pause) | Todo |
+| 59 | HUD | Todo |
+| 60 | Save System | Todo |
+
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
 **Feedback Loop Protocol (applies to every stage):**
@@ -34,7 +48,7 @@ Implement `CategoricalResolver` -- a `ConfigResolver` subtype that selects per-s
 Extends the GameState class introduced in Stage 12 with CategoricalResolver integration.
 
 ### Prerequisites
-Stages 1--51 (full math layer, all effect types, intersection system, physical trace, step tree, planning with bypass, visibility, arrow flight, checkpoints, arc rendering, all surface colors).
+Stages 1--51 (full math layer, all effect types, intersection system, physical trace, step tree, planning, visibility, arrow flight, checkpoints, arc rendering, all surface colors).
 
 ### What Is Introduced
 
@@ -67,7 +81,7 @@ _(GameState construction and copy tests are in Stage 12, TDD_02. Only Categorica
 - [ ] Press Play. Existing level still renders and behaves identically (no regressions from new resolver infrastructure).
 - [ ] If a test level with a CategoricalResolver surface is available: observe the surface renders in the color matching its initial resolved effect.
 - [ ] Verify the trajectory preview still works with all prior effect types.
-- [ ] Verify plan construction, removal, bypass, and visibility are unaffected.
+- [ ] Verify plan construction, removal, and visibility are unaffected.
 
 ### Invariants That Must Hold
 
@@ -84,7 +98,7 @@ _(GameState construction and copy tests are in Stage 12, TDD_02. Only Categorica
 | Math | Direction, Ray, Segment, GeneralizedCircle, MobiusTransform, TransformCache all pass | GUT math tests |
 | Effects | All 8 effect types (Reflection, CircleInversion, RigidMotion, LineNormalProjection, CircleNormalProjection, SemicircleDirectionalProjection, CompoundTransformative, Terminal) behave correctly | GUT effect tests |
 | Trace | Physical trace loop produces correct steps | GUT trace tests |
-| Planning | Plan construction, image chains, mixed planning, bypass all function | GUT planning tests |
+| Planning | Plan construction, image chains, mixed planning all function | GUT planning tests |
 | Visibility | Multi-step visibility, circle visibility, all-effects visibility correct | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual: fire arrow, observe flight |
 | Checkpoints | Undo/reset, plan retained after shot | Manual: fire, undo, verify |
@@ -177,7 +191,7 @@ Stage 52 (CategoricalResolver and GameState).
 | Math | All math primitives and transforms pass | GUT math tests |
 | Effects | All 8 effect types behave correctly | GUT effect tests |
 | Trace | Physical trace loop (without state changes) unchanged | GUT trace tests |
-| Planning | Plan construction, image chains, mixed planning, bypass | GUT planning tests |
+| Planning | Plan construction, image chains, mixed planning | GUT planning tests |
 | Visibility | All visibility computations correct | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
 | Checkpoints | Undo/reset, plan retained after shot | Manual verification |
@@ -216,7 +230,7 @@ Reference standard protocol at top of document.
 ## Stage 54: State Simulation During Planning
 
 ### Overview
-Extend the planner to simulate state changes during plan construction. The planner walks the plan FORWARD, applying state changes to a temporary copy, producing per-entry state snapshots (`state_at[]`). This stage also implements Pass 0 of `plan_mixed` -- the iterative bypass-state convergence loop that resolves the circular dependency between state, effect, geometry, and bypass. Terminal pre-pass ensures entries after a terminal are unconditionally bypassed.
+Extend the planner to simulate state changes during plan construction. The planner walks the plan FORWARD, applying state changes to a temporary copy, producing per-entry state snapshots (`state_at[]`). This stage also implements Pass 0 of `plan_mixed` -- the iterative state convergence loop that resolves the circular dependency between state, effect, and geometry. Terminal pre-pass ensures entries after a terminal are unconditionally skipped.
 
 ### Prerequisites
 Stages 52--53 (CategoricalResolver, GameState, StateChange, state changes during trace).
@@ -227,9 +241,9 @@ Stages 52--53 (CategoricalResolver, GameState, StateChange, state changes during
 |----------|------|----------------|
 | Behavior | Planner forward-walks plan applying state changes to temp copy | §13.8 |
 | Data | `state_at: Array[GameState]` -- per-entry state snapshots | §13.8 |
-| Behavior | Pass 0 of plan_mixed: iterative bypass-state convergence | §13.4 (Pass 0) |
-| Behavior | Terminal pre-pass: entries after terminal unconditionally bypassed | §13.4 (Pass 0) |
-| Behavior | Iterate until bypass_set stabilizes (max 10 iterations) | §13.4 (Pass 0) |
+| Behavior | Pass 0 of plan_mixed: iterative state convergence | §13.4 (Pass 0) |
+| Behavior | Terminal pre-pass: entries after terminal unconditionally skipped | §13.4 (Pass 0) |
+| Behavior | Iterate until reachable set stabilizes (max 10 iterations) | §13.4 (Pass 0) |
 | Behavior | Temporary state discarded after planning | §13.8 |
 | Invariant | S7: per-entry state matches between planner and trace | §29.3 |
 
@@ -238,24 +252,24 @@ Stages 52--53 (CategoricalResolver, GameState, StateChange, state changes during
 1. **`test_stage54_state_at_basic`**: Plan with 3 entries, no state changes. Expected: `state_at[0]`, `state_at[1]`, `state_at[2]` all equal the initial game_state. Validates: baseline state propagation.
 2. **`test_stage54_state_at_with_changes`**: Plan entry 0 has StateChange("key_a", 1). Entry 1 reads "key_a" via CategoricalResolver. Expected: `state_at[0]` has original value, `state_at[1]` has `key_a = 1`. Validates: §13.8 forward propagation.
 3. **`test_stage54_state_at_chain`**: Entry 0 writes "x" = 1. Entry 1 writes "y" = 2 (conditional on "x" = 1 via CategoricalResolver). Entry 2 reads "y". Expected: `state_at[2]` has both "x" = 1 and "y" = 2. Validates: chained state changes.
-4. **`test_stage54_bypassed_entries_skip_state_changes`**: Entry 0 is bypassed. Entry 0 has StateChange("key_a", 1). Entry 1 reads "key_a". Expected: `state_at[1]` does NOT have `key_a = 1` (bypassed entry's state change not applied). Validates: §13.4 Pass 0 bypass exclusion.
-5. **`test_stage54_terminal_pre_pass`**: Plan: [Reflection, Terminal, Reflection]. Expected: entry 2 (after terminal) is unconditionally bypassed. Validates: §13.4 terminal pre-pass.
-6. **`test_stage54_bypass_state_convergence`**: Construct scenario where bypass depends on state: surface A writes "switch" = false. Surface B uses CategoricalResolver on "switch" (true -> Reflection, false -> PassThrough). B is planned after A. When A is not bypassed, B becomes PassThrough (bypassed). When B is bypassed, A's image chain changes. Expected: convergence within 2 iterations. Validates: §13.4 iterative convergence.
-7. **`test_stage54_convergence_max_iterations`**: Pathological config that would loop forever. Expected: loop exits after 10 iterations with best-effort bypass_set. Validates: safety limit.
+4. **`test_stage54_skipped_entries_skip_state_changes`**: Entry 0 is skipped (unreachable). Entry 0 has StateChange("key_a", 1). Entry 1 reads "key_a". Expected: `state_at[1]` does NOT have `key_a = 1` (skipped entry's state change not applied). Validates: §13.4 Pass 0 exclusion.
+5. **`test_stage54_terminal_pre_pass`**: Plan: [Reflection, Terminal, Reflection]. Expected: entry 2 (after terminal) is unconditionally skipped. Validates: §13.4 terminal pre-pass.
+6. **`test_stage54_state_convergence`**: Construct scenario where reachability depends on state: surface A writes "switch" = false. Surface B uses CategoricalResolver on "switch" (true -> Reflection, false -> PassThrough). B is planned after A. When A is reachable, B becomes PassThrough (skipped). When B is skipped, A's image chain changes. Expected: convergence within 2 iterations. Validates: §13.4 iterative convergence.
+7. **`test_stage54_convergence_max_iterations`**: Pathological config that would loop forever. Expected: loop exits after 10 iterations with best-effort reachable set. Validates: safety limit.
 8. **`test_stage54_S7_state_at_matches_trace`**: For aligned steps: planner's `state_at[i]` matches the physical trace's game state at step i. Set up a plan with state changes. Run both planned and physical traces. Compare state at each aligned step. Validates: S7.
 9. **`test_stage54_temp_state_discarded`**: After planning, verify the real game_state is unchanged. Validates: §13.8 temporary state isolation.
 10. **`test_stage54_planning_uses_resolved_effects`**: Plan entry with CategoricalResolver. State changes from prior entry cause it to resolve differently. Expected: planner uses the correctly resolved effect (not the initial one). Validates: state-aware effect resolution in planning.
-11. **`test_stage54_convergence_max_iterations_behavior`**: Construct a pathological configuration where bypass doesn't converge within 10 iterations (e.g., 3+ surfaces with circular state dependencies). Expected: planner uses the last computed bypass_set after 10 iterations (best-effort). No crash, no infinite loop. A debug warning is logged. Validates: §13.4 safety limit behavior after max iterations.
-12. **`test_stage54_convergence_requires_multiple_iterations`**: Construct a scenario where the bypass set changes between iteration 1 and iteration 2 before stabilizing at iteration 2. Verify convergence takes exactly 2 iterations (not 1). Validates: the iterative loop is actually needed — single-pass would produce wrong results.
-13. **`test_stage54_convergence_cross_entry_dependency`**: Surface A's state change affects whether surface B is bypassed. Surface B's state change affects whether surface A is bypassed. Verify the loop resolves both correctly after convergence. Validates: cross-entry bypass-state dependency resolution.
-14. **`test_stage54_bypass_affects_visibility_via_state`**: Surface A has a state change that modifies surface B's state_key. If A is bypassed, its state change doesn't fire, so B keeps its original behavior. If A is NOT bypassed, B's behavior changes (e.g., B becomes pass-through instead of reflective). Set up geometry where bypass of A (determined by cursor position) changes whether B is reflective or pass-through, which changes the visibility region shape. Verify the visibility region matches the correct bypass determination. Validates: state simulation → bypass → visibility dependency chain.
+11. **`test_stage54_convergence_max_iterations_behavior`**: Construct a pathological configuration where the reachable set doesn't converge within 10 iterations (e.g., 3+ surfaces with circular state dependencies). Expected: planner uses the last computed reachable set after 10 iterations (best-effort). No crash, no infinite loop. A debug warning is logged. Validates: §13.4 safety limit behavior after max iterations.
+12. **`test_stage54_convergence_requires_multiple_iterations`**: Construct a scenario where the reachable set changes between iteration 1 and iteration 2 before stabilizing at iteration 2. Verify convergence takes exactly 2 iterations (not 1). Validates: the iterative loop is actually needed -- single-pass would produce wrong results.
+13. **`test_stage54_convergence_cross_entry_dependency`**: Surface A's state change affects whether surface B is reachable. Surface B's state change affects whether surface A is reachable. Verify the loop resolves both correctly after convergence. Validates: cross-entry state dependency resolution.
+14. **`test_stage54_reachability_affects_visibility_via_state`**: Surface A has a state change that modifies surface B's state_key. If A is unreachable, its state change doesn't fire, so B keeps its original behavior. If A IS reachable, B's behavior changes (e.g., B becomes pass-through instead of reflective). Set up geometry where reachability of A (determined by cursor position) changes whether B is reflective or pass-through, which changes the visibility region shape. Verify the visibility region matches the correct reachability determination. Validates: state simulation -> reachability -> visibility dependency chain.
 
 ### Interactive User Tests
 
 - [ ] Set up a plan with state-changing surfaces. Observe the preview updates correctly as the plan changes.
 - [ ] Plan a state-changing surface followed by a CategoricalResolver surface. Verify the preview shows the second surface's resolved behavior (post-state-change effect).
 - [ ] Fire and undo. Verify the preview returns to its pre-shot state.
-- [ ] Verify all prior planning behaviors (bypass, mixed chains, projective sub-chains) still work.
+- [ ] Verify all prior planning behaviors (mixed chains, projective sub-chains) still work.
 
 ### Invariants That Must Hold
 
@@ -272,7 +286,7 @@ Stages 52--53 (CategoricalResolver, GameState, StateChange, state changes during
 | Math | All math primitives and transforms | GUT math tests |
 | Effects | All 8 effect types | GUT effect tests |
 | Trace | Physical trace with state changes | GUT trace tests + Stage 53 tests |
-| Planning | Image chains, mixed planning, bypass (without state changes) | GUT planning tests |
+| Planning | Image chains, mixed planning (without state changes) | GUT planning tests |
 | Planning | State changes during planning | GUT Stage 54 tests |
 | Visibility | All visibility computations | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
@@ -303,8 +317,8 @@ Reference standard protocol at top of document.
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `scripts/game/planner.gd` | Modify | Add Pass 0 (state simulation + bypass convergence), state_at computation |
-| `scripts/math/planner.gd` | Modify | Integrate bypass-state convergence loop (max 10 iterations) |
+| `scripts/game/planner.gd` | Modify | Add Pass 0 (state simulation + convergence), state_at computation |
+| `scripts/math/planner.gd` | Modify | Integrate state convergence loop (max 10 iterations) |
 | `tests/test_stage54_state_simulation.gd` | Create | State simulation during planning tests including S7 |
 
 ---
@@ -371,7 +385,7 @@ Stages 1--54 (full trace system with state changes, planning with state simulati
 | Math | All math primitives and transforms | GUT math tests |
 | Effects | All 8 effect types | GUT effect tests |
 | Trace | Physical trace with state changes | GUT trace + state change tests |
-| Planning | Image chains, mixed planning, bypass, state simulation | GUT planning tests |
+| Planning | Image chains, mixed planning, state simulation | GUT planning tests |
 | Visibility | All visibility computations | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
 | Checkpoints | Undo/reset, plan retained | Manual verification |
@@ -450,7 +464,7 @@ Stage 55 (target surfaces, hit detection, targets_hit tracking during trace).
 - [ ] Reset level. Wall reappears (Block). Target pulsing again. No targets hit.
 - [ ] Fire at wall, then undo. Wall reappears, targets_hit empty.
 - [ ] Multi-target level: hit targets across two shots. Verify level completes after all hit.
-- [ ] All prior interactions (plan, visibility, bypass) still work.
+- [ ] All prior interactions (plan, visibility) still work.
 
 ### Invariants That Must Hold
 
@@ -468,7 +482,7 @@ Stage 55 (target surfaces, hit detection, targets_hit tracking during trace).
 | Math | All math primitives and transforms | GUT math tests |
 | Effects | All 8 effect types | GUT effect tests |
 | Trace | Physical trace with state changes, target hit detection | GUT trace + target tests |
-| Planning | Image chains, mixed planning, bypass, state simulation | GUT planning tests |
+| Planning | Image chains, mixed planning, state simulation | GUT planning tests |
 | Visibility | All visibility computations | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
 | Checkpoints | Undo restores targets_hit + game_state + plan + position | GUT Stage 56 tests + manual |
@@ -591,7 +605,7 @@ Stages 1--56 (all trace, planning, state, target, win condition, checkpoint syst
 | Math | All math primitives and transforms | GUT math tests |
 | Effects | All 8 effect types | GUT effect tests |
 | Trace | Physical trace with state changes, target detection | GUT trace tests |
-| Planning | Image chains, mixed planning, bypass, state simulation | GUT planning tests |
+| Planning | Image chains, mixed planning, state simulation | GUT planning tests |
 | Visibility | All visibility computations | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
 | Checkpoints | Full checkpoint/undo/reset cycle | GUT + manual verification |
@@ -703,7 +717,7 @@ Stage 57 (game loop, level loading, level discovery).
 | Math | All math primitives and transforms | GUT math tests |
 | Effects | All 8 effect types | GUT effect tests |
 | Trace | Physical trace with state changes, target detection | GUT trace tests |
-| Planning | Image chains, mixed planning, bypass, state simulation | GUT planning tests |
+| Planning | Image chains, mixed planning, state simulation | GUT planning tests |
 | Visibility | All visibility computations | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
 | Checkpoints | Full checkpoint/undo/reset cycle | GUT + manual |
@@ -803,7 +817,6 @@ Stage 58 (menus, level loading with surface_names in LevelData).
 
 | Invariant ID | Description | How Verified | New This Stage? |
 |-------------|-------------|-------------|----------------|
-| UX8 | Bypassed entries visible: bypassed entries shown dimmed in plan list | Manual: bypass a plan entry, observe dimmed display in HUD | Reinforced |
 | UX5 | Undo fully restores: shot counter and target progress revert on undo | Manual + unit test | Inherited |
 
 ### Regression Checklist
@@ -813,7 +826,7 @@ Stage 58 (menus, level loading with surface_names in LevelData).
 | Math | All math primitives and transforms | GUT math tests |
 | Effects | All 8 effect types | GUT effect tests |
 | Trace | Physical trace with state changes, target detection | GUT trace tests |
-| Planning | Image chains, mixed planning, bypass, state simulation | GUT planning tests |
+| Planning | Image chains, mixed planning, state simulation | GUT planning tests |
 | Visibility | All visibility computations | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
 | Checkpoints | Full checkpoint/undo/reset cycle | GUT + manual |
@@ -839,7 +852,7 @@ Reference standard protocol at top of document.
 | 1 | All new unit tests pass | [ ] |
 | 2 | All prior unit tests pass (Stages 1--58) | [ ] |
 | 3 | Interactive test items verified by user | [ ] |
-| 4 | Invariants verified (UX8, UX5) | [ ] |
+| 4 | Invariants verified (UX5) | [ ] |
 | 5 | User sign-off received | [ ] |
 
 ### Files Modified/Created
@@ -917,7 +930,7 @@ Stages 58--59 (menus with completion display, HUD with shot counter, level loadi
 | Math | All math primitives and transforms | GUT math tests |
 | Effects | All 8 effect types | GUT effect tests |
 | Trace | Physical trace with state changes, target detection | GUT trace tests |
-| Planning | Image chains, mixed planning, bypass, state simulation | GUT planning tests |
+| Planning | Image chains, mixed planning, state simulation | GUT planning tests |
 | Visibility | All visibility computations | GUT visibility tests |
 | Flight | Arrow shooting, animation, skip, camera tracking | Manual verification |
 | Checkpoints | Full checkpoint/undo/reset cycle | GUT + manual |
@@ -960,7 +973,7 @@ Reference standard protocol at top of document.
 
 ---
 
-## Appendix A: Invariant Introduction Map (All 30 Invariants, Status After Stage 60)
+## Appendix A: Invariant Introduction Map (All 29 Invariants, Status After Stage 60)
 
 | Invariant | Full ID | Introduced | First Testable | Fully Testable | Status After Stage 60 |
 |-----------|---------|-----------|----------------|----------------|----------------------|
@@ -990,7 +1003,6 @@ Reference standard protocol at top of document.
 | Undo fully restores | UX5 | Stage 32 | Stage 32 | Stage 65 | Tested (targets_hit added Stage 56) |
 | All targets reachable | UX6 | Stage 55 | Stage 55 | Stage 65 | Tested |
 | Solid path to cursor | UX7 | Stage 5 | Stage 5 | Stage 65 | Tested |
-| Bypassed entries visible | UX8 | Stage 29 | Stage 29 | Stage 65 | Tested |
 | Block stops arrow | UX9 | Stage 13 | Stage 13 | Stage 65 | Tested |
 | State changes visible | UX10 | Stage 57 | Stage 57 | Stage 65 | Tested |
 | Empty plan = fire straight | UX11 | Stage 5 | Stage 15 | Stage 65 | Tested |
@@ -1016,6 +1028,6 @@ Reference standard protocol at top of document.
 |----------|---------------------|
 | Unit tests | ~321 |
 | Interactive test items | ~187 |
-| Invariants actively tested | 21 (S1--S19, UX1--UX11 except those not yet introduced) |
+| Invariants actively tested | 21 (S1--S19, UX1--UX7, UX9--UX11 except those not yet introduced) |
 | Invariants introduced this document | 4 (S7, S19, UX6, UX10) |
-| Invariants reinforced this document | 2 (UX5, UX8) |
+| Invariants reinforced this document | 1 (UX5) |

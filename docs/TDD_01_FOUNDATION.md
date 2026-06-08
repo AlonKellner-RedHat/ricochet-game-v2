@@ -4,6 +4,19 @@
 
 **Fractional stage ordering:** Stages 2.5, 42.5, and 49.5 were inserted after the initial plan. They are ordered between their integer neighbors: Stage 2 → Stage 2.5 → Stage 3. The regression test policy includes fractional stages in sequence.
 
+### Stage Status
+| Stage | Topic | Status |
+|-------|-------|--------|
+| 1 | Godot Project Skeleton | Done |
+| 2 | Empty Room with Player | Done |
+| 2.5 | Gravity-Aware Movement and Jump | Done |
+| 3 | Cursor Tracking | Done |
+| 4 | Direction and Ray Data Classes | Done |
+| 5 | Straight-Line Preview (Player to Cursor) | Done |
+| 6 | GeneralizedCircle Data Class | Done |
+| 7 | Segment Data Class with Via Point | Done |
+| 8 | Computation Cache (Provenance System) | Done |
+
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
 **Feedback Loop Protocol (applies to every stage):**
@@ -776,7 +789,6 @@ Identical to Stage 5. No visual changes — this stage is pure infrastructure.
 | Undo fully restores | UX5 | — | — | Stage 32+ | Not yet introduced |
 | All targets reachable | UX6 | — | — | Stage 55+ | Not yet introduced |
 | Solid path to cursor | UX7 | Stage 5 (partial) | Stage 5 | Stage 65 | Partial (line only) |
-| Bypassed entries visible | UX8 | — | — | Stage 29+ | Not yet introduced |
 | Block stops arrow | UX9 | — | — | Stage 13+ | Not yet introduced |
 | State changes visible | UX10 | — | — | Stage 57+ | Not yet introduced |
 | Empty plan = fire straight | UX11 | Stage 5 (partial) | Stage 15 | Stage 65 | Partial (line only) |

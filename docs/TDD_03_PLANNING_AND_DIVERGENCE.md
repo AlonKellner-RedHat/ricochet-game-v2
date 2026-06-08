@@ -1,6 +1,24 @@
 # TDD Document 3: Planning and Divergence
 
-**Stages 19–30** | Surfaces with effects, plan construction, image chains, step tree merge, divergence, bypass, all 5 step types
+**Stages 19–30** | Surfaces with effects, plan construction, image chains, step tree merge, divergence, all 5 step types
+
+### Stage Status
+
+| Stage | Topic | Status |
+|-------|-------|--------|
+| 19 | Single non-interactive pass-through surface | Done |
+| 20a | MobiusTransform full implementation | Done |
+| 20b | Reflective surface (one side) | Done |
+| 21 | Multi-bounce physical trace | Done |
+| 22 | Plan construction UI (click to add) | Done |
+| 23 | Plan removal UI (right-click/clear) | Done |
+| 24 | Planned trace (single reflection) | Done |
+| 25 | Step tree merge (aligned case) | Done |
+| 26 | Divergence detection | Done |
+| 27 | Internal blocking surface | Done |
+| 28 | All five step types rendered | Done |
+| 29 | ~~Bypass computation~~ | Removed |
+| 30 | Multi-surface reflection chain | Done |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
@@ -624,7 +642,7 @@ Reference standard protocol (top of document).
 ### Overview
 Implement `plan_transformative_subchain` from §13.2 for a single reflective surface, producing the first planned trace. The backward image is computed by inverse-transforming the cursor through the planned surface's effect (for reflection: `image = reflect(cursor)` across the surface carrier). The forward bounce point is found by intersecting the aim line (player to image) with the surface's unbounded carrier via `intersect_line_with_carrier` (§11.5). The planned trace produces Steps with the same structure as the physical trace, enabling the step tree merge in later stages.
 
-**Design foresight for Stage 50:** The `plan_transformative_subchain` function implemented here is one piece of the full `plan_mixed` algorithm (§13.4). Stage 50 will add Pass 0 (iterative bypass-state convergence), Pass 1 (backward geometry with projective break points), and Pass 2 (forward origin fill). When implementing this stage, design the function signature and return types to accommodate Stage 50's requirements: `plan_mixed` will call `plan_transformative_subchain` as a subroutine for each transformative sub-chain between projective breaks. The current implementation must not preclude this — avoid assumptions about being the only sub-chain or having the full origin-to-cursor span.
+**Design foresight for Stage 50:** The `plan_transformative_subchain` function implemented here is one piece of the full `plan_mixed` algorithm (§13.4). Stage 50 will add Pass 1 (backward geometry with projective break points) and Pass 2 (forward origin fill). When implementing this stage, design the function signature and return types to accommodate Stage 50's requirements: `plan_mixed` will call `plan_transformative_subchain` as a subroutine for each transformative sub-chain between projective breaks. The current implementation must not preclude this — avoid assumptions about being the only sub-chain or having the full origin-to-cursor span.
 
 ### Prerequisites
 Stage 23 (plan construction/removal — a plan must exist to compute a planned trace).
@@ -656,7 +674,7 @@ Stage 23 (plan construction/removal — a plan must exist to compute a planned t
 
 - [ ] Add the mirror to the plan (left-click on blue side). The preview line should now show the planned path — a line from player to mirror bounce point, then from bounce point to cursor. (The rendering may still be basic at this stage; full 5-type rendering comes in Stage 28.)
 - [ ] Move the cursor around. The planned bounce point on the mirror updates in real time.
-- [ ] Move the cursor so the aimed line does not cross the mirror carrier at all. Observe behavior (bypass will be handled in Stage 29; for now the trace may produce degenerate results or no bounce).
+- [ ] Move the cursor so the aimed line does not cross the mirror carrier at all. Observe behavior (the trace may produce degenerate results or no bounce).
 - [ ] Clear the plan. Preview returns to the simple straight-line physical trace.
 
 ### Invariants That Must Hold
@@ -1086,122 +1104,13 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 29: Bypass Computation
-
-### Overview
-Implement `compute_bypass_from_geometry` from §13.4. For each plan entry (walking backward): transformative entries are bypassed if the aim line does not cross the surface carrier; projective entries are bypassed if `back_propagate()` returns null; terminal entries are never bypassed; pass-through entries are not bypassed. Bypassed entries are shown dimmed with a bypass indicator and produce no steps in traces. This reproduces the §16.5 worked example: a line reflection surface planned twice in a row has its second entry bypassed because the ray cannot return to the same line after a line reflection. Bypass is recomputed every frame as the cursor moves (§13.5, Principle 13).
-
-### Prerequisites
-Stage 28 (full 5-type rendering — bypassed entries need visual distinction from active entries).
-
-### What Is Introduced
-
-| Category | Item | Spec Reference |
-|----------|------|----------------|
-| Method | `compute_bypass_from_geometry(plan, state_at, origin, cursor) -> Set[int]` | §13.4 |
-| Behavior | Transformative bypass: aim line does not cross surface carrier | §13.4 |
-| Behavior | Projective bypass: `back_propagate()` returns null | §13.4 |
-| Behavior | Terminal bypass: never bypassed | §13.4 |
-| Behavior | Pass-through bypass: not bypassed | §13.4 |
-| Behavior | Bypassed entries produce NO steps in planned or physical traces | §13.5 |
-| Behavior | Bypass computed every frame as cursor moves | §13.5, Principle 13 |
-| Behavior | Duplicate entries evaluated independently | §13.4 |
-| Rendering | Bypassed entries shown dimmed with bypass indicator | §22.2 |
-| Rendering | Invalid plan warning: brief text or icon overlay when the plan cannot reach the cursor | §26.3 |
-
-### Unit Tests Added
-
-1. **`test_stage29_bypass_line_reflection_twice`**: Reproduce §16.5. Mirror M at x=200, plan=[{M, left}, {M, left}]. Player at (50, 300), cursor at (400, 300). Expected: first entry NOT bypassed, second entry bypassed (ray cannot return to the same line after line reflection). Validates: §16.5.
-2. **`test_stage29_no_bypass_single_entry`**: Plan=[{M, left}] with valid aim. Expected: entry NOT bypassed. Validates: single entry case.
-3. **`test_stage29_bypass_no_carrier_crossing`**: Plan=[{M, left}], cursor positioned so aim line is parallel to mirror carrier. Expected: entry bypassed (line does not cross carrier). Validates: transformative bypass condition.
-4. **`test_stage29_bypassed_produces_no_steps`**: When an entry is bypassed, the planned trace has no step corresponding to that entry. Validates: §13.5.
-5. **`test_stage29_bypass_recomputed_on_cursor_move`**: Move cursor from a position where entry is bypassed to one where it is not. Expected: bypass set changes. Validates: §13.5 per-frame recomputation.
-6. **`test_stage29_duplicate_independent_evaluation`**: Surface S planned twice. First entry reachable, second entry not. Expected: only the second is bypassed. Validates: §13.4 independent evaluation.
-7. **`test_stage29_terminal_not_bypassed`**: A block surface in the plan (if interactive=true). Expected: never bypassed. Validates: §13.4 terminal rule.
-8. **`test_stage29_passthrough_not_bypassed`**: A pass-through surface in the plan (if it could be added — this tests the function's logic). Expected: not bypassed. Validates: §13.4.
-9. **`test_stage29_effective_plan_after_bypass`**: Plan=[{A, left}, {B, left}, {A, left}] where third entry is bypassed. Effective plan (non-bypassed entries) = [{A, left}, {B, left}]. The planned trace uses only the effective entries. Validates: bypass exclusion.
-10. **`test_stage29_invalid_plan_warning`**: Plan active, all entries bypassed (effective plan empty). Expected: a warning overlay appears indicating the plan cannot reach the cursor. Validates: §26.3.
-11. **`test_stage29_bypass_stability_across_cursor_sweep`**: Plan a surface near a bypass boundary. Sweep the cursor across 100 positions along a line that crosses the boundary. Record the bypass set at each position. Expected: the bypass set changes monotonically (entry becomes bypassed and stays bypassed, or becomes active and stays active) — no oscillation (bypassed → active → bypassed) within a continuous sweep. Validates: bypass stability for visual smoothness.
-12. **`test_stage29_bypass_origin_equals_cursor`**: Set cursor at player position (zero-length Direction). Plan has one entry. Call `compute_bypass_from_geometry`. Expected: no crash, no NaN. All entries bypassed (aim line is undefined, so no leg can cross any surface). Validates: bypass robustness with degenerate zero-length aim.
-
-### Interactive User Tests **[BEHAVIORAL — USER SIGN-OFF REQUIRED]**
-
-- [ ] Add the same mirror to the plan twice (click blue side twice). Observe that the second entry in the HUD is dimmed and has a bypass indicator.
-- [ ] The numbered overlay on the surface shows "1" (active) and "2" (dimmed/bypass).
-- [ ] The preview shows only the first reflection — the second entry has no effect on the path.
-- [ ] Move the cursor around. The bypass status may change for some cursor positions (though for a line reflection, the second entry is always bypassed regardless of cursor).
-- [ ] Remove the bypassed entry (right-click). The plan now has one entry, no bypass indicators.
-- [ ] Add a valid second surface to the plan (different surface). Both entries are active (no bypass).
-- [ ] Create a plan where all entries are bypassed. Observe a warning text or icon appears indicating the plan cannot reach the cursor.
-
-### Invariants That Must Hold
-
-| Invariant ID | Description | How Verified | New This Stage? |
-|-------------|-------------|-------------|----------------|
-| UX8 | Bypassed entries are visible — dimmed with indicator, never silently dropped | Visual inspection + unit test | Yes |
-| S4 | Divergence monotonic | Unit test | Inherited |
-| S5 | Aligned steps share provenance | Unit test | Inherited |
-| S6 | Aligned steps match | Unit test | Inherited |
-| UX7 | Solid path to cursor | Visual | Inherited |
-| S2 | Transform round-trip | GUT tests | Inherited |
-| S16 | No NaN/Inf in output | Unit test | Inherited |
-
-### Regression Checklist
-
-| Prior Stage | Behavior | How to Verify |
-|-------------|----------|---------------|
-| Stage 28 | All 5 step types rendered correctly | Observe colors/styles with plan + divergence |
-| Stage 27 | Internal block causes divergence | Plan mirror, wall intercepts |
-| Stage 26 | Divergence detection | Unit tests |
-| Stage 25 | Step tree merge: aligned case | Clear plan, all green |
-| Stage 24 | Planned trace: single reflection | Add one mirror entry |
-| Stage 23 | Plan removal | Right-click, C key |
-| Stage 22 | Plan construction | Left-click |
-| Stage 21 | Multi-bounce trace | Aim through mirrors |
-| Stage 20b | Reflective surface | Fire from each side |
-| Stage 19 | Pass-through surface | Fire through |
-| Stage 18 | Arrow shooting | Press Spacebar |
-| Stage 13 | Room boundaries | Fire at wall |
-| Stage 2 | Player moves with WASD | Press WASD |
-
-### Expected Visual State
-
-Same as Stage 28, with addition of bypass visuals. When a plan entry is bypassed: its numbered overlay is dimmed, the HUD entry shows a bypass indicator (e.g., strikethrough or "[bypassed]" label). The preview path reflects only non-bypassed entries. When all entries are bypassed, the effective plan is empty and the preview behaves as empty-plan (all green dashed).
-
-### Feedback Loop Protocol
-
-Reference standard protocol (top of document).
-
-### Validation Summary (filled in after implementation)
-
-| Check | Status | Notes |
-|-------|--------|-------|
-| All unit tests pass | [ ] | |
-| All prior regression tests pass | [ ] | |
-| User interactive sign-off | [ ] | |
-| Failing interactive tests automated | [ ] | |
-| Stage complete | [ ] | |
-
-### Files Modified/Created
-
-| File | Action | Purpose |
-|------|--------|---------|
-| `scripts/math/bypass.gd` | Create | `compute_bypass_from_geometry` function |
-| `scripts/math/planner.gd` | Modify | Filter bypassed entries before computing planned trace |
-| `scripts/game/plan_manager.gd` | Modify | Store and expose bypass set, recompute per frame |
-| `scripts/visual/surface_renderer.gd` | Modify | Dimmed rendering for bypassed plan entries |
-| `scripts/game/plan_hud.gd` | Modify | Bypass indicator in HUD |
-| `tests/test_stage29_bypass.gd` | Create | Bypass computation unit tests |
-
----
-
 ## Stage 30: Multi-Surface Reflection Chain
 
 ### Overview
 Extend the planned trace to handle 2 or more reflective surfaces in sequence, implementing the full image chain from §13.1 and §13.2. Each planned surface's inverse transform is applied to the image in reverse order, producing a chain of images. The forward pass intersects each aim line with the next surface's carrier to find bounce points. This reproduces the §16.1 worked example: two mirrors with the player at (50, 450) and cursor at (475, 300), producing bounces at (100, 367) and (340, 100). Chain order matters — reordering the plan changes the path.
 
 ### Prerequisites
-Stage 29 (bypass computation — multi-surface chains need bypass to handle unreachable entries).
+Stage 28 (all 5 step types rendered — full visual foundation for multi-surface chains).
 
 ### What Is Introduced
 
@@ -1220,9 +1129,8 @@ Stage 29 (bypass computation — multi-surface chains need bypass to handle unre
 3. **`test_stage30_three_legs_all_aligned`**: In the §16.1 scenario, the planned and physical traces agree on all 3 legs. Expected: all steps are ALIGNED (pre-cursor) or ALIGNED_POST_PLANNED (post-cursor). `divergence_index == null`. Validates: full alignment through multi-surface chain.
 4. **`test_stage30_order_matters`**: Same two mirrors, but plan: [{B, right}, {A, left}] (reversed). Expected: different bounce points, different path geometry. The path changes when the plan order changes. Validates: §13.1 order dependence.
 5. **`test_stage30_three_mirror_chain`**: Add a third mirror. Plan 3 reflections. Expected: 4-leg path with 3 bounce points. Image chain applies 3 inverse transforms. Validates: scalability beyond 2 surfaces.
-6. **`test_stage30_chain_with_bypass`**: In a 3-mirror chain, one entry is geometrically unreachable. Expected: that entry is bypassed, effective chain has 2 entries. Validates: bypass integrates with multi-surface chains.
-7. **`test_stage30_chain_aim_ray_updates`**: After each bounce, the aim ray is updated to go from the bounce point toward the remaining (partially unfolded) image. Verify the intermediate aim ray directions. Validates: §13.2 forward pass mechanics.
-8. **`test_stage30_S16_no_nan_in_chain`**: Multi-mirror chain with various angles. All bounce points, images, and aim ray directions are finite (no NaN/Inf). Validates: S16.
+6. **`test_stage30_chain_aim_ray_updates`**: After each bounce, the aim ray is updated to go from the bounce point toward the remaining (partially unfolded) image. Verify the intermediate aim ray directions. Validates: §13.2 forward pass mechanics.
+7. **`test_stage30_S16_no_nan_in_chain`**: Multi-mirror chain with various angles. All bounce points, images, and aim ray directions are finite (no NaN/Inf). Validates: S16.
 
 ### Interactive User Tests **[BEHAVIORAL — USER SIGN-OFF REQUIRED]**
 
@@ -1231,7 +1139,6 @@ Stage 29 (bypass computation — multi-surface chains need bypass to handle unre
 - [ ] Move the cursor around. The bounce points update in real time — the entire 3-leg path adjusts smoothly.
 - [ ] Reverse the plan order: clear and re-add as [{B, right}, {A, left}]. The path changes visibly — different bounce points, different path geometry. This confirms order matters.
 - [ ] Add a third mirror entry to the plan. The path gains a fourth leg with a third bounce point.
-- [ ] Place the cursor so that one of the planned entries is bypassed. That entry shows as dimmed, and the path adjusts to skip it.
 - [ ] Fire the arrow with the two-mirror plan. The arrow bounces off both mirrors and arrives at the cursor position, matching the green preview.
 - [ ] Clear the plan. Preview returns to green dashed (empty plan).
 
@@ -1240,7 +1147,6 @@ Stage 29 (bypass computation — multi-surface chains need bypass to handle unre
 | Invariant ID | Description | How Verified | New This Stage? |
 |-------------|-------------|-------------|----------------|
 | UX7 | Solid path to cursor (through multi-bounce chain) | Visual: green solid from player through bounces to cursor | Inherited |
-| UX8 | Bypassed entries visible in multi-surface chain | Visual: dimmed entries | Inherited |
 | S4 | Divergence monotonic | Unit test | Inherited |
 | S5 | Aligned steps share provenance (multi-step chain) | Unit test | Inherited |
 | S6 | Aligned steps match (multi-step chain) | Unit test | Inherited |
@@ -1254,7 +1160,6 @@ Stage 29 (bypass computation — multi-surface chains need bypass to handle unre
 
 | Prior Stage | Behavior | How to Verify |
 |-------------|----------|---------------|
-| Stage 29 | Bypass computation (single + duplicate entries) | Plan same mirror twice, observe bypass |
 | Stage 28 | All 5 step types rendered | Plan mirror, add wall, observe colors |
 | Stage 27 | Internal block causes divergence | Plan mirror with wall |
 | Stage 26 | Divergence detection | Unit tests |
@@ -1271,7 +1176,7 @@ Stage 29 (bypass computation — multi-surface chains need bypass to handle unre
 
 ### Expected Visual State
 
-With a two-mirror plan: a 3-segment green solid path from player to cursor, bending at each mirror's bounce point. Green dashed continuation past cursor (reflecting further). The bounce points update smoothly as the cursor moves. With reversed plan order: a visibly different path through the same mirrors. All segments are green when aligned. If a blocking surface interferes, red solid and yellow dashed appear at the divergence point. Bypassed entries are dimmed with indicators.
+With a two-mirror plan: a 3-segment green solid path from player to cursor, bending at each mirror's bounce point. Green dashed continuation past cursor (reflecting further). The bounce points update smoothly as the cursor moves. With reversed plan order: a visibly different path through the same mirrors. All segments are green when aligned. If a blocking surface interferes, red solid and yellow dashed appear at the divergence point.
 
 ### Feedback Loop Protocol
 
@@ -1327,7 +1232,6 @@ Reference standard protocol (top of document).
 | Undo fully restores | UX5 | — | Stage 32+ | Not yet introduced |
 | All targets reachable | UX6 | — | Stage 55+ | Not yet introduced |
 | Solid path to cursor | UX7 | Stage 5 (partial) | Stage 28 | Tested (ALIGNED + DIVERGED_PLANNED form continuous solid path) |
-| Bypassed entries visible | UX8 | Stage 29 | Stage 29 | Tested (dimmed with bypass indicator, never silently dropped) |
 | Block stops arrow | UX9 | Stage 13 | Stage 13 | Tested (inherited, extended to internal blocks in Stage 27) |
 | State changes visible | UX10 | — | Stage 57+ | Not yet introduced |
 | Empty plan = fire straight | UX11 | Stage 5 (partial) | Stage 15 | Tested (inherited) |
@@ -1350,14 +1254,13 @@ Reference standard protocol (top of document).
 | 26 | 8 | 3 | ~176 | ~100 |
 | 27 | 7 | 7 | ~183 | ~107 |
 | 28 | 6 | 6 | ~189 | ~113 |
-| 29 | 10 | 7 | ~199 | ~120 |
-| 30 | 8 | 8 | ~207 | ~128 |
+| 30 | 8 | 8 | ~197 | ~121 |
 
 | Category | Count After Stage 30 |
 |----------|---------------------|
-| Unit tests | ~207 |
-| Interactive test items | ~128 |
+| Unit tests | ~197 |
+| Interactive test items | ~121 |
 | Invariants actively tested | 14 (S1, S2, S3, S4, S5, S6, S8, S9, S11, S12, S16, S17, S18, UX7) |
-| Invariants partially covered | 4 (UX3, UX4, UX8, UX9) |
-| Invariants fully tested | 2 (UX8, UX11) |
+| Invariants partially covered | 3 (UX3, UX4, UX9) |
+| Invariants fully tested | 1 (UX11) |
 | Invariants not yet introduced | 7 (S7, S10, S13, S14, S15, S19, UX1, UX2, UX5, UX6, UX10) |

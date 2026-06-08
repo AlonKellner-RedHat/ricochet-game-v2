@@ -6,6 +6,27 @@ Engine: **Godot 4.6+** with **GDScript**. Developed against Godot 4.6.x stable. 
 
 > **At a glance:** A 2D puzzle game where the player plans ricochet shots through mirrors, portals, and lenses. The core loop: aim → plan a sequence of surface bounces → fire → watch the arrow follow (or diverge from) the plan. The engine uses Möbius geometry to unify lines and circles. The hardest implementation areas are: the planning algorithm (§13), the visibility system (§15), and the Möbius frame transform (§5–6). Start with Phase 0 (§28).
 
+### Implementation Status
+
+| Feature | Status |
+|---------|--------|
+| Math layer (generalized circles, segments, Möbius) | Done |
+| Physical tracing (§12) | Done |
+| Reflection effect | Done |
+| Terminal (block) effect | Done |
+| Plan construction and removal | Done |
+| Planned trace with image chains | Done |
+| Step tree merge and divergence | Done |
+| Invariant sweep testing (12 invariants, 89k combos) | Done |
+| Arrow flight with freeze/animation/skip | Done |
+| Circle inversion effect | Todo |
+| Rigid motion effect | Todo |
+| Projective effects | Todo |
+| Visibility polygon (§15) | Todo |
+| State-changing surfaces | Todo |
+| Game systems (checkpoint, undo, reset) | Todo |
+| Level editor | Todo |
+
 ---
 
 # Part I: Game Design
@@ -54,7 +75,7 @@ These 25 rules are non-negotiable. Every system in the game must satisfy them.
 
 12. **Plan vs physical can diverge once.** Ideal paths may use extended geometry; physical paths use what is actually there. When they split, that split is a first-class event (one branch ends, others begin) — not a rendering trick.
 
-13. **Bypass is decided once.** Which planned surfaces count for this aim is computed once per shot and shared everywhere. Duplicating that logic is how planned and physical paths silently disagree.
+13. **Plan validity is visual.** The preview shows which planned entries will be reached and which won't — the player builds any plan they like and sees the consequences in real time.
 
 14. **Visibility shares the world.** What you can see or validly aim at uses the same scene and state as trajectory. Two different worlds for light and arrows guarantees inconsistency.
 
@@ -199,7 +220,7 @@ The player builds a plan by clicking on **surface sides** in order. The plan is 
 - **Preview**: the trajectory preview updates in real time as the plan and cursor change.
 - **Right-click removal**: right-clicking over a planned surface removes the **latest instance** of that surface from the plan. Right-clicking over an unplanned surface or empty space **clears the entire plan**.
 - **Clear plan**: dedicated input (C) clears the plan without resetting level state or player position.
-- **Duplicate entries allowed**: a surface side may appear in the plan **multiple times**, including **consecutively** (e.g., plan a circle-inversion surface's left side twice to invert then un-invert). If a duplicate entry is geometrically unreachable (e.g., a line surface planned twice consecutively — the ray cannot return after a line reflection), the entry is shown as **bypassed** in the preview, but the plan is not rejected. The player is free to construct any plan; the preview shows which entries are active and which are bypassed.
+- **Duplicate entries allowed**: a surface side may appear in the plan **multiple times**, including **consecutively** (e.g., plan a circle-inversion surface's left side twice to invert then un-invert). The player is free to construct any plan; the preview shows which entries are active.
 
 Plan entries reference surfaces by **surface ID** (§9.3), not by object reference. When the game state changes a surface's behavior, the plan entry's ID still resolves to the current (possibly modified) surface.
 
@@ -614,26 +635,37 @@ Example: a breakable mirror uses `CategoricalResolver` with `state_key = "mirror
 
 ## 10. Effect system
 
-### 10.1 Three separate interfaces
+### 10.1 Effect base class and hierarchy
 
-A single interface for all effects would violate LSP (a projective cannot substitute for a transformative in image-chain planning) and ISP (a block would carry unused planning methods).
+All effects extend a common `Effect` base class. Dispatch uses method calls, not type checks.
 
 ```
-TransformativeEffect:
-    func get_mobius() → MobiusTransform
-    func get_inverse_mobius() → MobiusTransform
-    # Both precomputed; inverse is NOT derived from forward at query time.
+Effect (extends RefCounted):
+    func is_terminal() → bool          # default: false
+    func is_transformative() → bool    # default: false
+    func is_projective() → bool        # default: false (todo)
+    func get_mobius() → MobiusTransform        # default: identity
+    func get_inverse_mobius() → MobiusTransform # default: get_mobius().invert()
+    func normalized(carrier: GeneralizedCircle) → Effect  # default: self
 
-ProjectiveEffect:
-    func apply_forward(hit_point: Vector2, surface: Surface, side: Side) → Ray
-    func back_propagate(target: Vector2, surface: Surface, side: Side) → Vector2?
-    # Returns null if geometrically impossible.
+TerminalEffect (extends Effect):
+    func is_terminal() → true
 
-TerminalEffect:
-    # Stops the ray. No outgoing ray, no transformation.
+TransformativeEffect (extends Effect):
+    func is_transformative() → true
+    # Subclasses override get_mobius() and get_inverse_mobius()
+
+ReflectionEffect (extends TransformativeEffect):
+    func normalized(carrier) → ReflectionEffect.new(carrier)
+    # Returns a new instance with the given carrier (used when frame normalization
+    # transforms the surface's geometry)
 ```
 
-A surface side's effect is one of these three, or `null` (pass-through). A surface with `null` on both sides and `interactive = false` on both sides has no gameplay effect and is not clickable for plan construction. However, it still participates in ray tracing as a pass-through — the ray passes through it, producing a step. If `is_target = true`, the pass-through still registers a target hit.
+Future effect types will extend `Effect` or `TransformativeEffect`:
+- `ProjectiveEffect` will add `apply_forward()` and `back_propagate()` methods
+- `CircleInversionEffect`, `RigidMotionEffect` will extend `TransformativeEffect`
+
+A surface side's effect is an `Effect` instance, or `null` (pass-through). A surface with `null` on both sides and `interactive = false` on both sides has no gameplay effect and is not clickable for plan construction. However, it still participates in ray tracing as a pass-through — the ray passes through it, producing a step. If `is_target = true`, the pass-through still registers a target hit.
 
 ### 10.2 Transformative effects
 
@@ -699,7 +731,7 @@ State changes are applied sequentially along the trace. If multiple hits write t
 | Terminal | No update — path ends | N/A |
 | Pass-through | No update | No |
 
-Terminal effects do NOT reset the Möbius frame — they simply end the path. In the planner, post-terminal entries are bypassed (§13.4), so no sub-chain inherits a post-terminal frame. The identity frame in the forward resolution pass (§13.4 Pass 2) is correct because sub-chain boundaries are always projective breaks (which reset the frame) or the start of the plan.
+Terminal effects do NOT reset the Möbius frame — they simply end the path. In the planner, post-terminal entries end the trace, so no sub-chain inherits a post-terminal frame.
 
 ### 10.8 Effect Möbius matrices
 
@@ -877,7 +909,7 @@ func trace(shared_ray: Ray, surfaces: Array, mode: TraceMode,
         # regardless of mode. This ensures both traces stop at the same walls.
         if hit.is_on_segment:
             side_config = hit.surface.active_side_config(hit.side, game_state)
-            if side_config.effect is TerminalEffect:
+            if side_config.effect != null and side_config.effect.is_terminal():
                 break
 
         # --- MODE-DEPENDENT: transformative effects ---
@@ -893,14 +925,14 @@ func trace(shared_ray: Ray, surfaces: Array, mode: TraceMode,
         if mode == PHYSICAL:
             if hit.is_on_segment:
                 side_config = hit.surface.active_side_config(hit.side, game_state)
-                if side_config and side_config.effect is TransformativeEffect:
+                if side_config and side_config.effect != null and side_config.effect.is_transformative():
                     apply_effect = true
         elif mode == PLANNED:
             if plan_index < plan_queue.size():
                 if hit.surface.id == plan_queue[plan_index].surface_id:
                     side_config = hit.surface.active_side_config(
                         plan_queue[plan_index].side, game_state)
-                    if side_config and side_config.effect is TransformativeEffect:
+                    if side_config and side_config.effect != null and side_config.effect.is_transformative():
                         apply_effect = true
                     plan_index += 1
 
@@ -1029,7 +1061,7 @@ Back-propagation per effect:
 | Circle normal | H = intersection of line(center, T) with the arc. |
 | Semi-circle directional | H = intersection of line(T, −normal) with the arc, where normal is perpendicular to the segment's diameter line. |
 
-The hit point returned by `back_propagate()` must lie within the surface's segment bounds (checked using the same arc containment test as §11.1). If the carrier-level intersection exists but falls outside the segment, `back_propagate()` returns null (triggering bypass per §13.5).
+The hit point returned by `back_propagate()` must lie within the surface's segment bounds (checked using the same arc containment test as §11.1). If the carrier-level intersection exists but falls outside the segment, `back_propagate()` returns null.
 
 Back-propagation targets are always in the **visual frame** (identity frame after a projective reset, or the current accumulated frame for terminal surfaces). Since projective effects reset the frame to identity, and back-propagation is called immediately after encountering a projective surface, the target `T` is in the visual frame.
 
@@ -1039,45 +1071,6 @@ Back-propagation targets are always in the **visual frame** (identity frame afte
 func plan_mixed(origin, cursor, plan, game_state):
     # plan is Array[{surface: Surface, side: Side}]
     
-    # --- Pass 0: Iterative state simulation with bypass convergence ---
-    # Bypass creates a circular dependency: state → effect → geometry → bypass → state.
-    # Resolve by iterating until the bypass set stabilizes.
-    bypass_set = Set()  # indices of bypassed entries
-    # Pre-pass: entries after a terminal are unconditionally bypassed.
-    for i in range(len(plan)):
-        entry = plan[i]
-        side_config = entry.surface.resolver.resolve(entry.side, game_state)
-        if side_config.effect is TerminalEffect:
-            for j in range(i + 1, len(plan)):
-                bypass_set.add(j)
-            break
-    
-    converged = false
-    iteration = 0
-    while not converged and iteration < 10:
-        state = game_state.copy()
-        state_at = []
-        for i in range(len(plan)):
-            state_at.append(state.copy())
-            if i in bypass_set:
-                continue  # skip bypassed entries' state changes
-            entry = plan[i]
-            side_config = entry.surface.resolver.resolve(entry.side, state)
-            if side_config.state_change:
-                state = apply_state_change(side_config.state_change, state)
-        
-        # Compute bypass from geometry using state_at
-        new_bypass_set = compute_bypass_from_geometry(plan, state_at, origin, cursor)
-        # Preserve terminal bypass (unconditional)
-        new_bypass_set = new_bypass_set.union(terminal_bypass_set)
-        
-        converged = (new_bypass_set == bypass_set)
-        bypass_set = new_bypass_set
-        iteration += 1
-    # state_at is now consistent with the final bypass set.
-    # The loop typically converges in 1-2 iterations.
-    # Safety limit of 10 prevents infinite loops for pathological configurations.
-    
     # --- Pass 1: Backward geometry ---
     # Walk the plan in reverse. Record sub-chain boundaries.
     real_target = cursor
@@ -1085,64 +1078,30 @@ func plan_mixed(origin, cursor, plan, game_state):
     transform_buffer = []
     
     for i in reverse(range(len(plan))):
-        if i in bypass_set:
-            continue  # Skip bypassed entries (including post-terminal)
-
         entry = plan[i]
-        side_config = entry.surface.active_side_config(entry.side, state_at[i])
+        side_config = entry.surface.active_side_config(entry.side, game_state)
         
-        if side_config.effect is TransformativeEffect:
+        if side_config.effect != null and side_config.effect.is_transformative():
             transform_buffer.insert(0, entry)
-            # State: entry added to buffer, target updated with inverse transform
         
-        elif side_config.effect is ProjectiveEffect:
-            # Save the current transformative sub-chain.
-            if transform_buffer:
-                sub_chains.insert(0, {entries: transform_buffer, target: real_target})
-            
-            # Back-propagate through the projective surface.
-            hit_point = side_config.effect.back_propagate(
-                real_target, entry.surface, entry.side)
-            if hit_point == null:
-                # Bypass this entry — skip it and continue.
-                continue
-            
-            real_target = hit_point
+        elif side_config.effect != null and side_config.effect.is_terminal():
+            # Terminal: the arrow stops here. Clear post-terminal entries.
             transform_buffer = []
-            # State: sub-chain saved, target set to projective hit point, buffer reset
-        
-        elif side_config.effect is TerminalEffect:
-            # Project real_target onto the terminal surface using standard intersection.
             terminal_ray = Ray(real_target, Direction(real_target, segment_center(entry.surface.segment)))
             terminal_hit = intersect_line_with_gcircle(terminal_ray, entry.surface.segment)
             terminal_point = terminal_hit.point if terminal_hit else entry.surface.segment.start
-            # The terminal intersection finds where the aim line (from preceding chain toward real_target) crosses the terminal surface. This is the same carrier-intersection logic used for all planned surfaces.
-            
-            # Clear any post-terminal entries that were accumulated
-            # (they're unreachable — the arrow stops here).
-            transform_buffer = []
-            
-            # Save the sub-chain targeting the terminal point.
-            # No further entries after this will be processed
-            # (they were already accumulated and just cleared).
             real_target = terminal_point
-            # Record the terminal as the final step of the current sub-chain.
             sub_chains.insert(0, {entries: [], target: terminal_point, is_terminal: true})
-            # State: buffer cleared (post-terminal entries unreachable), target set to terminal hit point
-            # Continue backward to process entries BEFORE the terminal.
         
         elif side_config.effect == null:
-            # Pass-through: still produces a step (ensures 1:1 index correspondence with physical trace).
-            # No frame change, no state change, but the step IS recorded.
-            # (Do NOT skip — pass-through entries need a step for the merge algorithm.)
-            # State: entry recorded with null effect, no frame change
+            # Pass-through: still produces a step (ensures 1:1 index correspondence).
+            pass
     
     # Save the final sub-chain (from origin to real_target).
     if transform_buffer:
         sub_chains.insert(0, {entries: transform_buffer, target: real_target})
     
     # --- Pass 2: Forward origin fill ---
-    # Fill in origins for each sub-chain.
     current_origin = origin
     all_steps = []
     
@@ -1150,95 +1109,32 @@ func plan_mixed(origin, cursor, plan, game_state):
         subpath = plan_transformative_subchain(
             current_origin, sc.target, sc.entries, MobiusTransform.IDENTITY)
         all_steps.extend(subpath.steps)
-        # The next sub-chain's origin is this sub-chain's last hit point
-        # (or the projective/terminal hit point that separated them).
         current_origin = sc.target
     
     return PlannedPath(all_steps)
 ```
 
-The loop typically converges in 1-2 iterations. The safety limit of 10 iterations prevents infinite loops for pathological configurations.
-
-**`compute_bypass_from_geometry` definition:**
-
-```
-func compute_bypass_from_geometry(plan, state_at, origin, cursor):
-    # Lightweight image-chain check: determines which entries are geometrically unreachable.
-    bypass = Set()
-    image = cursor
-    for i in reverse(range(len(plan))):
-        entry = plan[i]
-        side_config = entry.surface.resolver.resolve(entry.side, state_at[i])
-        
-        if side_config.effect is TransformativeEffect:
-            new_image = cache.apply(image, side_config.effect.get_inverse_mobius())
-            # Check: does the line from new_image through image cross the surface carrier?
-            carrier = derive_carrier(entry.surface.segment)
-            hit = intersect_line_with_carrier(
-                Ray(new_image, Direction(new_image, image)), carrier)
-            if hit is null:
-                bypass.add(i)  # leg doesn't cross surface
-            else:
-                image = new_image
-        
-        elif side_config.effect is ProjectiveEffect:
-            hit_point = side_config.effect.back_propagate(image, entry.surface, entry.side)
-            if hit_point is null:
-                bypass.add(i)  # unreachable
-            else:
-                image = hit_point
-        
-        elif side_config.effect is TerminalEffect:
-            # Terminal: not bypassed (it's the endpoint).
-            # Post-terminal bypass handled in the pre-pass.
-            pass
-        
-        elif side_config.effect is null:
-            # Pass-through: not bypassed (produces a step).
-            pass
-    
-    return bypass
-```
-
-### 13.5 Bypass
-
-A **plan entry** (not a surface — a surface may appear multiple times in the plan) is **bypassed** when:
-
-| Effect type | Bypass condition |
-|-------------|-----------------|
-| Transformative | Image construction produces a leg that does not cross the surface. |
-| Projective | `back_propagate()` returns `null`. |
-| Terminal (interactive) | Never bypassed — the planned trace terminates at the block. The plan is valid up to that point. |
-
-Terminal sides that are non-interactive (`interactive = false`) cannot appear in the plan — they are filtered at plan construction time (§4.2), not during bypass computation.
-
-**Duplicate entries:** A surface may appear in the plan multiple times, including consecutively (§4.2). Each occurrence is evaluated independently for bypass. For example, a circle-inversion surface planned twice in a row: the first entry inverts, and the second entry un-inverts — both are reachable. But a line-reflection surface planned twice in a row: the first entry reflects, and the second would require the ray to return to the same line — which is unreachable after a line reflection. The second entry is bypassed, but the plan is **not rejected**. Bypassed entries are shown dimmed in the preview.
-
-Bypass is computed **every frame** as the cursor moves and shared across planning, trajectory, and visibility for that frame. *(Principle 13.)*
-
-**Terminology note:** three distinct skip mechanisms exist: **geometric bypass** (this section — plan entry is geometrically unreachable), **pass-through skip** (null effect, entry skipped in the planner), and **terminal truncation** (entries after a terminal are unreachable). All three exclude entries from the effective plan but for different reasons.
-
-### 13.6 Plan validation
+### 13.5 Plan validation
 
 A plan is valid for a given origin and cursor if all back-propagations succeed, all image-chain legs cross their surfaces, and the aim ray reaches the first planned surface.
 
 When invalid, the preview shows the partial path up to the first failure.
 
-An empty plan is valid — it means 'fire straight in the aim direction.' A plan where all entries are bypassed is effectively empty. A plan consisting only of interactive terminal entries is valid — the trace ends at the first terminal.
+An empty plan is valid — it means 'fire straight in the aim direction.' A plan consisting only of interactive terminal entries is valid — the trace ends at the first terminal.
 
-### 13.7 Side in planning
+### 13.6 Side in planning
 
 Each plan entry is `{surface, side}` — the side is selected by the player at plan-construction time (§4.2) and is **fixed** for that entry. This eliminates a potential circular dependency: the effect (and its Möbius transform) depends on the side, and the image-chain geometry depends on the effect. Because the side is known before the planner runs, the effect is unambiguous at every step.
 
-The planner never guesses or resolves the side — it reads `entry.side` and looks up the corresponding `SideConfig`. If the side's effect is null (pass-through), the entry is bypassed.
+The planner never guesses or resolves the side — it reads `entry.side` and looks up the corresponding `SideConfig`. If the side's effect is null (pass-through), the entry is skipped (no frame change, but a step is still recorded).
 
-### 13.8 State simulation during planning
+### 13.7 State simulation during planning
 
 Before computing the backward image chain, the planner walks the plan **forward** and applies state changes to a **temporary copy** of the game state. This ensures that later plan entries see the post-effect state of earlier entries. For example, if plan entry 1 breaks a surface (state change), and plan entry 2 relies on that surface being broken (conditional effect), the planner correctly sees the broken state when evaluating entry 2.
 
 The temporary state is discarded after planning — it does not affect the actual game state until the shot is fired and the physical trace runs.
 
-### 13.9 Planned trace as Steps
+### 13.8 Planned trace as Steps
 
 The planned trace uses the same `trace()` function as the physical trace (§12.1), with `mode = PLANNED`. It produces **Steps** with the same structure — same hitpoints, same `start`/`end` coordinates. The only difference is which effects are applied (plan-queue-based rather than `is_on_segment`-based), which affects the `frame` field.
 
@@ -1473,13 +1369,13 @@ func compute_visibility(origin, plan, scene, game_state) → VisibilityResult:
         
         side_config = entry.surface.active_side_config(entry.side, game_state)
         
-        if side_config.effect is TransformativeEffect:
+        if side_config.effect != null and side_config.effect.is_transformative():
             M = side_config.effect.get_mobius()
             current_frame = current_frame.compose(M)
             current_origin = cache.apply(current_origin, M.inverse())
             truncating_segments = lit_segments
         
-        elif side_config.effect is ProjectiveEffect:
+        elif side_config.effect != null and side_config.effect.is_projective():
             current_frame = MobiusTransform.IDENTITY
             if side_config.effect is CircleNormalProjection:
                 # Point source shifts to the circle center.
@@ -1487,13 +1383,11 @@ func compute_visibility(origin, plan, scene, game_state) → VisibilityResult:
                 truncating_segments = lit_segments
             else:
                 # Line normal or semi-circle directional: parallel ray source.
-                # All outgoing rays share the same direction but originate
-                # from different points on the lit sub-segment.
                 current_origin = null  # signals parallel-source mode
                 current_direction = side_config.effect.get_outgoing_direction()
                 truncating_segments = lit_segments
         
-        elif side_config.effect is TerminalEffect:
+        elif side_config.effect != null and side_config.effect.is_terminal():
             regions = []
             break
     
@@ -1721,28 +1615,7 @@ Plan:       [{M1, left}, {P, left}, {M2, right}]
 
 **Result:** two transformative sub-chains ({M1} and {M2}) separated by projective break point P. The frame resets to identity at P.
 
-### 16.5 Bypass
-
-**Scene:** A mirror and a plan that includes an unreachable surface.
-
-```
-Surface M: start=(200, 100), end=(200, 400), via=(200, 250)
-    Left: Reflection.
-
-Surface U: start=(200, 100), end=(200, 400), via=(200, 250)
-    Left: Reflection.
-    (Same geometry as M — this is M planned again.)
-
-Player:    position=(50, 300)
-Cursor:    (400, 300)
-Plan:      [{M, left}, {M, left}]   # same surface planned twice
-```
-
-**Planning:** After reflecting through M once, the image of cursor is at (0, 300). The aim line from (50, 300) to (0, 300) hits M at (200, 300), reflects, and continues to cursor. The second plan entry attempts to reflect again — but after a line reflection, the ray cannot return to the same line. The second entry's image construction produces a leg that does not cross M. **The second entry is bypassed.**
-
-**Preview:** first entry drawn normally (solid green). Second entry shown dimmed with a bypass indicator. The effective plan is just [{M, left}].
-
-### 16.6 State change (multi-shot)
+### 16.5 State change (multi-shot)
 
 **Scene:** A breakable wall blocking the target.
 
@@ -1769,7 +1642,7 @@ Initial flags: {"wall_intact": true}
 
 This is a multi-shot puzzle where the first shot changes the game state to make the second shot possible.
 
-### 16.7 Shot lifecycle walkthrough
+### 16.6 Shot lifecycle walkthrough
 
 End-to-end walkthrough for a single shot:
 
@@ -2021,10 +1894,8 @@ ricochet-game-v2/
 player_position + cursor_position + plan
         │
         ├──→ planned_trace (image chains / back-prop, PLANNED mode)
-        │       │ bypass determined during planning (entries that
-        │       │ can't produce valid legs are marked bypassed)
         │       ▼
-        │    effective_plan + planned steps
+        │    planned steps
         │
         ├──→ physical_trace (ray casting, PHYSICAL mode)
         │         │
@@ -2148,7 +2019,6 @@ Target surfaces display their effect color on each side plus a **gold outline** 
 |---------|--------|
 | Visibility region | White, semi-transparent fill |
 | Planned surface overlay | Numbered label, brightened |
-| Bypassed plan entry | Dimmed, with bypass indicator |
 
 ### 22.3 Surface side indicators
 
@@ -2347,7 +2217,6 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 ### Phase 4: Planning algorithm
 - `Planner` — image chain method for transformative sub-chains.
 - Plan construction input: click to add, right-click to remove.
-- Bypass computation.
 - Step tree: planned vs physical paths, divergence detection.
 - Preview shows aligned/diverged colors.
 
@@ -2461,13 +2330,13 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **UX7. Plan preview shows the plan.** The solid-colored path (ALIGNED + DIVERGED_PLANNED) forms a continuous path from the player toward the cursor. *(§4.3.)*
 
-**UX8. Bypassed entries are visible.** If a plan entry is bypassed, it is visually indicated as inactive — never silently dropped. *(§4.2.)*
+**UX8. Plan feedback is immediate.** The preview updates every frame as the cursor moves, showing which planned entries are active. *(§4.2.)*
 
 **UX9. Block surfaces stop the arrow.** When the arrow hits a terminal surface, it stops. No pass-through. *(§10.5.)*
 
 **UX10. State changes are visible during flight.** Surface state changes appear at the moment the arrow reaches the triggering hit point. *(§21.2.)*
 
-**UX11. Empty plan = fire straight.** With no plan entries, the arrow fires straight toward the cursor. *(§13.6.)*
+**UX11. Empty plan = fire straight.** With no plan entries, the arrow fires straight toward the cursor. *(§13.5.)*
 
 #### Tier 2: Systemic internal invariants
 
@@ -2483,7 +2352,7 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **S6. Aligned steps match.** Before divergence: same hit surface ID, side, and frame ID. Checked by provenance, not coordinates. *(§14.8.)*
 
-**S7. Per-entry state matches.** For aligned steps: planner's `state_at[i]` equals the physical trace's game state at step `i`. *(§13.8 + §14.8.)*
+**S7. Per-entry state matches.** For aligned steps: planner's `state_at[i]` equals the physical trace's game state at step `i`. *(§13.7 + §14.8.)*
 
 **S8. Forward-first hit ordering.** Selected hit has smallest `t > 0`. If no `t > 0`: most negative `t < 0`. *(§11.3.)*
 
@@ -2523,8 +2392,7 @@ Screenshot comparison for known test scenes at known positions. Catches renderin
 
 ### 30.1 Frame budget
 
-Preview must update **every frame at 60fps** (~16.6ms per frame). Target: preview computation (bypass + planning + physical trace + visibility + visual conversion) should complete in under **5ms** on a mid-range CPU, leaving ~11ms for rendering and input processing. The preview computation includes:
-- Bypass computation.
+Preview must update **every frame at 60fps** (~16.6ms per frame). Target: preview computation (planning + physical trace + visibility + visual conversion) should complete in under **5ms** on a mid-range CPU, leaving ~11ms for rendering and input processing. The preview computation includes:
 - Planning algorithm.
 - Physical trace (up to 256 steps).
 - Visibility computation.
@@ -2618,8 +2486,6 @@ In **release** builds: log the error and recover gracefully — skip the problem
 | **Surface** | Segment + per-side effect configuration + stable ID. |
 | **Side** | LEFT or RIGHT, determined by traversal direction (start → via/end). Uniform for all segments. |
 | **Plan** | Ordered list of `{surface, side}` entries the player intends the arrow to hit. Each entry specifies which surface and which side. |
-| **Bypass** | Excluding a planned surface that is geometrically irrelevant for the current aim. Computed every frame as the cursor moves. |
-| **Effective plan** | The plan with bypassed entries skipped (not removed — bypassed entries remain in the plan but are inactive). |
 | **Hit** | Where a ray meets a surface. Stored as a HitRecord with parameter, point, surface, side, provenance. |
 | **Step** | One leg of a path: start → end, with frame and hit info. |
 | **Step chain** | Ordered list of steps forming a continuous path. |

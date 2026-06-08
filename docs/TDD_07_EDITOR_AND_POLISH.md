@@ -2,6 +2,18 @@
 
 **Stages 61--67** | Level editor, test levels (worked examples), invariant sweep testing (160k combos), performance, visual polish
 
+### Stage Status
+
+| Stage | Topic | Status |
+|-------|-------|--------|
+| 61 | Basic Level Editor -- Surface Placement | Todo |
+| 62 | Level Editor -- Effects, Targets, Spawn | Todo |
+| 63 | Level Editor -- Validation and Test Mode | Todo |
+| 64 | Test Levels for Worked Examples | Todo |
+| 65 | Invariant Sweep Testing | Todo |
+| 66 | Performance Optimization | Todo |
+| 67 | Visual Polish | Todo |
+
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
 **Feedback Loop Protocol (applies to every stage):**
@@ -370,7 +382,7 @@ Stage 63 (editor with validation -- levels can be created and validated), Stage 
 | Resource | `resources/levels/test_s16_2_circle_inversion.tres` -- §16.2 circle inversion | §16.2 |
 | Resource | `resources/levels/test_s16_3_divergence.tres` -- §16.3 divergence | §16.3 |
 | Resource | `resources/levels/test_s16_4_projective.tres` -- §16.4 projective break point | §16.4 |
-| Resource | `resources/levels/test_s16_5_bypass.tres` -- §16.5 bypass (same mirror planned twice) | §16.5 |
+| Resource | `resources/levels/test_s16_5_double_hit.tres` -- §16.5 same mirror planned twice | §16.5 |
 | Resource | `resources/levels/test_s16_6_state_change.tres` -- §16.6 state change (breakable wall + target) | §16.6 |
 | Resource | `resources/levels/test_all_effects.tres` -- **7th test level:** contains at least one surface of every effect type (reflection, circle inversion, rigid motion, line-normal projection, circle-normal projection, semicircle-directional projection, block, pass-through, compound transformative, state-conditional with CycleOverride). Includes a solvable puzzle path whose solution requires the arrow to interact with every effect type (not just that every type exists in the level — the solution path must touch reflection, inversion, rigid motion, at least one projective effect, a state-conditional surface, and a compound effect). Included in the Stage 65 sweep. | §16, §17.4 |
 | Script | `tests/test_stage64_worked_examples.gd` -- automated comparison tests for all worked examples | §29.4 |
@@ -386,7 +398,7 @@ Stage 63 (editor with validation -- levels can be created and validated), Stage 
 6. **`test_stage64_s16_3_block_stops_arrow`**: Same level. Expected: the arrow is stopped by the Block wall W. No steps beyond W. Validates: UX9.
 7. **`test_stage64_s16_4_projective_break`**: Load `test_s16_4_projective.tres`. M1 at x=100 (Reflection), P at x=250 (LineNormalProjection), M2 at x=400 (Reflection). Expected: trace shows Reflection off M1, Projection at P (resets frame), Reflection off M2. Frame reset is visible in step data. Validates: §16.4, S10.
 8. **`test_stage64_s16_4_frame_reset`**: Same level. Expected: frame after P is the identity frame (projective resets frame). Step at P has `step_type` involving projection. Validates: S10.
-9. **`test_stage64_s16_5_bypass`**: Load `test_s16_5_bypass.tres`. Same mirror planned twice. Expected: first hit is planned, second hit uses bypass (the mirror is hit again in a subsequent step). Bypass entries are visible. Validates: §16.5, UX8.
+9. **`test_stage64_s16_5_double_hit`**: Load `test_s16_5_double_hit.tres`. Same mirror planned twice. Expected: first hit is planned, second hit occurs in a subsequent step (the mirror is hit again). Both hits are visible. Validates: §16.5.
 10. **`test_stage64_s16_6_state_change`**: Load `test_s16_6_state_change.tres`. Breakable wall + target behind it. Expected: first shot breaks the wall (state change). Second shot passes through broken wall and hits target. State change is recorded. Validates: §16.6, S19.
 11. **`test_stage64_all_levels_load_without_errors`**: Load all 6 test levels. Expected: all load successfully, validation passes for each. Validates: editor serialization correctness.
 12. **`test_stage64_S3_determinism_per_level`**: For each test level, run the trace twice with identical inputs. Expected: both runs produce identical step trees. Validates: S3.
@@ -400,7 +412,7 @@ Stage 63 (editor with validation -- levels can be created and validated), Stage 
 - [ ] Load `test_s16_2_circle_inversion.tres`. Fire toward the circle. Arrow's path is inverted through the circle. Visual confirms the curved-to-straight (or vice versa) transformation.
 - [ ] Load `test_s16_3_divergence.tres`. Plan to hit mirror M, but wall W is in the way. Preview shows divergence (red/orange path segments). Arrow hits the wall and stops.
 - [ ] Load `test_s16_4_projective.tres`. Arrow bounces off M1, projects at P, bounces off M2. Frame reset at P is visually apparent (preview color or style change).
-- [ ] Load `test_s16_5_bypass.tres`. Plan the same mirror twice. Arrow bounces off the mirror, travels, and hits the mirror again. Both hits are visible in the preview.
+- [ ] Load `test_s16_5_double_hit.tres`. Plan the same mirror twice. Arrow bounces off the mirror, travels, and hits the mirror again. Both hits are visible in the preview.
 - [ ] Load `test_s16_6_state_change.tres`. First shot hits breakable wall -- wall breaks. Second shot passes through and hits target. Level completes.
 - [ ] Run full GUT suite. All worked example tests pass alongside all prior tests.
 
@@ -414,7 +426,6 @@ Stage 63 (editor with validation -- levels can be created and validated), Stage 
 | S11 | Three points on carrier | Unit test: test level surfaces satisfy S11 | Inherited |
 | S16 | No NaN/Inf in output | Unit test: all trace outputs are finite | Inherited |
 | S19 | Trace preserves real state | Unit test: §16.6 state change test | Inherited |
-| UX8 | Bypassed entries visible | Unit test: §16.5 bypass test | Inherited |
 | UX9 | Block stops arrow | Unit test: §16.3 block test | Inherited |
 
 ### Regression Checklist
@@ -431,7 +442,7 @@ Stage 63 (editor with validation -- levels can be created and validated), Stage 
 
 ### Expected Visual State
 
-No new visual changes to the game itself. In the editor, loading any test level shows the specific surface configuration described in §16. In test mode, the worked example scenarios play out visually: bounces, inversions, divergences, projections, bypasses, and state changes are all visible and match the spec's descriptions.
+No new visual changes to the game itself. In the editor, loading any test level shows the specific surface configuration described in §16. In test mode, the worked example scenarios play out visually: bounces, inversions, divergences, projections, and state changes are all visible and match the spec's descriptions.
 
 ### Feedback Loop Protocol
 
@@ -455,7 +466,7 @@ See standard protocol at top of document.
 | `resources/levels/test_s16_2_circle_inversion.tres` | Create | §16.2 circle inversion test level |
 | `resources/levels/test_s16_3_divergence.tres` | Create | §16.3 divergence test level |
 | `resources/levels/test_s16_4_projective.tres` | Create | §16.4 projective break point test level |
-| `resources/levels/test_s16_5_bypass.tres` | Create | §16.5 bypass test level |
+| `resources/levels/test_s16_5_double_hit.tres` | Create | §16.5 double-hit test level |
 | `resources/levels/test_s16_6_state_change.tres` | Create | §16.6 state change test level |
 | `resources/levels/test_all_effects.tres` | Create | All-effects test level (every effect type + CycleOverride) |
 | `tests/test_stage64_worked_examples.gd` | Create | Automated comparison tests for worked examples |
@@ -465,32 +476,32 @@ See standard protocol at top of document.
 ## Stage 65: Invariant Sweep Testing
 
 ### Overview
-This is the most critical testing stage in the entire project. Implement a grid sweep that tests ALL 30 invariants across 160,000 player-position/cursor-position combinations per test level (20x20 player grid times 20x20 cursor grid), plus custom near-degenerate positions. Every invariant that has been introduced across Stages 1--64 must now be fully and automatically verified at scale. Failures produce detailed reports with full context for debugging.
+This is the most critical testing stage in the entire project. Implement a grid sweep that tests ALL 29 invariants across 160,000 player-position/cursor-position combinations per test level (20x20 player grid times 20x20 cursor grid), plus custom near-degenerate positions. Every invariant that has been introduced across Stages 1--64 must now be fully and automatically verified at scale. Failures produce detailed reports with full context for debugging.
 
 The sweep includes 7 test levels: the 6 worked-example levels (§16.1-16.6) plus the all-effects test level from Stage 64.
 
 ### Prerequisites
-Stage 64 (test levels exist with known-good configurations), Stage 60 (all game systems complete -- all 30 invariants are implementable and testable).
+Stage 64 (test levels exist with known-good configurations), Stage 60 (all game systems complete -- all 29 invariants are implementable and testable).
 
 ### What Is Introduced
 
 | Category | Item | Spec Reference |
 |----------|------|----------------|
 | Script | `tests/test_stage65_invariant_sweep.gd` -- grid sweep test harness | §29.3 |
-| Script | `scripts/testing/invariant_checker.gd` -- checks all 30 invariants for a given (player_pos, cursor_pos, plan) configuration | §29.3 |
+| Script | `scripts/testing/invariant_checker.gd` -- checks all 29 invariants for a given (player_pos, cursor_pos, plan) configuration | §29.3 |
 | Script | `scripts/testing/sweep_reporter.gd` -- generates detailed failure reports | §29.3 |
 | Behavior | 20x20 player grid x 20x20 cursor grid = 160,000 combinations per level | §29.3 |
 | Behavior | Custom positions: per-level `test_positions` array (surface endpoints, near-degenerate points) used as BOTH additional player AND cursor positions | §29.3 |
-| Behavior | All 30 invariants checked at every combination | §29.3 |
+| Behavior | All 29 invariants checked at every combination | §29.3 |
 | Behavior | Failure report: first failure with full context (player pos, cursor pos, plan, which invariant, actual vs expected) | §29.3 |
 
 ### Unit Tests Added
 
-1. **`test_stage65_sweep_s16_1_two_mirror`**: Run full 160,000-combination sweep on `test_s16_1_two_mirror.tres`. All 30 invariants checked at every combination. Expected: zero failures. Validates: all invariants hold at scale for simple reflection.
+1. **`test_stage65_sweep_s16_1_two_mirror`**: Run full 160,000-combination sweep on `test_s16_1_two_mirror.tres`. All 29 invariants checked at every combination. Expected: zero failures. Validates: all invariants hold at scale for simple reflection.
 2. **`test_stage65_sweep_s16_2_circle_inversion`**: Full sweep on `test_s16_2_circle_inversion.tres`. Expected: zero failures. Validates: all invariants for inversion geometry.
 3. **`test_stage65_sweep_s16_3_divergence`**: Full sweep on `test_s16_3_divergence.tres`. Expected: zero failures. Validates: all invariants including divergence-related (S4, UX1, UX2).
 4. **`test_stage65_sweep_s16_4_projective`**: Full sweep on `test_s16_4_projective.tres`. Expected: zero failures. Validates: all invariants including projective (S10, S18).
-5. **`test_stage65_sweep_s16_5_bypass`**: Full sweep on `test_s16_5_bypass.tres`. Expected: zero failures. Validates: all invariants including bypass (UX8).
+5. **`test_stage65_sweep_s16_5_double_hit`**: Full sweep on `test_s16_5_double_hit.tres`. Expected: zero failures. Validates: all invariants including double-hit scenarios.
 6. **`test_stage65_sweep_s16_6_state_change`**: Full sweep on `test_s16_6_state_change.tres`. Expected: zero failures. Validates: all invariants including state (S7, S19, UX10).
 7. **`test_stage65_custom_positions_included`**: Verify that per-level `test_positions` are tested as both player and cursor positions, in addition to the 20x20 grid. Expected: total combinations > 160,000 when custom positions are present. Validates: custom position coverage.
 8. **`test_stage65_failure_report_format`**: Inject a known invariant violation (e.g., NaN in output). Expected: failure report includes player_pos, cursor_pos, plan, invariant ID ("S16"), actual value ("NaN"), expected condition ("finite"). Validates: report quality.
@@ -505,7 +516,7 @@ Stage 64 (test levels exist with known-good configurations), Stage 60 (all game 
 17. **`test_stage65_S16_no_nan_inf`**: Across ALL 160,000+ combinations: no NaN or Inf values appear anywhere in the step tree, visibility regions, or preview data. Expected: zero violations. Validates: S16 at exhaustive scale.
 18. **`test_stage65_S18_determinant_nonzero`**: Across all sweep positions: every Mobius frame matrix encountered during tracing has non-zero determinant. Expected: zero violations. Validates: S18 at scale.
 19. **`test_stage65_UX1_UX2_varying_plans`**: For each test level and a subset of (player, cursor) pairs (100 pairs): test with the empty plan AND with each single-surface plan (one entry per interactive surface side). UX1 and UX2 must hold for ALL plans, not just the fixed plan. Validates: UX1/UX2 across plan space.
-20. **`test_stage65_fuzz_optional`**: Generate 1000 random (player, cursor) pairs within level bounds. Check all 30 invariants for each. Expected: zero violations. *(Optional for CI, required for release.)*
+20. **`test_stage65_fuzz_optional`**: Generate 1000 random (player, cursor) pairs within level bounds. Check all 29 invariants for each. Expected: zero violations. *(Optional for CI, required for release.)*
 
 > **Note:** This test extends the fixed-plan sweep to cover the combinatorial plan space. While exhaustive coverage of all possible plans is computationally prohibitive, testing the empty plan plus all single-entry plans provides good coverage of plan-dependent UX invariants.
 
@@ -523,11 +534,11 @@ Stage 64 (test levels exist with known-good configurations), Stage 60 (all game 
 - [ ] If any failures occur, examine the failure report output. Verify it contains: player position, cursor position, plan state, which invariant failed, actual vs expected values.
 - [ ] Verify that the sweep covers the full 20x20 x 20x20 grid (check test output for "160,000 combinations tested" or similar).
 - [ ] Verify custom positions are included (test output mentions additional positions beyond the grid).
-- [ ] All 30 invariants show as tested in the sweep report summary.
+- [ ] All 29 invariants show as tested in the sweep report summary.
 
 ### Invariants That Must Hold
 
-This stage validates ALL 30 invariants at scale. Every invariant transitions to "fully testable" status.
+This stage validates ALL 29 invariants at scale. Every invariant transitions to "fully testable" status.
 
 | Invariant ID | Description | How Verified | New This Stage? |
 |-------------|-------------|-------------|----------------|
@@ -557,7 +568,6 @@ This stage validates ALL 30 invariants at scale. Every invariant transitions to 
 | UX5 | Undo fully restores | Sweep: state-change level undo tested | Fully testable |
 | UX6 | All targets reachable | Sweep: at least one valid path exists per level | Fully testable |
 | UX7 | Solid path from player toward cursor | Sweep: first segment is solid toward cursor | Fully testable |
-| UX8 | Bypassed entries visible | Sweep: bypass test level verified | Fully testable |
 | UX9 | Block stops arrow | Sweep: block surfaces terminate trace | Fully testable |
 | UX10 | State changes visible during flight | Sweep: state-change level verified | Fully testable |
 | UX11 | Empty plan = fire straight | Sweep: empty plan produces straight line | Fully testable |
@@ -597,13 +607,13 @@ See standard protocol at top of document.
 | File | Action | Purpose |
 |------|--------|---------|
 | `tests/test_stage65_invariant_sweep.gd` | Create | Grid sweep test harness (GUT test cases) |
-| `scripts/testing/invariant_checker.gd` | Create | Checks all 30 invariants for a given configuration |
+| `scripts/testing/invariant_checker.gd` | Create | Checks all 29 invariants for a given configuration |
 | `scripts/testing/sweep_reporter.gd` | Create | Generates detailed failure reports |
 | `resources/levels/test_s16_1_two_mirror.tres` | Modify | Add `test_positions` array for custom sweep positions |
 | `resources/levels/test_s16_2_circle_inversion.tres` | Modify | Add `test_positions` array |
 | `resources/levels/test_s16_3_divergence.tres` | Modify | Add `test_positions` array |
 | `resources/levels/test_s16_4_projective.tres` | Modify | Add `test_positions` array |
-| `resources/levels/test_s16_5_bypass.tres` | Modify | Add `test_positions` array |
+| `resources/levels/test_s16_5_double_hit.tres` | Modify | Add `test_positions` array |
 | `resources/levels/test_s16_6_state_change.tres` | Modify | Add `test_positions` array |
 | `resources/levels/test_all_effects.tres` | Modify | Add `test_positions` array |
 
@@ -668,7 +678,7 @@ Stage 65 (invariant sweep provides the regression baseline for verifying optimiz
 5. **`test_stage66_spatial_index_finds_all`**: Create 200 surfaces. Query spatial index for surfaces near a point. Expected: returns the same set as a brute-force scan (no false negatives). Validates: spatial index correctness.
 6. **`test_stage66_spatial_index_no_false_negatives`**: For 1,000 random query points, verify spatial index returns a superset of the brute-force result. Expected: zero missed surfaces. Validates: §30.2 correctness.
 7. **`test_stage66_preview_under_5ms`**: Measure preview computation time for test levels with 10 surfaces, averaged over 100 runs. Expected: average < 5ms. Validates: §30.1 performance target. (This test may be skipped on slow CI machines; marked as performance-only.)
-8. **`test_stage66_sweep_regression`**: Re-run the full Stage 65 invariant sweep on all test levels AFTER applying all optimizations. Expected: zero failures. Validates: optimizations preserve all 30 invariants.
+8. **`test_stage66_sweep_regression`**: Re-run the full Stage 65 invariant sweep on all test levels AFTER applying all optimizations. Expected: zero failures. Validates: optimizations preserve all 29 invariants.
 9. **`test_stage66_incremental_vs_full_sweep`**: For 1,000 sweep positions: compute full trace and incremental trace (with small cursor delta). Expected: identical results for all 1,000 positions. Validates: incremental correctness at scale.
 10. **`test_stage66_packed_float64_no_precision_loss`**: Compare PackedFloat64Array batch results against standard float64 scalar results for known edge cases (very large coordinates, very small deltas, near-tangent intersections). Expected: identical within machine epsilon. Validates: no precision degradation.
 11. **`test_stage66_numerical_large_coordinates`**: Surfaces and player at coordinates > 10,000 units. All invariants hold. No NaN/Inf. Validates: §31.
@@ -690,7 +700,7 @@ Stage 65 (invariant sweep provides the regression baseline for verifying optimiz
 
 | Invariant ID | Description | How Verified | New This Stage? |
 |-------------|-------------|-------------|----------------|
-| ALL (S1--S19, UX1--UX11) | All 30 invariants | Full Stage 65 sweep re-run after optimization | Inherited (regression) |
+| ALL (S1--S19, UX1--UX11) | All 29 invariants | Full Stage 65 sweep re-run after optimization | Inherited (regression) |
 
 ### Regression Checklist
 
@@ -789,7 +799,7 @@ Stage 66 (performance optimized, all invariants verified -- visual polish must n
 19. **`test_stage67_sound_break`**: Arrow hits a breakable wall. Expected: `break.wav` plays. Validates: §28 sound.
 20. **`test_stage67_sound_target_hit`**: Arrow hits a target. Expected: `target_hit.wav` plays. Validates: §28 sound.
 21. **`test_stage67_sound_level_complete`**: All targets hit, level complete. Expected: `level_complete.wav` plays. Validates: §28 sound.
-22. **`test_stage67_invariant_sweep_regression`**: Re-run the full Stage 65 invariant sweep. Expected: zero failures. Visual changes must not affect trace/math correctness. Validates: all 30 invariants still hold.
+22. **`test_stage67_invariant_sweep_regression`**: Re-run the full Stage 65 invariant sweep. Expected: zero failures. Visual changes must not affect trace/math correctness. Validates: all 29 invariants still hold.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 
@@ -812,7 +822,7 @@ Stage 66 (performance optimized, all invariants verified -- visual polish must n
 
 | Invariant ID | Description | How Verified | New This Stage? |
 |-------------|-------------|-------------|----------------|
-| ALL (S1--S19, UX1--UX11) | All 30 invariants | Full Stage 65 sweep re-run after visual polish | Inherited (regression) |
+| ALL (S1--S19, UX1--UX11) | All 29 invariants | Full Stage 65 sweep re-run after visual polish | Inherited (regression) |
 
 ### Regression Checklist
 
@@ -897,7 +907,7 @@ The following spec features are intentionally deferred per GAME_SPEC.md §33 and
 
 ## Appendix A: Invariant Introduction Map (All 30 Invariants)
 
-All 30 invariants reach "fully testable" status by Stage 65 (invariant sweep testing). Stage 66 and Stage 67 re-run the full sweep to confirm no regressions.
+All 29 invariants reach "fully testable" status by Stage 65 (invariant sweep testing). Stage 66 and Stage 67 re-run the full sweep to confirm no regressions.
 
 | # | Invariant | Full ID | Introduced | First Unit-Tested | First Manually Tested | Fully Sweep-Tested |
 |---|-----------|---------|-----------|-------------------|----------------------|-------------------|
@@ -927,10 +937,9 @@ All 30 invariants reach "fully testable" status by Stage 65 (invariant sweep tes
 | 24 | Undo fully restores | UX5 | Stage 32 | Stage 32 | Stage 32 | Stage 65 |
 | 25 | All targets reachable | UX6 | Stage 55 | Stage 55 | Stage 55 | Stage 65 |
 | 26 | Solid path from player toward cursor | UX7 | Stage 5 | Stage 5 | Stage 5 | Stage 65 |
-| 27 | Bypassed entries visible | UX8 | Stage 29 | Stage 29 | Stage 29 | Stage 65 |
-| 28 | Block stops arrow | UX9 | Stage 13 | Stage 13 | Stage 13 | Stage 65 |
-| 29 | State changes visible during flight | UX10 | Stage 57 | Stage 57 | Stage 57 | Stage 65 |
-| 30 | Empty plan = fire straight | UX11 | Stage 5 (partial) | Stage 15 | Stage 15 | Stage 65 |
+| 27 | Block stops arrow | UX9 | Stage 13 | Stage 13 | Stage 13 | Stage 65 |
+| 28 | State changes visible during flight | UX10 | Stage 57 | Stage 57 | Stage 57 | Stage 65 |
+| 29 | Empty plan = fire straight | UX11 | Stage 5 (partial) | Stage 15 | Stage 15 | Stage 65 |
 
 ---
 
@@ -950,10 +959,10 @@ All 30 invariants reach "fully testable" status by Stage 65 (invariant sweep tes
 | Interactive test items (Stages 1--60) | ~185 |
 | Interactive test items (Stages 61--67) | ~62 |
 | **Total interactive test items** | **~247** |
-| Invariants fully sweep-tested | **30 / 30** |
+| Invariants fully sweep-tested | **29 / 29** |
 | Sweep combinations per level | 160,000+ |
 | Test levels in sweep | 7 |
-| **Total sweep checks** | **~1,120,000+ x 30 invariants = ~33.6M invariant checks** |
+| **Total sweep checks** | **~1,120,000+ x 29 invariants = ~32.5M invariant checks** |
 
 ---
 
@@ -1008,7 +1017,7 @@ This table provides the definitive cross-reference for every invariant across th
 |--------|----------|-------|
 | Introduced | 25 | Step tree alignment: aligned steps trace to same plan entry |
 | First unit-tested | 25 | Provenance chain comparison |
-| Reinforced | 26, 29, 37 | Expanded with divergence and bypass |
+| Reinforced | 26, 29, 37 | Expanded with divergence |
 | Fully sweep-tested | 65 | Checked at every combination |
 | Regression-verified | 66, 67 | Full sweep re-run |
 
@@ -1048,7 +1057,7 @@ This table provides the definitive cross-reference for every invariant across th
 |--------|----------|-------|
 | Introduced | 16 | Just-hit surface excluded from next intersection |
 | First unit-tested | 16 | Re-hit prevention test |
-| Reinforced | 18, 25, 29 | Bypass explicitly manages exclusion |
+| Reinforced | 18, 25, 29 | Exclusion management |
 | Fully sweep-tested | 65 | Checked at every combination |
 | Regression-verified | 66, 67 | Full sweep re-run |
 
@@ -1222,17 +1231,6 @@ This table provides the definitive cross-reference for every invariant across th
 | First unit-tested | 5 | `test_stage5_preview_exists_when_cursor_differs` |
 | Expanded | 15, 17, 25 | Preview solidness extends to planned paths |
 | Fully sweep-tested | 65 | `test_stage65_UX7_solid_path` |
-| Regression-verified | 66, 67 | Full sweep re-run |
-
-### UX8: Bypassed entries visible
-
-| Aspect | Stage(s) | Notes |
-|--------|----------|-------|
-| Introduced | 29 | Bypass system: surfaces hit multiple times are visible in preview |
-| First unit-tested | 29 | Bypass visibility check |
-| First manually tested | 29 | Plan same surface twice, observe both hits in preview |
-| Reinforced | 64 | §16.5 bypass test level |
-| Fully sweep-tested | 65 | Checked at every combination |
 | Regression-verified | 66, 67 | Full sweep re-run |
 
 ### UX9: Block stops arrow
