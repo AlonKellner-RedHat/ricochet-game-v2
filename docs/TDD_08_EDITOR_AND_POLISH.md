@@ -1,4 +1,4 @@
-# TDD Document 7: Editor and Polish
+# TDD Document 8: Editor and Polish
 
 **Stages 61--67** | Level editor, test levels (worked examples), invariant sweep testing (160k combos), performance, visual polish
 

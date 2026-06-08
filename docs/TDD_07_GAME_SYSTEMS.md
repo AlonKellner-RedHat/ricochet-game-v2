@@ -1,4 +1,4 @@
-# TDD Document 6: Game Systems
+# TDD Document 7: Game Systems
 
 **Stages 52--60** | State-conditional surfaces, multi-shot puzzles, targets, win condition, game loop, menus, HUD, save system
 

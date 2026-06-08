@@ -60,4 +60,4 @@ Each stage follows the feedback loop protocol:
 ## Key References
 
 - `GAME_SPEC.md` — Single source of truth for game design (25 core principles in section 2)
-- `docs/TDD_01_FOUNDATION.md` through `docs/TDD_07_EDITOR_AND_POLISH.md` — Stage-by-stage implementation guide
+- `docs/TDD_01_FOUNDATION.md` through `docs/TDD_08_EDITOR_AND_POLISH.md` — Stage-by-stage implementation guide
