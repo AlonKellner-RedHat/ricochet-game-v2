@@ -39,6 +39,9 @@ func speed_up() -> void:
 func is_flying() -> bool:
 	return _flying
 
+func get_arrow_position() -> Vector2:
+	return _arrow_position
+
 func _process(delta: float) -> void:
 	if not _flying or _path == null:
 		return

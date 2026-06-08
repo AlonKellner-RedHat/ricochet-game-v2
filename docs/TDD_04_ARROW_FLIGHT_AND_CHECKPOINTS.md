@@ -6,7 +6,7 @@
 
 | Stage | Topic | Status |
 |-------|-------|--------|
-| 31 | Arrow Flight with Plan | Partial (arrow flight works; camera tracking not implemented) |
+| 31 | Arrow Flight with Plan | Done |
 | 32 | Checkpoint System | Todo |
 | 33 | Plan Retained After Shot | Done |
 

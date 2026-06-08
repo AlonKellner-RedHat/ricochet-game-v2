@@ -2,6 +2,7 @@ extends Node2D
 
 @export var gravity := Vector2(0, 0)
 @export var room_rect := Rect2(560, 240, 800, 600)
+@export var level_bounds := Rect2(0, 0, 1920, 1080)
 @export var build_room := true
 
 @export var passthrough_lines: Array[Vector4] = []

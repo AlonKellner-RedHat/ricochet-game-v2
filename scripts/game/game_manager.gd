@@ -8,6 +8,7 @@ var _arrow_animator: Node2D
 var _path_renderer: Node2D
 var _level_settings: Node2D
 var _plan_hud: Control
+var _camera: Camera2D
 
 var plan := PlanManager.new()
 var click_detector := ClickDetector.new()
@@ -22,11 +23,27 @@ func _ready() -> void:
 	_path_renderer = parent.get_node_or_null("PathRenderer")
 	_level_settings = parent
 	_plan_hud = parent.get_node_or_null("PlanHUD")
+	_camera = parent.get_node_or_null("Camera")
 	if _arrow_animator:
 		_arrow_animator.flight_completed.connect(_on_flight_completed)
+	if _camera and _level_settings and "level_bounds" in _level_settings:
+		var bounds: Rect2 = _level_settings.level_bounds
+		_camera.limit_left = int(bounds.position.x)
+		_camera.limit_top = int(bounds.position.y)
+		_camera.limit_right = int(bounds.end.x)
+		_camera.limit_bottom = int(bounds.end.y)
 
 func _process(_delta: float) -> void:
+	_update_camera()
 	_update_hover()
+
+func _update_camera() -> void:
+	if not _camera:
+		return
+	if _arrow_animator and _arrow_animator.is_flying():
+		_camera.global_position = _arrow_animator.get_arrow_position()
+	elif _player:
+		_camera.global_position = _player.global_position
 
 func _update_hover() -> void:
 	if not _cursor or not _level_settings:
