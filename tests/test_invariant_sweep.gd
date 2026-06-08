@@ -70,11 +70,12 @@ func test_sweep_with_plans() -> void:
 		var checker := InvariantChecker.new()
 		checker.setup(scene)
 
-		var runner := SweepRunner.new().configure(3, 5, 42)
+		var runner := SweepRunner.new().configure(5, 10, 42)
 		if "room_rect" in scene:
 			var rect: Rect2 = scene.room_rect
 			runner.set_bounds(rect.position + Vector2(10, 10), rect.position + rect.size - Vector2(10, 10))
-		var positions := runner.build_positions()
+		var poi := runner._extract_points_of_interest(scene)
+		var positions := runner.build_positions(poi)
 
 		for plan in plans:
 			for player_pos in positions:
