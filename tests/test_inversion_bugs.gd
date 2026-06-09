@@ -171,3 +171,75 @@ func test_step4_segment_exclusion_after_renorm() -> void:
 		gut.p("Steps 10 and 13 same start: %s (dist=%.4f)" % [repeating, s10.start.distance_to(s13.start)])
 
 	assert_lt(path.steps.size(), 50, "Should not loop (got %d steps)" % path.steps.size())
+
+# === BUG 2: Post-inversion aim point ignores surfaces ===
+
+func test_bug2_reproduce_aim_ignores_surfaces() -> void:
+	var surfs := _build_scene_surfaces()
+	var player := Vector2(1301.632, 932.631)
+	var cursor := Vector2(1112.158, 507.941)
+	var aim := Direction.new(player, cursor)
+	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	gut.p("Steps: %d" % path.steps.size())
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		var hit_info := "no_hit"
+		if s.hit != null:
+			hit_info = "t=%.4f on_seg=%s seg_line=%s" % [s.hit.t, s.hit.on_segment, s.hit.segment.is_line()]
+		gut.p("  [%d] fid=%d start=%s end=%s is_arc=%s %s" % [
+			i, s.frame_id, s.start, s.end, s.is_arc_step, hit_info])
+	# After inversion, the trace should still interact with walls (block surfaces)
+	# The user reports steps 2-4 are all escape/no_hit, passing through walls
+	var escape_count := 0
+	for s in path.steps:
+		var step: Tracer.Step = s
+		if step.hit == null:
+			escape_count += 1
+	gut.p("Escape (no_hit) steps: %d out of %d" % [escape_count, path.steps.size()])
+	# There should be at most 2 escape steps (forward + return from infinity)
+	# The user sees 3 escape steps passing through blocking surfaces
+	assert_lt(escape_count, 3, "Should not have multiple escape steps passing through walls")
+
+func test_bug2_aim_point_frame_analysis() -> void:
+	var surfs := _build_scene_surfaces()
+	var player := Vector2(1301.632, 932.631)
+	var cursor := Vector2(1112.158, 507.941)
+	var aim := Direction.new(player, cursor)
+	gut.p("aim_point (direction.end) = %s" % aim.end)
+	gut.p("Player = %s, Cursor = %s" % [player, cursor])
+
+	# Trace and capture per-step details about aim injection
+	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+
+	# Check: does step 1 hit the inversion surface?
+	var found_inversion_hit := false
+	var inversion_step := -1
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		if s.hit != null and s.hit.on_segment and not s.hit.segment.is_line():
+			found_inversion_hit = true
+			inversion_step = i
+			gut.p("Inversion hit at step %d, point=%s, frame_id after=%s" % [
+				i, s.end,
+				path.steps[i + 1].frame_id if i + 1 < path.steps.size() else "N/A"])
+			break
+	assert_true(found_inversion_hit, "Should hit the inversion surface")
+
+	# Check: what is the first post-inversion step?
+	if inversion_step >= 0 and inversion_step + 1 < path.steps.size():
+		var post := path.steps[inversion_step + 1] as Tracer.Step
+		gut.p("Post-inversion step: start=%s end=%s fid=%d hit=%s is_arc=%s" % [
+			post.start, post.end, post.frame_id,
+			"hit" if post.hit != null else "NO HIT",
+			post.is_arc_step])
+		# The post-inversion step ends at the aim image — check if that's where it ends
+		var inv_seg := Segment.new(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
+		var inv_carrier := inv_seg.get_carrier()
+		var inv_eff := CircleInversionEffect.new(inv_carrier)
+		var aim_image := inv_eff.get_mobius().apply(cursor)
+		gut.p("aim_point = %s" % aim.end)
+		gut.p("aim_image (M(cursor)) = %s" % aim_image)
+		gut.p("Post-inversion step end = %s" % post.end)
+		gut.p("Distance to aim_image: %.4f" % post.end.distance_to(aim_image))
+
+	assert_true(true, "Diagnostic — check output")
