@@ -13,7 +13,7 @@ b = Vector2(1920, 0)
 [node name="Main" type="Node2D" unique_id=1606209940]
 script = ExtResource("2")
 passthrough_lines = Array[Vector4]([Vector4(800, 240, 800, 840), Vector4(1100, 240, 1100, 840)])
-inversion_left_arcs = PackedFloat64Array(960, 440, 960, 640, 1060, 540)
+inversion_left_arcs = PackedFloat64Array(1100, 440, 1100, 640, 1200, 540)
 
 [node name="Background" type="ColorRect" parent="." unique_id=1610522736]
 offset_right = 1920.0
@@ -27,7 +27,7 @@ position = Vector2(0, 1000)
 shape = SubResource("floor_shape")
 
 [node name="Player" parent="." unique_id=636081454 instance=ExtResource("1")]
-position = Vector2(960, 540)
+position = Vector2(700, 540)
 
 [node name="Cursor" type="Node2D" parent="." unique_id=114423737]
 script = ExtResource("3")

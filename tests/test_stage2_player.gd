@@ -18,7 +18,7 @@ func test_stage2_player_collision_radius() -> void:
 	assert_eq(circle.radius, 12.0, "Player collision radius should be 12")
 
 func test_stage2_player_initial_position() -> void:
-	assert_eq(_player.position, Vector2(960, 540), "Player should spawn at center")
+	assert_eq(_player.position, Vector2(700, 540), "Player should spawn at configured position")
 
 func test_stage2_player_moves_on_input() -> void:
 	var start_pos := _player.position
