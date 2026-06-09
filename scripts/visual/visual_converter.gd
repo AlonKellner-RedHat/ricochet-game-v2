@@ -1,16 +1,26 @@
 class_name VisualConverter
 extends RefCounted
 
-const ARC_COLLINEAR_THRESHOLD := 1e-6
 const POINTS_PER_FULL_CIRCLE := 64
+const MAX_ARC_RADIUS := 100000.0
 
 static func is_arc(start: Vector2, via: Vector2, end_v: Vector2) -> bool:
 	if is_inf(end_v.x) or is_inf(end_v.y):
 		return false
 	if start == end_v:
 		return false
-	var cross := (via - start).cross(end_v - start)
-	return absf(cross) > ARC_COLLINEAR_THRESHOLD
+	var d := end_v - start
+	var seg_len_sq := d.length_squared()
+	if seg_len_sq < 1e-10:
+		return false
+	var cross := (via - start).cross(d)
+	if absf(cross) <= seg_len_sq * 1e-4:
+		return false
+	var seg := Segment.new(start, end_v, via)
+	var carrier := seg.get_carrier()
+	if carrier.is_line():
+		return false
+	return carrier.radius() < MAX_ARC_RADIUS
 
 static func arc_params(start: Vector2, via: Vector2, end_v: Vector2) -> Dictionary:
 	var seg := Segment.new(start, end_v, via)
