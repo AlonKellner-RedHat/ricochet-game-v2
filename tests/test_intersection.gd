@@ -44,12 +44,11 @@ func test_skip_segment() -> void:
 	var seg_a := Segment.new(Vector2(300, 0), Vector2(300, 600), Vector2(300, 300))
 	var seg_b := Segment.new(Vector2(500, 0), Vector2(500, 600), Vector2(500, 300))
 	var ray := Ray.new(Vector2(100, 300), Direction.new(Vector2(100, 300), Vector2(600, 300)))
-	var hit := Intersection.find_nearest_hit(ray, [seg_a, seg_b], seg_a)
+	var hit := Intersection.find_nearest_hit(ray, [seg_a, seg_b], Vector2(NAN, NAN), seg_a)
 	assert_not_null(hit, "Should find non-skipped hit")
 	assert_almost_eq(hit.point.x, 500.0, 0.01, "Skipped A, hit B at x=500")
 
 func test_origin_skip() -> void:
-	# Segment passes through ray origin — hit at origin should be skipped.
 	var seg := Segment.new(Vector2(200, 0), Vector2(200, 600), Vector2(200, 300))
 	var ray := Ray.new(Vector2(200, 300), Direction.new(Vector2(200, 300), Vector2(600, 300)))
 	var hit := Intersection.find_nearest_hit(ray, [seg])

@@ -273,4 +273,6 @@ static func _effect_name(effect: RefCounted) -> String:
 		return "block"
 	if effect is ReflectionEffect:
 		return "reflect"
+	if effect is CircleInversionEffect:
+		return "inversion"
 	return "unknown"

@@ -6,7 +6,7 @@ class PlannedPath extends RefCounted:
 	var origin: Vector2
 	var target: Vector2
 
-static func _compute_image(target: Vector2, entries: Array, surfaces: Array, game_state: GameState) -> Variant:
+static func _compute_image(target: Vector2, entries: Array, surfaces: Array, game_state: GameState, cache: TransformCache = null) -> Variant:
 	var image := target
 	for i in range(entries.size() - 1, -1, -1):
 		var entry: PlanManager.PlanEntry = entries[i]
@@ -17,14 +17,14 @@ static func _compute_image(target: Vector2, entries: Array, surfaces: Array, gam
 		if config == null or config.effect == null or not config.effect.is_transformative():
 			return null
 		var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
-		image = inv_mobius.apply(image)
+		image = cache.apply_point_cached(inv_mobius, image) if cache else inv_mobius.apply(image)
 	return image
 
-static func compute_aim_direction(origin: Vector2, cursor: Vector2, plan_entries: Array, surfaces: Array, game_state: GameState) -> Direction:
+static func compute_aim_direction(origin: Vector2, cursor: Vector2, plan_entries: Array, surfaces: Array, game_state: GameState, cache: TransformCache = null) -> Direction:
 	if plan_entries.size() == 0:
 		return Direction.new(origin, cursor)
 
-	var image = _compute_image(cursor, plan_entries, surfaces, game_state)
+	var image = _compute_image(cursor, plan_entries, surfaces, game_state, cache)
 	if image == null:
 		return Direction.new(origin, cursor)
 
@@ -38,7 +38,8 @@ static func plan_transformative_subchain(
 	sub_target: Vector2,
 	entries: Array,
 	surfaces: Array,
-	game_state: GameState
+	game_state: GameState,
+	cache: TransformCache = null
 ) -> PlannedPath:
 	var path := PlannedPath.new()
 	path.origin = sub_origin
@@ -47,7 +48,7 @@ static func plan_transformative_subchain(
 	if entries.size() == 0:
 		return path
 
-	var image = _compute_image(sub_target, entries, surfaces, game_state)
+	var image = _compute_image(sub_target, entries, surfaces, game_state, cache)
 	if image == null:
 		return path
 
@@ -77,7 +78,7 @@ static func plan_transformative_subchain(
 
 		var config: SideConfig = surf.active_side_config(entry.side, game_state)
 		var mobius: MobiusTransform = config.effect.get_mobius()
-		image = mobius.apply(image)
+		image = cache.apply_point_cached(mobius, image) if cache else mobius.apply(image)
 
 		current_point = bounce_point
 		aim_dir = Direction.new(current_point, image)

@@ -42,10 +42,10 @@ func _compute_trace() -> void:
 	if plan and not plan.is_empty():
 		plan_entries = plan.entries
 
-	var aim_dir: Direction = Planner.compute_aim_direction(
-		player_pos, cursor_pos, plan_entries, surfaces, GameState.new())
-	var aim_ray := Ray.new(player_pos, aim_dir)
 	var cache := TransformCache.new()
+	var aim_dir: Direction = Planner.compute_aim_direction(
+		player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
+	var aim_ray := Ray.new(player_pos, aim_dir)
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache)

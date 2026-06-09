@@ -68,8 +68,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				norm_surfaces = _build_normalized(surfaces, frame, norm_to_surface, cache)
 				cache.set_normalized(frame.id, norm_surfaces, norm_to_surface.duplicate())
 			frame_dirty = false
-			# Restore last_hit_segment for the re-normalized surface
 			if last_hit_orig_surf != null:
+				last_hit_segment = null
 				for ns in norm_surfaces:
 					var ns_surf: Surface = ns
 					if norm_to_surface.get(ns_surf.segment) == last_hit_orig_surf:
@@ -81,7 +81,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		for ns in norm_surfaces:
 			norm_segments.append(ns.segment)
 
-		var hit: Intersection.HitRecord = Intersection.find_nearest_hit(ray, norm_segments, last_hit_segment)
+		var hit: Intersection.HitRecord = Intersection.find_nearest_hit(ray, norm_segments, Vector2(NAN, NAN), last_hit_segment)
 
 		# --- Virtual hitpoint competition ---
 		var best_t := INF
@@ -125,7 +125,6 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var _vv := frame.apply((ray.origin + aim_point) / 2.0)
 			path.steps.append(Step.new(_vs, _ve, frame.id, null, shared_ray, frame, _vv, _arc))
 			aim_injected = true
-			# Check if cursor also reached (plan complete + matched at this point)
 			if not cursor_injected and plan_index >= plan_entries.size() and plan_matched:
 				path.cursor_index = path.steps.size()
 				cursor_injected = true
@@ -230,16 +229,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var mobius: MobiusTransform = effect_config.effect.get_mobius()
 			var inv_mobius: MobiusTransform = effect_config.effect.get_inverse_mobius()
 			frame = cache.compose_cached(frame, mobius)
-			ray = Ray.new(inv_mobius.apply(hit.point), ray.direction)
+			var new_origin := cache.apply_point_cached(inv_mobius, hit.point)
+			ray = Ray.new(new_origin, ray.direction)
 			last_hit_orig_surf = orig_surf
 			last_hit_segment = null
 			frame_dirty = true
 			continue
 
-		if hit.segment.is_line():
-			last_hit_segment = hit.segment
-		else:
-			last_hit_segment = null
+		last_hit_segment = hit.segment
 		last_hit_orig_surf = null
 		ray = Ray.new(hit.point, ray.direction)
 
@@ -267,13 +264,13 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 		inv = frame.invert()
 	var result: Array = []
 	for surf in surfaces:
-		var s := inv.apply(surf.segment.start)
-		var e := inv.apply(surf.segment.end)
+		var s := cache.apply_point_forward(inv, surf.segment.start) if cache else inv.apply(surf.segment.start)
+		var e := cache.apply_point_forward(inv, surf.segment.end) if cache else inv.apply(surf.segment.end)
 		var v: Vector2
 		if is_inf(surf.segment.via.x) or is_inf(surf.segment.via.y):
 			v = Vector2(INF, INF)
 		else:
-			v = inv.apply(surf.segment.via)
+			v = cache.apply_point_forward(inv, surf.segment.via) if cache else inv.apply(surf.segment.via)
 		var new_seg := Segment.new(s, e, v)
 		var state := GameState.new()
 		var left := _normalize_config(surf.active_side_config(Side.Value.LEFT, state), new_seg)
