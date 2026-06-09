@@ -88,5 +88,8 @@ static func cdiv(v1: Vector2, v2: Vector2) -> Vector2:
 static func cmod2(v: Vector2) -> float:
 	return v.x * v.x + v.y * v.y
 
+func maps_lines_to_arcs() -> bool:
+	return cmod2(c) > 1e-20
+
 static func reset_id_counter() -> void:
 	_next_id = 1

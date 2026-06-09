@@ -7,14 +7,9 @@ const MAX_ARC_RADIUS := 100000.0
 static func is_arc(start: Vector2, via: Vector2, end_v: Vector2) -> bool:
 	if is_inf(end_v.x) or is_inf(end_v.y):
 		return false
-	if start == end_v:
+	if is_inf(start.x) or is_inf(start.y):
 		return false
-	var d := end_v - start
-	var seg_len_sq := d.length_squared()
-	if seg_len_sq < 1e-10:
-		return false
-	var cross := (via - start).cross(d)
-	if absf(cross) <= seg_len_sq * 1e-4:
+	if start.distance_squared_to(end_v) < 1e-10:
 		return false
 	var seg := Segment.new(start, end_v, via)
 	var carrier := seg.get_carrier()
@@ -25,6 +20,8 @@ static func is_arc(start: Vector2, via: Vector2, end_v: Vector2) -> bool:
 static func arc_params(start: Vector2, via: Vector2, end_v: Vector2) -> Dictionary:
 	var seg := Segment.new(start, end_v, via)
 	var carrier := seg.get_carrier()
+	if carrier.is_line():
+		return {"center": Vector2.ZERO, "radius": 0.0, "start_angle": 0.0, "end_angle": 0.0, "clockwise": false, "point_count": 2, "span": 0.0}
 	var ctr := carrier.center()
 	var r := carrier.radius()
 

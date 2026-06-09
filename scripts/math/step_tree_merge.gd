@@ -7,13 +7,15 @@ class MergedStep extends RefCounted:
 	var via: Vector2
 	var type: StepTypes.Type
 	var frame_id: int
+	var is_arc_step: bool
 
-	func _init(p_start: Vector2, p_end: Vector2, p_type: StepTypes.Type, p_frame_id: int = 0, p_via: Vector2 = Vector2.ZERO) -> void:
+	func _init(p_start: Vector2, p_end: Vector2, p_type: StepTypes.Type, p_frame_id: int = 0, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 		start = p_start
 		end = p_end
 		type = p_type
 		frame_id = p_frame_id
 		via = p_via if p_via != Vector2.ZERO else (p_start + p_end) / 2.0
+		is_arc_step = p_is_arc
 
 static func classify_physical(path: Tracer.TracedPath) -> Array:
 	var result: Array = []
@@ -27,7 +29,7 @@ static func classify_physical(path: Tracer.TracedPath) -> Array:
 			step_type = StepTypes.Type.ALIGNED
 		else:
 			step_type = StepTypes.Type.ALIGNED_POST_PLANNED
-		result.append(MergedStep.new(s.start, s.end, step_type, s.frame_id, s.via))
+		result.append(MergedStep.new(s.start, s.end, step_type, s.frame_id, s.via, s.is_arc_step))
 	return result
 
 static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int) -> Array:
@@ -46,7 +48,7 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 				step_type = StepTypes.Type.ALIGNED_POST_PLANNED
 			else:
 				step_type = StepTypes.Type.ALIGNED
-			merged.append(MergedStep.new(p.start, p.end, step_type, p.frame_id, p.via))
+			merged.append(MergedStep.new(p.start, p.end, step_type, p.frame_id, p.via, p.is_arc_step))
 		else:
 			diverged = true
 			if p != null:
@@ -55,8 +57,8 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 					div_type = StepTypes.Type.DIVERGED_POST_PLANNED
 				else:
 					div_type = StepTypes.Type.DIVERGED_PLANNED
-				merged.append(MergedStep.new(p.start, p.end, div_type, p.frame_id, p.via))
+				merged.append(MergedStep.new(p.start, p.end, div_type, p.frame_id, p.via, p.is_arc_step))
 			if r != null:
-				merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id, r.via))
+				merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id, r.via, r.is_arc_step))
 
 	return merged

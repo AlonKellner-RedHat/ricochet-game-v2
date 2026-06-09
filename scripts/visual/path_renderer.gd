@@ -80,7 +80,7 @@ func _draw() -> void:
 		if from == to:
 			continue
 		var col := StepTypes.color(ms.type)
-		if VisualConverter.is_arc(ms.start, ms.via, ms.end):
+		if ms.is_arc_step and not is_inf(ms.end.x) and not is_inf(ms.end.y):
 			var p := VisualConverter.arc_params(ms.start, ms.via, ms.end)
 			var arc_center: Vector2 = p["center"] - global_position
 			if StepTypes.is_solid(ms.type):

@@ -9,6 +9,7 @@ extends Node2D
 @export var block_lines: Array[Vector4] = []
 @export var mirror_lines: Array[Vector4] = []
 @export var mirror_right_lines: Array[Vector4] = []
+@export var inversion_left_arcs: PackedFloat64Array = PackedFloat64Array()
 
 var surfaces: Array[Surface] = []
 
@@ -56,6 +57,22 @@ func _ready() -> void:
 		var node := Node2D.new()
 		node.set_script(load("res://scripts/game/surface_node.gd"))
 		node.name = "MirrorR_%d" % surf.id
+		add_child(node)
+		node.setup(surf)
+	for i in range(0, inversion_left_arcs.size(), 6):
+		var seg := Segment.new(
+			Vector2(inversion_left_arcs[i], inversion_left_arcs[i + 1]),
+			Vector2(inversion_left_arcs[i + 2], inversion_left_arcs[i + 3]),
+			Vector2(inversion_left_arcs[i + 4], inversion_left_arcs[i + 5]))
+		var carrier := seg.get_carrier()
+		var inversion := CircleInversionEffect.new(carrier)
+		var left_config := SideConfig.new(inversion, true)
+		var right_config := SideConfig.new(null, false)
+		var surf := Surface.new(seg, left_config, right_config, false, false)
+		surfaces.append(surf)
+		var node := Node2D.new()
+		node.set_script(load("res://scripts/game/surface_node.gd"))
+		node.name = "Inversion_%d" % surf.id
 		add_child(node)
 		node.setup(surf)
 	# Screen boundary pass-throughs — ensure off-screen steps split at screen edge

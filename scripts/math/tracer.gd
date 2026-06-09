@@ -9,8 +9,9 @@ class Step extends RefCounted:
 	var hit: RefCounted
 	var ray: Ray
 	var frame: MobiusTransform
+	var is_arc_step: bool
 
-	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: RefCounted = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO) -> void:
+	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: RefCounted = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 		start = p_start
 		end = p_end
 		frame_id = p_frame_id
@@ -18,6 +19,7 @@ class Step extends RefCounted:
 		ray = p_ray
 		frame = p_frame
 		via = p_via if p_via != Vector2.ZERO else (p_start + p_end) / 2.0
+		is_arc_step = p_is_arc
 
 class TracedPath extends RefCounted:
 	var steps: Array = []
@@ -116,10 +118,12 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			best_type = "carrier"
 
 		# --- Process winner ---
+		var _arc: bool = frame.maps_lines_to_arcs()
 		if best_type == "aim":
-			path.steps.append(Step.new(
-				frame.apply(ray.origin), frame.apply(aim_point),
-				frame.id, null, shared_ray, frame))
+			var _vs := frame.apply(ray.origin)
+			var _ve := frame.apply(aim_point)
+			var _vv := frame.apply((ray.origin + aim_point) / 2.0)
+			path.steps.append(Step.new(_vs, _ve, frame.id, null, shared_ray, frame, _vv, _arc))
 			aim_injected = true
 			# Check if cursor also reached (plan complete + matched at this point)
 			if not cursor_injected and plan_index >= plan_entries.size() and plan_matched:
@@ -130,9 +134,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			continue
 
 		if best_type == "cursor":
-			path.steps.append(Step.new(
-				frame.apply(ray.origin), frame.apply(aim_point),
-				frame.id, null, shared_ray, frame))
+			var _vs2 := frame.apply(ray.origin)
+			var _ve2 := frame.apply(aim_point)
+			var _vv2 := frame.apply((ray.origin + aim_point) / 2.0)
+			path.steps.append(Step.new(_vs2, _ve2, frame.id, null, shared_ray, frame, _vv2, _arc))
 			path.cursor_index = path.steps.size()
 			cursor_injected = true
 			current_mode = post_cursor_mode
@@ -140,15 +145,17 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			continue
 
 		if best_type == "player_block":
-			path.steps.append(Step.new(
-				frame.apply(ray.origin), frame.apply(origin),
-				frame.id, null, shared_ray, frame))
+			var _vs3 := frame.apply(ray.origin)
+			var _ve3 := frame.apply(origin)
+			var _vv3 := frame.apply((ray.origin + origin) / 2.0)
+			path.steps.append(Step.new(_vs3, _ve3, frame.id, null, shared_ray, frame, _vv3, _arc))
 			break
 
 		if best_type == "player_waypoint":
-			path.steps.append(Step.new(
-				frame.apply(ray.origin), frame.apply(origin),
-				frame.id, null, shared_ray, frame))
+			var _vs4 := frame.apply(ray.origin)
+			var _ve4 := frame.apply(origin)
+			var _vv4 := frame.apply((ray.origin + origin) / 2.0)
+			path.steps.append(Step.new(_vs4, _ve4, frame.id, null, shared_ray, frame, _vv4, _arc))
 			ray = Ray.new(origin, ray.direction)
 			continue
 
@@ -158,9 +165,9 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var escape_end := _clip_to_bounds(vis_origin, vis_dir, bounds)
 			var return_start := _clip_to_bounds(vis_origin, -vis_dir, bounds)
 			if vis_origin != escape_end:
-				path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, shared_ray, frame))
+				path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, shared_ray, frame, (vis_origin + escape_end) / 2.0, false))
 			if return_start != vis_origin:
-				path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame))
+				path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame, (return_start + vis_origin) / 2.0, false))
 			break
 
 		# best_type == "carrier"
@@ -171,10 +178,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var vis_dir := (vis_end - vis_start).normalized()
 			var esc := _clip_to_bounds(vis_start, -vis_dir, bounds)
 			var ret := _clip_to_bounds(vis_end, vis_dir, bounds)
-			path.steps.append(Step.new(vis_start, esc, frame.id, null, shared_ray, frame))
-			path.steps.append(Step.new(ret, vis_end, frame.id, hit, shared_ray, frame))
+			path.steps.append(Step.new(vis_start, esc, frame.id, null, shared_ray, frame, (vis_start + esc) / 2.0, false))
+			path.steps.append(Step.new(ret, vis_end, frame.id, hit, shared_ray, frame, (ret + vis_end) / 2.0, false))
 		else:
-			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit, shared_ray, frame, vis_via))
+			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit, shared_ray, frame, vis_via, frame.maps_lines_to_arcs()))
 
 		var orig_surf: Surface = norm_to_surface.get(hit.segment)
 		if orig_surf and orig_surf.is_target and hit.on_segment:
@@ -229,7 +236,10 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			frame_dirty = true
 			continue
 
-		last_hit_segment = hit.segment
+		if hit.segment.is_line():
+			last_hit_segment = hit.segment
+		else:
+			last_hit_segment = null
 		last_hit_orig_surf = null
 		ray = Ray.new(hit.point, ray.direction)
 
