@@ -80,10 +80,18 @@ func _draw() -> void:
 		if from == to:
 			continue
 		var col := StepTypes.color(ms.type)
-		if StepTypes.is_solid(ms.type):
-			draw_line(from, to, col, LINE_WIDTH)
+		if VisualConverter.is_arc(ms.start, ms.via, ms.end):
+			var p := VisualConverter.arc_params(ms.start, ms.via, ms.end)
+			var arc_center: Vector2 = p["center"] - global_position
+			if StepTypes.is_solid(ms.type):
+				draw_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col, LINE_WIDTH)
+			else:
+				_draw_dashed_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col)
 		else:
-			_draw_dashed(from, to, col)
+			if StepTypes.is_solid(ms.type):
+				draw_line(from, to, col, LINE_WIDTH)
+			else:
+				_draw_dashed(from, to, col)
 
 	for i in _merged_steps.size():
 		var ms: StepTreeMerge.MergedStep = _merged_steps[i]
@@ -91,6 +99,26 @@ func _draw() -> void:
 		col.a = 0.4
 		draw_circle(ms.start - global_position, 4.0, col)
 		draw_circle(ms.end - global_position, 4.0, col)
+
+func _draw_dashed_arc(center: Vector2, radius: float, start_angle: float, end_angle: float, point_count: int, col: Color) -> void:
+	var span := end_angle - start_angle
+	if span < 0.0:
+		span += TAU
+	var total_len := radius * span
+	if total_len == 0.0:
+		return
+	var drawn := 0.0
+	var on := true
+	while drawn < total_len:
+		var seg_len := DASH_ON if on else DASH_OFF
+		seg_len = minf(seg_len, total_len - drawn)
+		if on:
+			var a0 := start_angle + (drawn / total_len) * span
+			var a1 := start_angle + ((drawn + seg_len) / total_len) * span
+			var seg_points := maxi(2, int(point_count * seg_len / total_len))
+			draw_arc(center, radius, a0, a1, seg_points, col, LINE_WIDTH)
+		drawn += seg_len
+		on = not on
 
 func _draw_dashed(from: Vector2, to: Vector2, col: Color) -> void:
 	var dir := to - from

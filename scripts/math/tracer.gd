@@ -4,18 +4,20 @@ extends RefCounted
 class Step extends RefCounted:
 	var start: Vector2
 	var end: Vector2
+	var via: Vector2
 	var frame_id: int
 	var hit: RefCounted
 	var ray: Ray
 	var frame: MobiusTransform
 
-	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: RefCounted = null, p_ray: Ray = null, p_frame: MobiusTransform = null) -> void:
+	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: RefCounted = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO) -> void:
 		start = p_start
 		end = p_end
 		frame_id = p_frame_id
 		hit = p_hit
 		ray = p_ray
 		frame = p_frame
+		via = p_via if p_via != Vector2.ZERO else (p_start + p_end) / 2.0
 
 class TracedPath extends RefCounted:
 	var steps: Array = []
@@ -164,6 +166,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		# best_type == "carrier"
 		var vis_start := frame.apply(ray.origin)
 		var vis_end := frame.apply(hit.point)
+		var vis_via := frame.apply((ray.origin + hit.point) / 2.0)
 		if hit.t < 0.0:
 			var vis_dir := (vis_end - vis_start).normalized()
 			var esc := _clip_to_bounds(vis_start, -vis_dir, bounds)
@@ -171,7 +174,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			path.steps.append(Step.new(vis_start, esc, frame.id, null, shared_ray, frame))
 			path.steps.append(Step.new(ret, vis_end, frame.id, hit, shared_ray, frame))
 		else:
-			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit, shared_ray, frame))
+			path.steps.append(Step.new(vis_start, vis_end, frame.id, hit, shared_ray, frame, vis_via))
 
 		var orig_surf: Surface = norm_to_surface.get(hit.segment)
 		if orig_surf and orig_surf.is_target and hit.on_segment:
