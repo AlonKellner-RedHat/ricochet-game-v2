@@ -6,7 +6,7 @@
 
 | Stage | Topic | Status |
 |-------|-------|--------|
-| 40 | Circle Inversion Effect | Todo |
+| 40 | Circle Inversion Effect | Done |
 | 41 | Arc Segment Rendering | Todo |
 | 42 | Circle Inversion in Physical Trace | Todo |
 | 42.5 | Arc Collision Shapes for Player Physics | Todo |
