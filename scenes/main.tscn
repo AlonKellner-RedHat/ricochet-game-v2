@@ -27,7 +27,7 @@ position = Vector2(0, 1000)
 shape = SubResource("floor_shape")
 
 [node name="Player" parent="." unique_id=636081454 instance=ExtResource("1")]
-position = Vector2(700, 540)
+position = Vector2(700, 100)
 
 [node name="Cursor" type="Node2D" parent="." unique_id=114423737]
 script = ExtResource("3")
