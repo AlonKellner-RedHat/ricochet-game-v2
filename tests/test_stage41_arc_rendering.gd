@@ -63,16 +63,14 @@ func test_stage41_draw_arc_clockwise_swap() -> void:
 	assert_almost_eq(p["end_angle"], sa, 0.01, "CW: draw_end = start_angle (swapped)")
 
 func test_stage41_point_count_full_circle() -> void:
-	var s := Vector2(300, 200)
-	var e := Vector2(300, 200)
 	var span := TAU
-	var count := maxi(4, int(64 * span / TAU))
-	assert_eq(count, 64, "Full circle = 64 points")
+	var count := maxi(4, int(256 * span / TAU))
+	assert_eq(count, 256, "Full circle = 256 points")
 
 func test_stage41_point_count_quarter_circle() -> void:
 	var span := TAU / 4.0
-	var count := maxi(4, int(64 * span / TAU))
-	assert_eq(count, 16, "Quarter circle = 16 points")
+	var count := maxi(4, int(256 * span / TAU))
+	assert_eq(count, 64, "Quarter circle = 64 points")
 
 func test_stage41_escape_step_guard() -> void:
 	var s := Vector2(200, 200)

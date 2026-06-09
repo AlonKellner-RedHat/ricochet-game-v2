@@ -1,7 +1,7 @@
 class_name VisualConverter
 extends RefCounted
 
-const POINTS_PER_FULL_CIRCLE := 64
+const POINTS_PER_FULL_CIRCLE := 256
 const MAX_ARC_RADIUS := 100000.0
 
 static func is_arc(start: Vector2, via: Vector2, end_v: Vector2) -> bool:
