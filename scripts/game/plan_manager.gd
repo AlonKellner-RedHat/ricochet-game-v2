@@ -38,3 +38,8 @@ func has_surface(surface_id: int) -> bool:
 		if entry.surface_id == surface_id:
 			return true
 	return false
+
+func restore_from(p_entries: Array) -> void:
+	entries.clear()
+	for entry in p_entries:
+		entries.append(PlanEntry.new(entry.surface_id, entry.side))

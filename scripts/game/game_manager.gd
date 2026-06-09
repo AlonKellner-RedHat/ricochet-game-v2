@@ -12,6 +12,9 @@ var _camera: Camera2D
 
 var plan := PlanManager.new()
 var click_detector := ClickDetector.new()
+var game_state := GameState.new()
+var targets_hit: Dictionary = {}
+var _checkpoints := CheckpointStack.new()
 var _hovered_node: Node2D = null
 
 func _ready() -> void:
@@ -32,6 +35,7 @@ func _ready() -> void:
 		_camera.limit_top = int(bounds.position.y)
 		_camera.limit_right = int(bounds.end.x)
 		_camera.limit_bottom = int(bounds.end.y)
+	_checkpoints.set_initial(_capture_checkpoint())
 
 func _process(_delta: float) -> void:
 	_update_camera()
@@ -95,6 +99,14 @@ func _input(event: InputEvent) -> void:
 				_level_settings.gravity = Vector2(0, 980)
 		return
 
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_Z:
+		_try_undo()
+		return
+
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_R:
+		_try_reset()
+		return
+
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_C:
 		plan.clear()
 		_update_hud()
@@ -152,9 +164,11 @@ func _try_fire() -> void:
 	if player_pos == cursor_pos:
 		return
 
+	_checkpoints.push(_capture_checkpoint())
+
 	var surfaces := _get_surfaces()
 	var dir := _compute_aim_direction(player_pos, cursor_pos, surfaces)
-	var path := Tracer.trace(player_pos, dir, surfaces, GameState.new())
+	var path := Tracer.trace(player_pos, dir, surfaces, game_state)
 
 	if _path_renderer:
 		_path_renderer.modulate.a = 0.25
@@ -169,9 +183,36 @@ func _on_flight_completed() -> void:
 	if _path_renderer:
 		_path_renderer.modulate.a = 1.0
 
+func _try_undo() -> void:
+	var data := _checkpoints.pop()
+	if data == null:
+		return
+	_restore_checkpoint(data)
+
+func _try_reset() -> void:
+	var data := _checkpoints.reset()
+	if data == null:
+		return
+	_restore_checkpoint(data)
+
+func _capture_checkpoint() -> CheckpointData:
+	var pos := _player.global_position if _player else Vector2.ZERO
+	var vel := _player.velocity if _player else Vector2.ZERO
+	return CheckpointData.new(pos, vel, game_state, plan.entries, targets_hit)
+
+func _restore_checkpoint(data: CheckpointData) -> void:
+	if _player:
+		_player.global_position = data.player_position
+		_player.velocity = data.player_velocity
+	game_state = data.game_state.copy()
+	plan.restore_from(data.plan_entries)
+	targets_hit = data.targets_hit.duplicate()
+	_update_hud()
+	_update_surface_overlays()
+
 func _compute_aim_direction(player_pos: Vector2, cursor_pos: Vector2, surfaces: Array) -> Direction:
 	var entries: Array = plan.entries if not plan.is_empty() else []
-	return Planner.compute_aim_direction(player_pos, cursor_pos, entries, surfaces, GameState.new())
+	return Planner.compute_aim_direction(player_pos, cursor_pos, entries, surfaces, game_state)
 
 func _get_surfaces() -> Array:
 	if _level_settings and "surfaces" in _level_settings:

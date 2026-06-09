@@ -7,7 +7,7 @@
 | Stage | Topic | Status |
 |-------|-------|--------|
 | 31 | Arrow Flight with Plan | Done |
-| 32 | Checkpoint System | Todo |
+| 32 | Checkpoint System | Done |
 | 33 | Plan Retained After Shot | Done |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
