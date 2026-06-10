@@ -243,3 +243,121 @@ func test_bug2_aim_point_frame_analysis() -> void:
 		gut.p("Distance to aim_image: %.4f" % post.end.distance_to(aim_image))
 
 	assert_true(true, "Diagnostic — check output")
+
+# === BUG 3: Three user-reported cases ===
+
+func _trace_and_diagnose(player: Vector2, cursor: Vector2, label: String) -> Tracer.TracedPath:
+	var surfs := _build_scene_surfaces()
+	var aim := Direction.new(player, cursor)
+	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	gut.p("--- %s ---" % label)
+	gut.p("Player=%s Cursor=%s Steps=%d" % [player, cursor, path.steps.size()])
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		var hit_info := "no_hit"
+		if s.hit != null:
+			hit_info = "t=%.4f on_seg=%s line=%s side=%d" % [
+				s.hit.t, s.hit.on_segment, s.hit.segment.is_line(), s.hit.side]
+		gut.p("  [%d] fid=%d arc=%s %s->%s %s" % [
+			i, s.frame_id, s.is_arc_step, s.start, s.end, hit_info])
+	# Check: is the first post-inversion step an aim virtual hit?
+	var inv_carrier := Segment.new(
+		Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550)).get_carrier()
+	var inv_mobius := CircleInversionEffect.new(inv_carrier).get_mobius()
+	var aim_image := inv_mobius.apply(cursor)
+	gut.p("M(cursor) = %s" % aim_image)
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		if s.hit == null and s.frame_id != 0:
+			var dist := s.end.distance_to(aim_image)
+			gut.p("  Step %d (no_hit, fid=%d) ends at dist %.4f from M(cursor)" % [i, s.frame_id, dist])
+			if dist < 1.0:
+				gut.p("  >>> This is the AIM virtual hit at M(cursor)!")
+	return path
+
+func test_bug3_case1_line_ignores_surfaces() -> void:
+	var path := _trace_and_diagnose(
+		Vector2(1370.004, 540.0), Vector2(1301.356, 503.933),
+		"Case 1: line ignores surfaces after inversion")
+	# After inversion, post-aim steps should still hit walls
+	var post_inversion_escapes := 0
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		if s.frame_id != 0 and s.hit == null:
+			post_inversion_escapes += 1
+	assert_lt(post_inversion_escapes, 3,
+		"Post-inversion should not have 3+ escape steps (got %d)" % post_inversion_escapes)
+
+func test_bug3_case2_cursor_inside_circle() -> void:
+	var path := _trace_and_diagnose(
+		Vector2(1346.67, 540.0), Vector2(1144.192, 495.918),
+		"Case 2: cursor inside circle carrier")
+	var post_inversion_escapes := 0
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		if s.frame_id != 0 and s.hit == null:
+			post_inversion_escapes += 1
+	assert_lt(post_inversion_escapes, 3,
+		"Post-inversion should not have 3+ escape steps (got %d)" % post_inversion_escapes)
+
+func test_bug3_case3_arc_direction_flip() -> void:
+	var path_a := _trace_and_diagnose(
+		Vector2(1072.635, 965.964), Vector2(1154.202, 378.701),
+		"Case 3a: cursor (1154, 379)")
+	var path_b := _trace_and_diagnose(
+		Vector2(1072.635, 965.964), Vector2(1156.204, 379.703),
+		"Case 3b: cursor (1156, 380)")
+	# Both should have an arc step after the inversion hit
+	# Check if the arc directions match (both should be same winding)
+	var arc_a_via := Vector2.ZERO
+	var arc_b_via := Vector2.ZERO
+	for s in path_a.steps:
+		var step: Tracer.Step = s
+		if step.is_arc_step and step.frame_id != 0:
+			arc_a_via = step.via
+			gut.p("Case 3a arc: start=%s via=%s end=%s" % [step.start, step.via, step.end])
+			var cross_a := (step.via - step.start).cross(step.end - step.start)
+			gut.p("  cross product: %.4f (%s)" % [cross_a, "CCW" if cross_a > 0 else "CW"])
+			break
+	for s in path_b.steps:
+		var step: Tracer.Step = s
+		if step.is_arc_step and step.frame_id != 0:
+			arc_b_via = step.via
+			gut.p("Case 3b arc: start=%s via=%s end=%s" % [step.start, step.via, step.end])
+			var cross_b := (step.via - step.start).cross(step.end - step.start)
+			gut.p("  cross product: %.4f (%s)" % [cross_b, "CCW" if cross_b > 0 else "CW"])
+			break
+	assert_true(true, "Diagnostic — check arc directions above")
+
+# === Step 4: Why does player_waypoint fire after reflections? ===
+
+func test_step4_plan_matched_after_reflection() -> void:
+	# Simple reflection scene (no inversion) — empty plan
+	var walls := RoomBuilder.create_room_surfaces(Rect2(160, 90, 1600, 900))
+	var mirror_seg := Segment.new(Vector2(960, 200), Vector2(960, 800), Vector2(960, 500))
+	var carrier := mirror_seg.get_carrier()
+	var refl := ReflectionEffect.new(carrier)
+	var mirror := Surface.new(mirror_seg, SideConfig.new(refl, true), SideConfig.new(null, false), false, false)
+	var surfs: Array = walls + [mirror]
+	var player := Vector2(800, 500)
+	var cursor := Vector2(700, 500)
+	var aim := Direction.new(player, cursor)
+	# Empty plan — what happens to plan_matched after reflection?
+	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	gut.p("Reflection test — Steps: %d" % path.steps.size())
+	gut.p("cursor_index: %d" % path.cursor_index)
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		var hit_info := "no_hit"
+		if s.hit != null:
+			hit_info = "on_seg=%s" % s.hit.on_segment
+		gut.p("  [%d] fid=%d %s->%s %s" % [i, s.frame_id, s.start, s.end, hit_info])
+	# Does the trace pass through the player position?
+	var found_player_waypoint := false
+	for s in path.steps:
+		var step: Tracer.Step = s
+		if step.end.distance_to(player) < 5.0 or step.start.distance_to(player) < 5.0:
+			found_player_waypoint = true
+			gut.p("Player position touched at step: %s->%s" % [step.start, step.end])
+	gut.p("Player waypoint fired: %s" % found_player_waypoint)
+	assert_true(true, "Diagnostic — check output")
