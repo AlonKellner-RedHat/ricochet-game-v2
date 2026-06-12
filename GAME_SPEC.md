@@ -11,20 +11,22 @@ Engine: **Godot 4.6+** with **GDScript**. Developed against Godot 4.6.x stable. 
 | Feature | Status |
 |---------|--------|
 | Math layer (generalized circles, segments, Möbius) | Done |
-| Physical tracing (§12) | Done |
+| Physical tracing — stage-based hitpoint walk (§12) | Done |
 | Reflection effect | Done |
 | Terminal (block) effect | Done |
 | Plan construction and removal | Done |
 | Planned trace with image chains | Done |
 | Step tree merge and divergence | Done |
-| Invariant sweep testing (12 invariants, 89k combos) | Done |
+| Invariant sweep testing (15 checks, 10 scenes, 29k combos) | Done |
 | Arrow flight with freeze/animation/skip | Done |
-| Circle inversion effect | Todo |
+| Camera tracking during arrow flight (§4.5) | Done |
+| Game systems: checkpoint, undo, reset (§3.3) | Done |
+| Circle inversion effect — math, rendering, physical trace | Done |
+| Epsilon removal — three-tier provenance endpoint detection (§31.3) | Done |
 | Rigid motion effect | Todo |
 | Projective effects | Todo |
 | Visibility polygon (§15) | Todo |
 | State-changing surfaces | Todo |
-| Game systems (checkpoint, undo, reset) | Todo |
 | Level editor | Todo |
 
 ---
@@ -464,18 +466,23 @@ Every conversion is **cached** (§17) so round-tripping returns the exact origin
 
 ### 8.1 Point
 
-A 2D position with **provenance** — the reason the point was created.
+A 2D position with **transform provenance** — a record of how the point was derived from its original coordinates. *(See `DESIGN_PROVENANCE_PRIMITIVES.md` for full rationale.)*
 
 ```
 Point:
-    position:   Vector2
-    provenance: enum { ORIGIN, BOUNCE, IMAGE, CORNER, CURSOR, ... }
-    source_id:  int     # which surface/effect created this point
+    original:   Vector2                  # source coordinates (immutable after creation)
+    coords:     Vector2                  # current position after all transforms
+    transforms: Array[TrackedTransform]  # ordered sequence of transforms applied
+    frame:      MobiusTransform          # aggregated transform (product of sequence)
 ```
 
-Provenance is stored, not recomputed. *(Principle 5.)*
+**Invariant:** `frame.apply(original) == coords`. When inverse-pair simplification reduces the transform sequence to empty, `coords == original` exactly — no floating-point drift.
 
-**ID assignment:** provenance IDs are global, monotonically incrementing, unique across the entire session. The player position gets a new ID each frame it changes. The cursor gets a new ID each frame. When a point is transformed, the result gets a NEW ID — the cache maps `(source_id, transform_id) → new_id`.
+**Construction:** `Point.at(position)` creates a point with `original = coords = position`, empty transforms, identity frame.
+
+**Transformation:** `point.transformed(t)` returns a NEW point with the `TrackedTransform` appended. Adjacent inverse pairs cancel: if the last transform in the sequence is `t.inverse`, the pair is removed instead of appended. This guarantees exact round-trip: `p.transformed(t).transformed(t.inverse).coords == p.coords`.
+
+**Comparison:** `same_origin(other)` checks `original == other.original`; `same_position(other)` checks `coords == other.coords`. Both use exact equality.
 
 ### 8.2 Direction
 
@@ -790,15 +797,17 @@ The function derives the segment's carrier from its three points (cached — §1
 
 Candidates are filtered:
 
-1. **Segment bounds**: the candidate must lie on the intended arc/path:
-   - **Finite line**: candidate's parameter along the line is between start and end.
-   - **Line through ∞**: candidate is outside the start–end range (going through ∞). Equivalently: via is `INF` and the candidate is NOT between start and end.
-   - **Circular arc**: the candidate is on the arc if the following cross-product sign tests pass (all vectors relative to the center):
-     - `cross(start - center, candidate - center)` has the same sign as `cross(start - center, via - center)`, AND
-     - `cross(via - center, candidate - center)` has the same sign as `cross(via - center, end - center)`.
-     This determines arc containment without computing any angles.
+1. **Segment bounds** (`is_on_segment`): the candidate P must lie on the arc/line from start S through via V to end E. This is determined by the **cross-ratio containment test**, which unifies line and arc containment under a single algebraic formula:
 
-The cross-product test works correctly for arcs of any span, including major arcs (> 180°), because it tests the candidate's position relative to the via point's winding, not absolute angle values.
+   The point P is on the segment iff `Re(cross_ratio(S, P; E, V)) >= 0`.
+
+   Computed in homogeneous coordinates to handle the point at infinity (line segments with `via = INF`):
+   1. Compute homogeneous determinants: `hdet(S,V)`, `hdet(E,P)`, `hdet(S,P)`, `hdet(E,V)`, where `hdet(A,B) = zA·wB - zB·wA` treating each point as `(z, w)` with `w = 1` for finite points and `w = 0` for the point at infinity.
+   2. Compute `num = cmul(hdet(S,V), hdet(E,P))` and `den = cmul(hdet(S,P), hdet(E,V))` where `cmul` is complex multiplication (treating `Vector2` as `(real, imag)`).
+   3. Compute `product = cmul(num, conj(den))`.
+   4. The point is on the segment iff `product.x >= 0`.
+
+   This works correctly for arcs of any span (including major arcs > 180°), lines through infinity, and full circles. No center computation, no angle comparison, no epsilon threshold.
 
 For full-circle segments (where start equals end after traversing the full carrier), all points on the carrier are considered contained.
 
@@ -808,12 +817,21 @@ For full-circle segments (where start equals end after traversing the full carri
 
 ```
 HitRecord:
-    t:          float       # ray parameter (t > 0 forward, t < 0 beyond-infinity)
-    point:      Vector2     # intersection point in normalized coordinates
-    surface:    Surface
-    side:       Side        # LEFT or RIGHT
-    provenance: int         # unique ID for this hit event
+    t:             float       # ray parameter (t > 0 forward, t < 0 beyond-infinity)
+    point:         Point       # intersection point (provenance-aware, §8.1)
+    segment:       Segment     # the segment hit (Surface found via norm_to_surface mapping)
+    side:          Side        # LEFT or RIGHT
+    on_segment:    bool        # true if the hit point lies on the segment arc/line
+    at_endpoint:   int         # 0 = interior, 1 = at start, 2 = at end (§31.3.1)
+    blocked_left:  bool        # whether the LEFT side is blocked at this hitpoint
+    blocked_right: bool        # whether the RIGHT side is blocked at this hitpoint
 ```
+
+The `point` field is a `Point` (§8.1), not a raw `Vector2`. The HitRecord references the normalized `Segment`; the original `Surface` is found via a `norm_to_surface` mapping dictionary maintained by the tracer (§12.1).
+
+The `at_endpoint` field is set by the three-tier provenance endpoint detection system (§31.3.1). When `at_endpoint > 0`, the `point.coords` are the exact defining coordinates of the endpoint — snapped from provenance, not from the quadratic solver.
+
+`is_fully_blocked()` returns `blocked_left and blocked_right`. An effect fires only when the hitpoint is fully blocked (§12.1).
 
 ### 11.3 Earliest hit selection
 
@@ -834,7 +852,7 @@ When multiple surfaces produce hits at the same `t`, only the tie-breaking winne
 | Ray carrier coincides with surface carrier | No intersection — ray travels along the surface. |
 | Zero-length segment | Never produces a hit. |
 
-`find_earliest_hit` always internally excludes surfaces at the ray origin (t ≈ 0 within machine precision). The `excluded_surfaces` parameter provides ADDITIONAL exclusions for pass-through tracking. Both mechanisms work together.
+The tracer passes a `skip_segment` parameter — the segment from the most recent hit, excluded by **reference equality** (object identity), not by epsilon comparison on the `t` parameter. This is consistent with §31.3 (no epsilon decisions).
 
 ### 11.5 Unbounded carrier intersection
 
@@ -842,11 +860,13 @@ When multiple surfaces produce hits at the same `t`, only the tie-breaking winne
 func intersect_line_with_carrier(ray: Ray, carrier: GeneralizedCircle) → Array[HitCandidate]
 ```
 
-Identical to `intersect_line_with_gcircle` (§11.1) but **without the segment-bounds filter**. Returns all intersection points on the unbounded carrier (the full line or full circle). Used by the PLANNED mode (§14.1) which intentionally uses infinite carrier extensions to find where the ideal path crosses the planned surface, even if the intersection is outside the segment's start–end–via bounds.
+Same quadratic intersection as §11.1 but **without the segment-bounds filter**. Returns all intersection points on the unbounded carrier (the full line or full circle). Used internally and available for future PLANNED mode extensions.
 
 ### 11.6 See-through parameter
 
-`find_earliest_hit` accepts an optional `see_through: Set[Surface]` parameter. Surfaces in this set are treated as transparent — rays pass through them without recording a hit. Used by the visibility system (§15) for truncating boundaries. Distinct from `excluded_surfaces` (pass-through departure exclusion) and the internal origin-on-surface exclusion (§11.4).
+*(Not yet implemented — specified for the visibility system §15.)*
+
+`find_all_hits` will accept an optional `see_through: Set[Surface]` parameter. Surfaces in this set will be treated as transparent — rays pass through them without recording a hit. Used by the visibility system (§15) for truncating boundaries. Distinct from `skip_segment` (departure surface exclusion, §11.4).
 
 ---
 
@@ -854,7 +874,7 @@ Identical to `intersect_line_with_gcircle` (§11.1) but **without the segment-bo
 
 ### 12.1 The tracing loop
 
-The tracer uses a **unified hitpoint model**: it intersects the shared ray with ALL surface carriers (ignoring `is_on_segment`), producing mode-independent step boundaries. The two modes (PHYSICAL and PLANNED, §14.1) differ ONLY in which effects are applied at each hitpoint — they produce the same hitpoints.
+The tracer uses a **stage-based hitpoint walk**: each stage intersects the shared ray with ALL surface segments at once, sorts the hitpoints in projective order, and walks them sequentially. A "stage" ends when a transformative effect fires — the frame changes, surfaces are re-normalized, and a new stage begins.
 
 The initial ray is constructed from the player and cursor positions:
 ```
@@ -862,98 +882,134 @@ initial_direction = Direction(player_position, cursor_position)
 shared_ray = Ray(player_position, initial_direction)
 ```
 
+The two modes (PHYSICAL and PLANNED, §14.1) differ ONLY in which effects are applied at each hitpoint.
+
 ```
 enum TraceMode { PHYSICAL, PLANNED }
 
 func trace(shared_ray: Ray, surfaces: Array, mode: TraceMode,
-           plan_queue: Array = [], target_dist: float = -1.0,
-           game_state: GameState, bounds: Rect2) → TracedPath:
+           plan_entries: Array = [], game_state: GameState,
+           bounds: Rect2, cursor_pos: Vector2) → TracedPath:
     game_state = game_state.copy()
+    transform_stack = []           # Array[TrackedTransform]
     frame = MobiusTransform.IDENTITY
-    ray = shared_ray   # working copy — origin advances, direction unchanged
+    ray = shared_ray               # working copy — origin advances, direction unchanged
     steps = []
     hit_count = 0
-    excluded_surfaces = Set()
-    targets_hit = Set()
-    target_passed = (target_dist < 0.0)
-    accumulated_dist = 0.0
+    last_hit_segment = null        # skip_segment: excluded by reference equality (§11.4)
+    targets_hit = {}
     plan_index = 0
     frame_dirty = true
-    normalized_surfaces = []
+    norm_surfaces = []
+    norm_to_surface = {}           # normalized Segment → original Surface mapping
 
     while hit_count < 256:
+        # === Stage boundary: recompute frame and normalize surfaces ===
         if frame_dirty:
-            normalized_surfaces = transform_all(surfaces, frame.inverse())
+            frame = compose_all(transform_stack)       # product of TrackedTransforms
+            norm_surfaces = normalize_all(surfaces, frame.inverse())
+            norm_to_surface = build_mapping(norm_surfaces, surfaces)
             frame_dirty = false
 
-        # Find ALL carrier intersections with the working ray, ignoring is_on_segment.
-        # This uses intersect_line_with_carrier for EVERY surface carrier.
-        hit = find_earliest_carrier_hit(ray, normalized_surfaces, exclude=excluded_surfaces)
+        # === Collect ALL hits in this stage ===
+        carrier_hits = find_all_hits(ray, norm_segments, skip=last_hit_segment)
 
-        # Virtual hitpoint: target_dist competes with carrier hits via t-sorting.
-        if not target_passed:
-            ... (inject target as virtual hit if it's nearer)
+        # Inject virtual hitpoints
+        origin_hp = HitRecord(t=0.0, point=ray.origin, segment=null)
+        hitpoints = carrier_hits + [origin_hp]
 
-        if hit == null:
-            steps.append(Step(vis_origin, escape_end, frame, null, shared_ray, frame))
-            break
+        if cursor is reachable:
+            cursor_t = project_point_on_ray(ray, cursor_in_frame)
+            cursor_hp = HitRecord(t=cursor_t, point=cursor_in_frame, segment=null)
+            hitpoints.append(cursor_hp)
 
-        steps.append(Step(vis_start, vis_end, frame, hit, shared_ray, frame))
-        hit_count += 1
+        # === Projective sort ===
+        # Order: positive t ascending, then negative t ascending, then t=0 last.
+        # Ties broken by segment instance ID.
+        hitpoints = projective_sort(hitpoints)
 
-        if hit.surface.is_target:
-            targets_hit.add(hit.surface.id)
+        # === Walk sorted hitpoints ===
+        step_left_blocked = false
+        step_right_blocked = false
+        stage_ended = false
 
-        # --- MODE-INDEPENDENT: terminal effects ---
-        # Terminal effects (walls, blocks) ALWAYS stop the trace when on-segment,
-        # regardless of mode. This ensures both traces stop at the same walls.
-        if hit.is_on_segment:
-            side_config = hit.surface.active_side_config(hit.side, game_state)
-            if side_config.effect != null and side_config.effect.is_terminal():
-                break
+        for hp in hitpoints:
+            hit_count += 1
+            vis_start = frame.apply(step_origin)
+            vis_end = frame.apply(hp.point)
 
-        # --- MODE-DEPENDENT: transformative effects ---
-        # The hitpoint is the same in both modes. The difference is whether
-        # a transformative effect is applied:
-        #
-        #   PHYSICAL: apply only if hitpoint is_on_segment.
-        #   PLANNED:  apply only if surface is next in plan_queue.
+            # Zero-length skip (§31.3 — exact equality, no epsilon)
+            if vis_start == vis_end:
+                ... (handle cursor injection or origin escape)
+                continue
 
-        apply_effect = false
-        side_config = null
+            # Generate visual step
+            steps.append(Step(vis_start, vis_end, frame, hp, shared_ray))
 
-        if mode == PHYSICAL:
-            if hit.is_on_segment:
-                side_config = hit.surface.active_side_config(hit.side, game_state)
-                if side_config and side_config.effect != null and side_config.effect.is_transformative():
+            # Cursor check
+            if hp == cursor_hp:
+                path.cursor_index = len(steps)
+                break to next stage
+
+            # Target tracking
+            orig_surf = norm_to_surface[hp.segment]
+            if orig_surf.is_target and hp.on_segment:
+                targets_hit[orig_surf.id] = true
+
+            # === Blockage accumulation at endpoints ===
+            step_left_blocked |= hp.blocked_left
+            step_right_blocked |= hp.blocked_right
+
+            if hp.at_endpoint > 0 and not fully_blocked:
+                # Check ALL other segments sharing this endpoint
+                for other_seg in norm_segments:
+                    if other_seg == hp.segment: continue
+                    ep = at_which_endpoint(hp.point, other_seg)  # exact equality
+                    if ep > 0:
+                        sides = endpoint_blocked_sides(hp.point, other_seg, ray, ep)
+                        step_left_blocked |= sides[0]
+                        step_right_blocked |= sides[1]
+
+            fully_blocked = step_left_blocked and step_right_blocked
+
+            # === Effect application (mode-dependent) ===
+            if mode == PHYSICAL:
+                if fully_blocked and effect.is_transformative():
                     apply_effect = true
-        elif mode == PLANNED:
-            if plan_index < plan_queue.size():
-                if hit.surface.id == plan_queue[plan_index].surface_id:
-                    side_config = hit.surface.active_side_config(
-                        plan_queue[plan_index].side, game_state)
-                    if side_config and side_config.effect != null and side_config.effect.is_transformative():
-                        apply_effect = true
+            elif mode == PLANNED:
+                if plan_index < plan_entries.size() and surface matches:
+                    apply_effect = true
                     plan_index += 1
 
-        if not apply_effect:
-            excluded_surfaces.add(hit.segment)
-            ray = Ray(origin = hit.point, direction = ray.direction)
-            continue
+            if fully_blocked:
+                step_left_blocked = false    # reset for next hitpoint
+                step_right_blocked = false
 
-        # Apply the transformative effect
-        frame = frame.compose(side_config.effect.get_mobius())
-        ray = Ray(
-            origin = side_config.effect.get_inverse_mobius().apply(hit.point),
-            direction = ray.direction    # unchanged
-        )
-        excluded_surfaces = Set()
-        frame_dirty = true
+            if apply_effect:
+                # Push transform, advance ray, start new stage
+                transform_stack.append(effect.get_tracked_transform())
+                ray = Ray(origin=inverse.apply(hp.point), direction=ray.direction)
+                last_hit_segment = null
+                frame_dirty = true
+                stage_ended = true
+                break   # → next iteration of outer while loop
+
+            # No effect — advance within this stage
+            last_hit_segment = hp.segment
+            step_origin = hp.point
+
+        if not stage_ended:
+            break   # no more stages to process
 
     return TracedPath(steps, targets_hit)
 ```
 
-**Key invariant:** Both PHYSICAL and PLANNED modes produce steps at the SAME hitpoints (same start/end in visual coords). Divergence occurs ONLY when they apply different effects — i.e., different frames at a step (§14.2).
+**Key design decisions:**
+- **All hits precomputed per stage**, not one-at-a-time. This enables projective sort and the cursor to compete naturally with carrier hits.
+- **`skip_segment`** (single segment, reference equality) replaces the `excluded_surfaces` set. Only the most recently hit segment is excluded — the next stage clears it.
+- **Blockage accumulation** at endpoints: `blocked_left` and `blocked_right` accumulate across all segments sharing the endpoint. An effect fires only when both sides are blocked (`is_fully_blocked()`). This handles Y-junctions and T-junctions correctly.
+- **Transform stack** stores `TrackedTransform` objects (forward + inverse pair). The frame is recomposed from the stack on each stage boundary, enabling inverse-pair cancellation (§8.1).
+- The origin hitpoint (t=0) is always injected and sorted last by `projective_sort`. When reached, the ray escapes to bounds (forward and return segments).
 
 ### 12.2 Step record
 
@@ -1473,7 +1529,7 @@ func build_regions_from_casts(cast_results, origin):
 
 **`intersect_regions_with_surface(regions, surface):`** For each region, find which portion of the surface lies inside the region. Cast rays from origin through the surface's start, end, and via points. For each ray, if the earliest hit IS the surface (not a closer obstruction), that point is illuminated. The illuminated sub-segment is the continuous portion of the surface between illuminated points.
 
-**`see_through` parameter in `find_earliest_hit`:** Surfaces in the `see_through` set are treated as transparent — rays pass through them without recording a hit. This is distinct from `excluded_surfaces` (which prevents re-hitting the departure surface). Both can be active simultaneously.
+**`see_through` parameter in `find_all_hits`:** *(Not yet implemented — specified for the visibility system §15.)* Surfaces in the `see_through` set will be treated as transparent — rays pass through them without recording a hit. This is distinct from `skip_segment` (which prevents re-hitting the departure surface, §11.4). Both can be active simultaneously.
 
 ### 15.4 Multiple regions
 
@@ -2356,7 +2412,7 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **S8. Forward-first hit ordering.** Selected hit has smallest `t > 0`. If no `t > 0`: most negative `t < 0`. *(§11.3.)*
 
-**S9. Exclusion respected.** Surfaces in `excluded_surfaces` never appear in the hit result. *(§12.1.)*
+**S9. Exclusion respected.** The `skip_segment` segment is excluded from the hit result. *(§11.4, §12.1.)*
 
 **S10. Projective resets frame.** After every projective hit, `frame_id == IDENTITY_ID`. *(§10.7.)*
 
@@ -2431,6 +2487,35 @@ Rays use two-point `Direction` — no stored angles, no unit vectors. The `Direc
 Do not use `|x| < ε` for decisions that change topology (which hit wins, on-segment, vertex order). Epsilon logic varies with scale and platform. Prefer structural or provenance facts.
 
 **Collinearity in particular:** whether a segment is a line or arc is determined by **construction provenance**, not by coordinate comparison. A segment is a line if its three defining points were placed collinearly by the level editor (stored as a construction fact in the serialized cache) or if the via is `Vector2(INF, INF)`. At runtime, no floating-point collinearity test is performed — the carrier type (line vs circle) is a stored decision, loaded from the serialized cache.
+
+**Specific replacements (v0.7.0):** All six epsilon usages in the core math layer have been replaced:
+
+| Location | Was | Now |
+|----------|-----|-----|
+| `projective_sort` | `absf(t) < 1e-12` | `t == 0.0` (origin is constructed with exactly 0.0) |
+| `at_which_endpoint` | `distance_to < 0.01` | `point == segment.start.coords` (exact equality) |
+| `endpoint_blocked_sides` | `absf(cross) < 1e-9` | `cross == 0.0` (exact sign test) |
+| `maps_lines_to_arcs` | `cmod2(c) > 1e-20` | `c != Vector2.ZERO` (exact zero check) |
+| Tracer zero-length step | `distance_to < 0.01` | `vis_start == vis_end` (exact equality) |
+| `VisualConverter.is_arc` | `distance_squared_to < 1e-10` | `start == end_v` (exact equality) |
+
+Testing-layer tolerances (e.g., in `invariant_checker.gd`) are unaffected — they measure rendered pixel positions, not topology-changing decisions.
+
+#### 31.3.1 Three-tier endpoint detection
+
+When intersecting a ray with a segment, the intersection system uses a three-tier provenance chain to detect whether a hit occurs at a segment endpoint. This replaces the former distance-based `at_which_endpoint` check.
+
+**Tier 1 — Exact coordinate match (provenance):** Compare each segment endpoint coordinate against the ray's defining points (`ray.origin.coords`, `ray.direction.start.coords`, `ray.direction.end.coords`). If `endpoint_coords == ray_defining_point`, the endpoint is detected. This catches structural coincidences where the ray was constructed from the same defining points as the segment — the most common case (player at a vertex, reflection point at an adjacent segment's endpoint).
+
+**Tier 2 — Structural collinearity:** Compute `cross(endpoint - ray.origin, ray.direction)`. If the cross product is exactly `0.0`, the endpoint is collinear with the ray and is detected. This catches cases where the endpoint is structurally on the ray line but was not a defining point of the ray. The `== 0.0` test is deterministic — not an epsilon band.
+
+**Tier 3 — Quadratic solver:** The general ray-carrier intersection via the quadratic formula (§11.1). This produces approximate floating-point hit coordinates. Hits from this tier get `at_endpoint = 0` (interior hit).
+
+**Provenance snapping:** When Tier 1 or 2 detects an endpoint, the nearest quadratic hit (if one was found) is snapped to the exact endpoint coordinates and the exact `t`-value from projecting the endpoint onto the ray. The `at_endpoint` field is set to 1 (start) or 2 (end). This eliminates floating-point drift at structurally significant points.
+
+**Unmatched endpoint hits:** If a Tier 1/2 detected endpoint has no nearby quadratic hit (e.g., ray lies on the carrier — the quadratic has no isolated intersection), it is emitted as an additional HitRecord. This handles ray-on-carrier edge cases where the quadratic solver returns empty.
+
+**Blockage at endpoints:** When a hit occurs at an endpoint (`at_endpoint > 0`), the tracer examines the tangent direction into the segment relative to the ray direction to determine `blocked_left` and `blocked_right`. At non-endpoint interior hits, both sides are blocked. At endpoints, only the side where the segment extends is blocked. Multiple segments sharing an endpoint accumulate their blocked sides independently (§12.1).
 
 ### 31.4 Provenance
 

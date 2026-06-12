@@ -8,7 +8,7 @@
 |-------|-------|--------|
 | 40 | Circle Inversion Effect | Done |
 | 41 | Arc Segment Rendering | Done |
-| 42 | Circle Inversion in Physical Trace | Todo |
+| 42 | Circle Inversion in Physical Trace | Done |
 | 42.5 | Arc Collision Shapes for Player Physics | Todo |
 | 43 | Circle Inversion in Planner | Todo |
 | 44 | Visibility with Circles | Todo |

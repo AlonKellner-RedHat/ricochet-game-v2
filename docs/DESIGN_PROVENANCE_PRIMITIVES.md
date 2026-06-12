@@ -605,13 +605,13 @@ The visual and game layers (`scripts/visual/`, `scripts/game/`) need `Vector2` f
 
 ## 10. Migration Plan
 
-### Phase 1: New primitives (additive, no breakage)
+### Phase 1: New primitives (additive, no breakage) — Done
 - Add `TrackedTransform` class (`scripts/math/tracked_transform.gd`)
 - Add `Point` class (`scripts/math/point.gd`)
 - Unit tests for Point creation, transformation, simplification, aggregation, equality
 - Unit tests for TrackedTransform self-inverse, pair creation, identity
 
-### Phase 2: Segment uses Point
+### Phase 2: Segment uses Point — Done
 - Change `Segment.start/end/via` from `Vector2` to `Point`
 - Add `Segment.transformed(TrackedTransform) -> Segment`
 - Update `Segment._init()` to accept `Point` args
@@ -621,36 +621,36 @@ The visual and game layers (`scripts/visual/`, `scripts/game/`) need `Vector2` f
 - Update all Segment construction sites (level_settings, room_builder, visual_converter, tests)
 - Run tests after each file change
 
-### Phase 3: Direction, Ray, HitRecord use Point
+### Phase 3: Direction, Ray, HitRecord use Point — Done
 - Change `Direction.start/end` to `Point`
 - Change `Ray.origin` to `Point`
 - Change `HitRecord.point` to `Point`
 - Update `Intersection` methods to work with `Point.coords` for math, return `Point` in HitRecord
 - Run tests
 
-### Phase 4: Effects return TrackedTransform
+### Phase 4: Effects return TrackedTransform — Done
 - Add `get_tracked_transform() -> TrackedTransform` to Effect base class
 - Implement in `ReflectionEffect` (self-inverse)
 - Implement in `CircleInversionEffect` (self-inverse)
 - Keep `get_mobius()` / `get_inverse_mobius()` temporarily for backward compatibility
 - Run tests
 
-### Phase 5: Tracer uses Point and TrackedTransform
+### Phase 5: Tracer uses Point and TrackedTransform — Done
 - Replace `frame: MobiusTransform` with `transform_stack: Array[TrackedTransform]`
 - Replace `aim_point: Vector2` with `aim_point: Point`
 - Replace `origin` usage for virtual hits with `origin_point: Point`
 - Replace manual point transforms with `point.transformed(tracked)`
 - Replace `_build_normalized` to use `segment.transformed(frame_inv)`
-- Remove `apply_point_cached`, `apply_point_forward`, `compose_cached`, `invert_cached` from TransformCache
+- Keep `apply_point_forward`, `compose_cached`, `invert_cached` in TransformCache (still used for normalized surface caching)
 - Keep normalized surface cache
-- Run tests — the 2 currently-failing tests should now pass
+- Run tests
 
-### Phase 6: Planner uses Point
+### Phase 6: Planner uses Point — Todo
 - Update `_compute_image` to work with Points
 - Update `plan_transformative_subchain` to work with Points
 - Run tests
 
-### Phase 7: Visual layer extraction
+### Phase 7: Visual layer extraction — Partial
 - Update `path_renderer.gd` to use `.coords` extraction
 - Update `surface_node.gd` to use `.coords` extraction  
 - Update `arrow_animator.gd` to use `.coords` extraction
@@ -658,7 +658,7 @@ The visual and game layers (`scripts/visual/`, `scripts/game/`) need `Vector2` f
 - Update `game_manager.gd` debug output to use `.coords`
 - Run tests
 
-### Phase 8: Cleanup
+### Phase 8: Cleanup — Todo
 - Remove unused cache methods from `TransformCache`
 - Remove `get_mobius()` / `get_inverse_mobius()` if fully replaced
 - Run full test suite
