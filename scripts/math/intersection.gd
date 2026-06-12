@@ -31,25 +31,9 @@ static func find_nearest_hit(ray: Ray, segments: Array, _skip_point: Vector2 = V
 	for seg in segments:
 		if skip_segment != null and seg == skip_segment:
 			continue
-		var carrier: GeneralizedCircle = seg.get_carrier()
-		var hits := _intersect_ray_carrier(ray, carrier)
-		for hit_dict in hits:
-			var point: Vector2 = hit_dict["point"]
-			var on_seg := is_on_segment(point, seg)
-			var side := _determine_side(ray, point, seg)
-			var ep := at_which_endpoint(point, seg) if on_seg else 0
-			var bl := false
-			var br := false
-			if on_seg:
-				if ep == 0:
-					bl = true
-					br = true
-				else:
-					var sides := endpoint_blocked_sides(point, seg, ray, ep)
-					bl = sides[0]
-					br = sides[1]
-			var record := HitRecord.new(hit_dict["t"], point, seg, side, on_seg, ep, bl, br)
-			if hit_dict["t"] > t_offset:
+		var seg_hits := _find_segment_hits(ray, seg)
+		for record in seg_hits:
+			if record.t > t_offset:
 				forward.append(record)
 			else:
 				beyond.append(record)
@@ -65,31 +49,93 @@ static func find_all_hits(ray: Ray, segments: Array, skip_segment: Segment = nul
 	for seg in segments:
 		if skip_segment != null and seg == skip_segment:
 			continue
-		var carrier: GeneralizedCircle = seg.get_carrier()
-		var hits := _intersect_ray_carrier(ray, carrier)
-		for hit_dict in hits:
-			var point: Vector2 = hit_dict["point"]
-			var on_seg := is_on_segment(point, seg)
-			var side := _determine_side(ray, point, seg)
-			var ep := at_which_endpoint(point, seg) if on_seg else 0
-			var bl := false
-			var br := false
-			if on_seg:
-				if ep == 0:
-					bl = true
-					br = true
-				else:
-					var sides := endpoint_blocked_sides(point, seg, ray, ep)
-					bl = sides[0]
-					br = sides[1]
-			results.append(HitRecord.new(hit_dict["t"], point, seg, side, on_seg, ep, bl, br))
+		results.append_array(_find_segment_hits(ray, seg))
+	return results
+
+static func _detect_endpoints_on_ray(ray: Ray, segment: Segment) -> Dictionary:
+	var result: Dictionary = {}
+	var dir := ray.direction.to_vector()
+	var ray_defining: Array[Vector2] = [ray.origin.coords, ray.direction.start.coords, ray.direction.end.coords]
+
+	for ep_idx in [1, 2]:
+		var ep_coords: Vector2 = segment.start.coords if ep_idx == 1 else segment.end.coords
+		var detected := false
+		for rp in ray_defining:
+			if ep_coords == rp:
+				detected = true
+				break
+		if not detected:
+			var cross := (ep_coords - ray.origin.coords).cross(dir)
+			if cross == 0.0:
+				detected = true
+		if detected:
+			result[ep_idx] = project_point_on_ray(ray, ep_coords)
+	return result
+
+static func _find_segment_hits(ray: Ray, segment: Segment) -> Array:
+	var ep_on_ray := _detect_endpoints_on_ray(ray, segment)
+	var carrier: GeneralizedCircle = segment.get_carrier()
+	var quad_hits := _intersect_ray_carrier(ray, carrier)
+
+	if quad_hits.is_empty() and ep_on_ray.is_empty():
+		return []
+
+	var available_eps := ep_on_ray.duplicate()
+	var results: Array = []
+
+	for hit_dict in quad_hits:
+		var t: float = hit_dict["t"]
+		var point: Vector2 = hit_dict["point"]
+		var ep := 0
+
+		if not available_eps.is_empty():
+			var best_ep := 0
+			var best_dist := INF
+			for ep_idx in available_eps:
+				var dist := absf(t - float(available_eps[ep_idx]))
+				if dist < best_dist:
+					best_dist = dist
+					best_ep = ep_idx
+			if best_ep > 0:
+				point = segment.start.coords if best_ep == 1 else segment.end.coords
+				t = float(available_eps[best_ep])
+				ep = best_ep
+				available_eps.erase(best_ep)
+
+		var on_seg := is_on_segment(point, segment)
+		var side := _determine_side(ray, point, segment)
+		var bl := false
+		var br := false
+		if on_seg:
+			if ep == 0:
+				bl = true
+				br = true
+			else:
+				var sides := endpoint_blocked_sides(point, segment, ray, ep)
+				bl = sides[0]
+				br = sides[1]
+		results.append(HitRecord.new(t, point, segment, side, on_seg, ep, bl, br))
+
+	for ep_idx in available_eps:
+		var ep_coords: Vector2 = segment.start.coords if ep_idx == 1 else segment.end.coords
+		var t: float = float(available_eps[ep_idx])
+		var on_seg := is_on_segment(ep_coords, segment)
+		var side := _determine_side(ray, ep_coords, segment)
+		var bl := false
+		var br := false
+		if on_seg:
+			var sides := endpoint_blocked_sides(ep_coords, segment, ray, ep_idx)
+			bl = sides[0]
+			br = sides[1]
+		results.append(HitRecord.new(t, ep_coords, segment, side, on_seg, ep_idx, bl, br))
+
 	return results
 
 static func projective_sort(hits: Array) -> Array:
 	var sorted := hits.duplicate()
 	sorted.sort_custom(func(a: HitRecord, b: HitRecord) -> bool:
-		var a_zero := absf(a.t) < 1e-12
-		var b_zero := absf(b.t) < 1e-12
+		var a_zero := a.t == 0.0
+		var b_zero := b.t == 0.0
 		if a_zero and b_zero:
 			return false
 		if a_zero:
@@ -215,10 +261,10 @@ static func _pick_nearest(hits: Array) -> HitRecord:
 static func _hdet(zA: Vector2, wA: float, zB: Vector2, wB: float) -> Vector2:
 	return Vector2(zA.x * wB - zB.x * wA, zA.y * wB - zB.y * wA)
 
-static func at_which_endpoint(point: Vector2, segment: Segment, eps: float = 0.01) -> int:
-	if point.distance_to(segment.start.coords) < eps:
+static func at_which_endpoint(point: Vector2, segment: Segment, _eps: float = 0.01) -> int:
+	if point == segment.start.coords:
 		return 1
-	if point.distance_to(segment.end.coords) < eps:
+	if point == segment.end.coords:
 		return 2
 	return 0
 
@@ -246,7 +292,7 @@ static func endpoint_blocked_sides(point: Vector2, segment: Segment, ray: Ray, w
 	var tangent := tangent_into_segment(segment, which_endpoint)
 	var ray_dir := ray.direction.to_vector().normalized()
 	var cross := ray_dir.cross(tangent)
-	if absf(cross) < 1e-9:
+	if cross == 0.0:
 		return [true, true]
 	if cross > 0:
 		return [false, true]

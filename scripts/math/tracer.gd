@@ -151,7 +151,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var step_hit: Intersection.HitRecord = null if is_null_seg else hp
 
 			# --- Zero-length skip ---
-			if vis_start.distance_to(vis_end) < 0.01:
+			if vis_start == vis_end:
 				if is_origin:
 					if hp_idx == 0:
 						var vis_dir2 := (frame.apply(step_origin_pos + ray.direction.to_vector().normalized()) - vis_start).normalized()

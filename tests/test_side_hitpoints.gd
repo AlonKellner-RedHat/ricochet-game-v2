@@ -46,7 +46,7 @@ func test_at_which_endpoint_off_segment() -> void:
 func test_at_which_endpoint_near_start() -> void:
 	var seg := _horiz_segment()
 	var result := Intersection.at_which_endpoint(Vector2(100.005, 200.003), seg)
-	assert_eq(result, 1, "Point within eps of start should return 1")
+	assert_eq(result, 0, "Point near but not exactly at start should return 0 (exact equality)")
 
 func test_at_which_endpoint_arc() -> void:
 	var seg := _arc_segment()

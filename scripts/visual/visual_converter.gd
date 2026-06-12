@@ -9,7 +9,7 @@ static func is_arc(start: Vector2, via: Vector2, end_v: Vector2) -> bool:
 		return false
 	if is_inf(start.x) or is_inf(start.y):
 		return false
-	if start.distance_squared_to(end_v) < 1e-10:
+	if start == end_v:
 		return false
 	var seg := Segment.from_coords(start, end_v, via)
 	var carrier := seg.get_carrier()

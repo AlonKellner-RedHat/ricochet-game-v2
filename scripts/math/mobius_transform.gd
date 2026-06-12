@@ -89,7 +89,7 @@ static func cmod2(v: Vector2) -> float:
 	return v.x * v.x + v.y * v.y
 
 func maps_lines_to_arcs() -> bool:
-	return cmod2(c) > 1e-20
+	return c != Vector2.ZERO
 
 static func reset_id_counter() -> void:
 	_next_id = 1
