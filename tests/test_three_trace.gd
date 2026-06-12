@@ -6,7 +6,7 @@ func before_each() -> void:
 
 func _mirror(x: float, y_start: float = 0.0, y_end: float = 600.0) -> Surface:
 	var mid_y := (y_start + y_end) / 2.0
-	var seg := Segment.new(Vector2(x, y_start), Vector2(x, y_end), Vector2(x, mid_y))
+	var seg := Segment.from_coords(Vector2(x, y_start), Vector2(x, y_end), Vector2(x, mid_y))
 	var carrier := seg.get_carrier()
 	var refl := ReflectionEffect.new(carrier)
 	var config := SideConfig.new(refl, true)
@@ -17,14 +17,14 @@ func _wall(x: float) -> Surface:
 
 func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> Array:
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	var aim_ray := Ray.new(player, aim)
+	var aim_ray := Ray.from_coords(player, aim)
 	var cache := TransformCache.new()
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
 	var ci: int = planned.cursor_index
 	if ci < 0:
 		ci = planned.steps.size()
@@ -129,13 +129,13 @@ func test_user_bug_two_mirrors_empty_plan() -> void:
 	var w_bot := RoomBuilder.create_block_surface(Vector2(1360, 840), Vector2(560, 840), Vector2(960, 840))
 	var w_left := RoomBuilder.create_block_surface(Vector2(560, 840), Vector2(560, 240), Vector2(560, 540))
 
-	var m1_seg := Segment.new(Vector2(800, 300), Vector2(800, 780), Vector2(800, 540))
+	var m1_seg := Segment.from_coords(Vector2(800, 300), Vector2(800, 780), Vector2(800, 540))
 	var m1_refl := ReflectionEffect.new(m1_seg.get_carrier())
 	var m1_left := SideConfig.new(m1_refl, true)
 	var m1_right := SideConfig.new(null, false)
 	var mirror1 := Surface.new(m1_seg, m1_left, m1_right, false, false)
 
-	var m2_seg := Segment.new(Vector2(1200, 300), Vector2(1200, 780), Vector2(1200, 540))
+	var m2_seg := Segment.from_coords(Vector2(1200, 300), Vector2(1200, 780), Vector2(1200, 540))
 	var m2_refl := ReflectionEffect.new(m2_seg.get_carrier())
 	var m2_left := SideConfig.new(m2_refl, true)
 	var m2_right := SideConfig.new(null, false)

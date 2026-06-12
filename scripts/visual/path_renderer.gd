@@ -4,6 +4,10 @@ const LINE_WIDTH := 2.0
 const DASH_ON := 10.0
 const DASH_OFF := 5.0
 
+enum DisplayMode { MERGED, PHYSICAL, PLANNED }
+const DISPLAY_MODE_NAMES := ["MERGED", "PHYSICAL", "PLANNED"]
+
+var display_mode: int = DisplayMode.MERGED
 var _player: CharacterBody2D
 var _cursor: Node2D
 var _traced_path: Tracer.TracedPath = null
@@ -45,13 +49,13 @@ func _compute_trace() -> void:
 	var cache := TransformCache.new()
 	var aim_dir: Direction = Planner.compute_aim_direction(
 		player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
-	var aim_ray := Ray.new(player_pos, aim_dir)
+	var aim_ray := Ray.from_coords(player_pos, aim_dir)
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
 	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
 
 	var ci: int = _planned_path.cursor_index
 	if ci < 0:
@@ -70,7 +74,20 @@ func _get_surfaces() -> Array:
 		return parent.surfaces
 	return []
 
+func cycle_display_mode() -> void:
+	display_mode = (display_mode + 1) % 3
+	print("[PathRenderer] Display mode: %s" % DISPLAY_MODE_NAMES[display_mode])
+	queue_redraw()
+
 func _draw() -> void:
+	if display_mode == DisplayMode.MERGED:
+		_draw_merged()
+	elif display_mode == DisplayMode.PHYSICAL:
+		_draw_raw_trace(_traced_path, Color.CYAN, "P")
+	elif display_mode == DisplayMode.PLANNED:
+		_draw_raw_trace(_planned_path, Color.MAGENTA, "L")
+
+func _draw_merged() -> void:
 	if _merged_steps.size() == 0:
 		return
 	for i in _merged_steps.size():
@@ -99,6 +116,47 @@ func _draw() -> void:
 		col.a = 0.4
 		draw_circle(ms.start - global_position, 4.0, col)
 		draw_circle(ms.end - global_position, 4.0, col)
+
+func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: String) -> void:
+	if path == null or path.steps.size() == 0:
+		return
+	var cursor_idx := path.cursor_index if path.cursor_index >= 0 else path.steps.size()
+	for i in path.steps.size():
+		var step: Tracer.Step = path.steps[i]
+		var from := step.start - global_position
+		var to := step.end - global_position
+		if from == to:
+			continue
+		var col := base_color
+		if i >= cursor_idx:
+			col = Color(base_color, 0.35)
+		var is_virtual := step.hit == null
+		if step.is_arc_step and not is_inf(step.end.x) and not is_inf(step.end.y):
+			var p := VisualConverter.arc_params(step.start, step.via, step.end)
+			var arc_center: Vector2 = p["center"] - global_position
+			if is_virtual:
+				_draw_dashed_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col)
+			else:
+				draw_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col, LINE_WIDTH)
+		else:
+			if is_virtual:
+				_draw_dashed(from, to, col)
+			else:
+				draw_line(from, to, col, LINE_WIDTH)
+
+	for i in path.steps.size():
+		var step: Tracer.Step = path.steps[i]
+		var col := base_color
+		col.a = 0.4
+		draw_circle(step.start - global_position, 4.0, col)
+		draw_circle(step.end - global_position, 4.0, col)
+		# Step index label
+		var mid := ((step.start + step.end) / 2.0) - global_position + Vector2(0, -10)
+		var font := ThemeDB.fallback_font
+		var lbl := "%s%d" % [label_prefix, i]
+		if step.hit == null:
+			lbl += "*"
+		draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
 
 func _draw_dashed_arc(center: Vector2, radius: float, start_angle: float, end_angle: float, point_count: int, col: Color) -> void:
 	var span := end_angle - start_angle
@@ -155,7 +213,7 @@ func get_traced_path() -> Tracer.TracedPath:
 	return _traced_path
 
 func get_planned_path():
-	return null
+	return _planned_path
 
 func get_typed_steps() -> Array:
 	return _merged_steps

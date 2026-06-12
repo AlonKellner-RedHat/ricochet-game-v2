@@ -4,7 +4,7 @@ func before_each() -> void:
 	MobiusTransform.reset_id_counter()
 
 func _make_reflection(x: float) -> MobiusTransform:
-	var seg := Segment.new(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 	var refl := ReflectionEffect.new(seg.get_carrier())
 	return refl.get_mobius()
 
@@ -82,7 +82,7 @@ func test_norm_cache_different_frame_ids() -> void:
 
 func test_shared_cache_same_frame_ids() -> void:
 	var cache := TransformCache.new()
-	var seg := Segment.new(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
 	var refl := ReflectionEffect.new(seg.get_carrier())
 	var config := SideConfig.new(refl, true)
 	var mirror := Surface.new(seg, config, config, false, false)
@@ -90,8 +90,8 @@ func test_shared_cache_same_frame_ids() -> void:
 	var surfaces: Array = [mirror, w]
 	var player := Vector2(600, 300)
 	var cursor := Vector2(200, 300)
-	var aim := Direction.new(player, cursor)
-	var ray := Ray.new(player, aim)
+	var aim := Direction.from_coords(player, cursor)
+	var ray := Ray.from_coords(player, aim)
 
 	# PLANNED mode needs a plan entry to apply the mirror's effect
 	var plan_entries: Array = [PlanManager.PlanEntry.new(mirror.id, Side.Value.LEFT)]
@@ -99,10 +99,10 @@ func test_shared_cache_same_frame_ids() -> void:
 	# Both traces use the SAME cache — no ID counter reset needed
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
+		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
 
 	assert_gt(physical.steps.size(), 1, "Physical trace should have >1 step after reflection")
 	assert_gt(planned.steps.size(), 1, "Planned trace should have >1 step after reflection")

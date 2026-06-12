@@ -13,5 +13,8 @@ func get_mobius() -> MobiusTransform:
 func get_inverse_mobius() -> MobiusTransform:
 	return get_mobius().invert()
 
+func get_tracked_transform() -> TrackedTransform:
+	return TrackedTransform.identity()
+
 func normalized(_carrier: GeneralizedCircle) -> Effect:
 	return self

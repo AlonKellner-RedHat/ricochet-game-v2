@@ -8,25 +8,25 @@ var _inverse_cache: Dictionary = {}
 var _norm_cache: Dictionary = {}
 var _point_cache: Dictionary = {}
 
-func derive_carrier_cached(start: Point, end_pt: Point, via: Point) -> GeneralizedCircle:
-	var key := Vector3i(start.id, end_pt.id, via.id)
+func derive_carrier_cached(start: Vector2, end_pt: Vector2, via: Vector2) -> GeneralizedCircle:
+	var key := "%s|%s|%s" % [var_to_str(start), var_to_str(end_pt), var_to_str(via)]
 	if _carrier_cache.has(key):
 		return _carrier_cache[key]
 
-	var seg := Segment.new(start.position, end_pt.position, via.position)
+	var seg := Segment.from_coords(start, end_pt, via)
 	var carrier := seg.get_carrier()
 
 	_carrier_cache[key] = carrier
-	var reverse_key := Vector3i(start.id, end_pt.id, -1)
+	var reverse_key := "%s|%s" % [var_to_str(start), var_to_str(end_pt)]
 	_via_cache[reverse_key] = via
 
 	return carrier
 
-func derive_via_cached(start: Point, end_pt: Point, _carrier: GeneralizedCircle) -> Point:
-	var reverse_key := Vector3i(start.id, end_pt.id, -1)
+func derive_via_cached(start: Vector2, end_pt: Vector2, _carrier: GeneralizedCircle) -> Vector2:
+	var reverse_key := "%s|%s" % [var_to_str(start), var_to_str(end_pt)]
 	if _via_cache.has(reverse_key):
 		return _via_cache[reverse_key]
-	return null
+	return Vector2(NAN, NAN)
 
 func compose_cached(a: MobiusTransform, b: MobiusTransform) -> MobiusTransform:
 	var key := Vector2i(a.id, b.id)

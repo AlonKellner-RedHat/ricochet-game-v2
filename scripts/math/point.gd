@@ -1,19 +1,49 @@
 class_name Point
 extends RefCounted
 
-enum Provenance { ORIGIN, BOUNCE, IMAGE, CORNER, CURSOR, SEGMENT_START, SEGMENT_END, SEGMENT_VIA }
+var original: Vector2
+var coords: Vector2
+var transforms: Array
+var frame: MobiusTransform
 
-static var _next_id: int = 1
+static func at(position: Vector2) -> Point:
+	var p := Point.new()
+	p.original = position
+	p.coords = position
+	p.transforms = []
+	p.frame = MobiusTransform.identity()
+	return p
 
-var id: int
-var position: Vector2
-var provenance: Provenance
+func transformed(t: TrackedTransform) -> Point:
+	var p := Point.new()
+	p.original = original
+	p.transforms = _simplify(transforms + [t])
+	p.frame = _aggregate(p.transforms)
+	if p.transforms.is_empty():
+		p.coords = original
+	else:
+		p.coords = p.frame.apply(original)
+	return p
 
-func _init(p_position: Vector2, p_provenance: Provenance = Provenance.ORIGIN) -> void:
-	id = _next_id
-	_next_id += 1
-	position = p_position
-	provenance = p_provenance
+func same_origin(other: Point) -> bool:
+	return original == other.original
 
-static func reset_id_counter() -> void:
-	_next_id = 1
+func same_position(other: Point) -> bool:
+	return coords == other.coords
+
+static func _simplify(seq: Array) -> Array:
+	var result: Array = []
+	for t in seq:
+		if result.size() > 0 and result.back().inverse == t:
+			result.pop_back()
+		else:
+			result.append(t)
+	return result
+
+static func _aggregate(seq: Array) -> MobiusTransform:
+	if seq.is_empty():
+		return MobiusTransform.identity()
+	var result: MobiusTransform = seq[0].mobius
+	for i in range(1, seq.size()):
+		result = result.compose(seq[i].mobius)
+	return result

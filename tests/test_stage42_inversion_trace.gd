@@ -5,7 +5,7 @@ func before_each() -> void:
 	MobiusTransform.reset_id_counter()
 
 func _inversion_surface() -> Surface:
-	var seg := Segment.new(Vector2(200, 100), Vector2(200, 300), Vector2(300, 200))
+	var seg := Segment.from_coords(Vector2(200, 100), Vector2(200, 300), Vector2(300, 200))
 	var carrier := seg.get_carrier()
 	var inv := CircleInversionEffect.new(carrier)
 	var left := SideConfig.new(inv, true)
@@ -40,7 +40,7 @@ func test_stage42_inversion_surface_creation() -> void:
 
 # --- Step 4: Physical trace through inversion ---
 
-func _trace_outside_in() -> Tracer.TracedPath:
+func _trace_outside_in(plan_entries: Array = []) -> Tracer.TracedPath:
 	# Player approaches the arc from outside (right side), hitting the LEFT (outer) side.
 	# Ray at y=250 (not y=200) to avoid passing through the inversion center,
 	# which would keep the post-inversion path as a straight line instead of an arc.
@@ -52,8 +52,9 @@ func _trace_outside_in() -> Tracer.TracedPath:
 	var surfaces: Array = [inv_surf, w_left, w_right, w_top, w_bot]
 	var player := Vector2(450, 250)
 	var cursor := Vector2(50, 250)
-	var aim := Direction.new(player, cursor)
-	return Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 600, 400))
+	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
+	return Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 600, 400),
+		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 
 func test_stage42_trace_through_inversion() -> void:
 	var path := _trace_outside_in()
@@ -73,7 +74,7 @@ func test_stage42_frame_after_inversion() -> void:
 	var surfaces: Array = [inv_surf, w]
 	var player := Vector2(450, 200)
 	var cursor := Vector2(50, 200)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 600, 400))
 	var found_non_identity := false
 	for step in path.steps:
@@ -98,7 +99,7 @@ func test_stage42_inversion_direction_unchanged() -> void:
 	var surfaces: Array = [inv_surf, w]
 	var player := Vector2(50, 200)
 	var cursor := Vector2(400, 200)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 600, 400))
 	for step in path.steps:
 		var s: Tracer.Step = step
@@ -119,7 +120,8 @@ func test_stage42_S16_no_nan_in_trace() -> void:
 		assert_false(is_inf(s.start.x) or is_inf(s.start.y), "No Inf in start: %s" % s.start)
 
 func test_stage42_visual_path_contains_arc() -> void:
-	var path := _trace_outside_in()
+	var plan := [PlanManager.PlanEntry.new(1, Side.Value.LEFT)]
+	var path := _trace_outside_in(plan)
 	var found_arc := false
 	for i in path.steps.size():
 		var s: Tracer.Step = path.steps[i]
@@ -131,11 +133,11 @@ func test_stage42_visual_path_contains_arc() -> void:
 func test_stage42_transform_all_line_becomes_circle() -> void:
 	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
 	var inv := CircleInversionEffect.new(carrier)
-	var line_seg := Segment.new(Vector2(50, 100), Vector2(50, 300), Vector2(50, 200))
+	var line_seg := Segment.from_coords(Vector2(50, 100), Vector2(50, 300), Vector2(50, 200))
 	assert_true(line_seg.is_line(), "Original segment is a line")
 	var m_inv := inv.get_mobius().invert()
-	var s := m_inv.apply(line_seg.start)
-	var e := m_inv.apply(line_seg.end)
-	var v := m_inv.apply(line_seg.via)
-	var transformed := Segment.new(s, e, v)
+	var s := m_inv.apply(line_seg.start.coords)
+	var e := m_inv.apply(line_seg.end.coords)
+	var v := m_inv.apply(line_seg.via.coords)
+	var transformed := Segment.from_coords(s, e, v)
 	assert_false(transformed.is_line(), "Line becomes circle under inversion")

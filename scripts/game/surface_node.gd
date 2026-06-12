@@ -50,7 +50,7 @@ func _draw() -> void:
 		if is_arc:
 			_draw_surface_arc(left_color, LINE_WIDTH)
 		else:
-			draw_line(surface.segment.start, surface.segment.end, left_color, LINE_WIDTH)
+			draw_line(surface.segment.start.coords, surface.segment.end.coords, left_color, LINE_WIDTH)
 	else:
 		var left_alpha := 1.0 if left_config.interactive else 0.5
 		var right_alpha := 1.0 if right_config.interactive else 0.5
@@ -64,17 +64,17 @@ func _draw() -> void:
 			draw_arc(p["center"], outer_r, p["start_angle"], p["end_angle"], p["point_count"], outer_color, LINE_WIDTH * 0.5)
 			draw_arc(p["center"], inner_r, p["start_angle"], p["end_angle"], p["point_count"], inner_color, LINE_WIDTH * 0.5)
 		else:
-			var seg_dir := (surface.segment.end - surface.segment.start).normalized()
+			var seg_dir := (surface.segment.end.coords - surface.segment.start.coords).normalized()
 			var normal := Vector2(-seg_dir.y, seg_dir.x)
 			var offset := normal * SIDE_OFFSET
-			var mid := (surface.segment.start + surface.segment.end) / 2.0
+			var mid := (surface.segment.start.coords + surface.segment.end.coords) / 2.0
 			var side_at_normal: Side.Value = surface.segment.determine_side(mid + normal * SIDE_OFFSET)
 			if side_at_normal == Side.Value.LEFT:
-				draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
-				draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+				draw_line(surface.segment.start.coords + offset, surface.segment.end.coords + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
+				draw_line(surface.segment.start.coords - offset, surface.segment.end.coords - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
 			else:
-				draw_line(surface.segment.start + offset, surface.segment.end + offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
-				draw_line(surface.segment.start - offset, surface.segment.end - offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
+				draw_line(surface.segment.start.coords + offset, surface.segment.end.coords + offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+				draw_line(surface.segment.start.coords - offset, surface.segment.end.coords - offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
 
 	if _hover_side >= 0:
 		if is_arc:
@@ -83,16 +83,16 @@ func _draw() -> void:
 			var hover_r: float = p["radius"] + (SIDE_OFFSET + 2.0) * (1.0 if is_outer else -1.0)
 			draw_arc(p["center"], hover_r, p["start_angle"], p["end_angle"], p["point_count"], HOVER_COLOR, HOVER_WIDTH)
 		else:
-			var seg_dir2 := (surface.segment.end - surface.segment.start).normalized()
+			var seg_dir2 := (surface.segment.end.coords - surface.segment.start.coords).normalized()
 			var normal2 := Vector2(-seg_dir2.y, seg_dir2.x)
-			var mid2 := (surface.segment.start + surface.segment.end) / 2.0
+			var mid2 := (surface.segment.start.coords + surface.segment.end.coords) / 2.0
 			var side_at_n2: Side.Value = surface.segment.determine_side(mid2 + normal2 * SIDE_OFFSET)
 			var sign2 := 1.0 if side_at_n2 == _hover_side else -1.0
 			var hover_offset := normal2 * (SIDE_OFFSET + 2.0) * sign2
-			draw_line(surface.segment.start + hover_offset, surface.segment.end + hover_offset, HOVER_COLOR, HOVER_WIDTH)
+			draw_line(surface.segment.start.coords + hover_offset, surface.segment.end.coords + hover_offset, HOVER_COLOR, HOVER_WIDTH)
 
 	if _plan_indices.size() > 0:
-		var mid := surface.segment.via
+		var mid := surface.segment.via.coords
 		var label_text := ""
 		for idx in _plan_indices:
 			if label_text != "":
@@ -105,14 +105,14 @@ func _draw_surface_arc(color: Color, width: float) -> void:
 	draw_arc(p["center"], p["radius"], p["start_angle"], p["end_angle"], p["point_count"], color, width)
 
 func _arc_params() -> Dictionary:
-	return VisualConverter.arc_params(surface.segment.start, surface.segment.via, surface.segment.end)
+	return VisualConverter.arc_params(surface.segment.start.coords, surface.segment.via.coords, surface.segment.end.coords)
 
 func _is_left_outer() -> bool:
 	var carrier := surface.segment.get_carrier()
 	if carrier.is_line():
 		return true
 	var ctr := carrier.center()
-	var test_point := ctr + (surface.segment.start - ctr).normalized() * (carrier.radius() + SIDE_OFFSET)
+	var test_point := ctr + (surface.segment.start.coords - ctr).normalized() * (carrier.radius() + SIDE_OFFSET)
 	return surface.segment.determine_side(test_point) == Side.Value.LEFT
 
 func _effect_color(config: SideConfig) -> Color:
@@ -130,8 +130,8 @@ func _add_collision_shape() -> void:
 	var body := StaticBody2D.new()
 	var collision := CollisionShape2D.new()
 	var shape := SegmentShape2D.new()
-	shape.a = surface.segment.start
-	shape.b = surface.segment.end
+	shape.a = surface.segment.start.coords
+	shape.b = surface.segment.end.coords
 	collision.shape = shape
 	body.add_child(collision)
 	add_child(body)

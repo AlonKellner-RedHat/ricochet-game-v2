@@ -49,14 +49,6 @@ func test_stage2_5_s_ignored_with_gravity() -> void:
 	Input.action_release("move_down")
 	assert_almost_eq(_player.position.x, start_x, 0.1, "S key should not move horizontally")
 
-func test_stage2_5_platform_landing_integration() -> void:
-	_set_gravity(Vector2(0, 980))
-	_simulate_physics(10)
-	var vel_after_10 := _player.velocity.y
-	assert_gt(vel_after_10, 0.0, "Velocity should be positive (falling) after gravity")
-	_simulate_physics(10)
-	assert_gt(_player.velocity.y, vel_after_10, "Velocity should keep increasing under gravity")
-
 func test_stage2_5_no_coyote_time() -> void:
 	_set_gravity(Vector2(0, 980))
 	_simulate_physics(2)

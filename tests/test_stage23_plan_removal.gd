@@ -63,7 +63,7 @@ func test_stage23_rightclick_planned_removes() -> void:
 		pending("No mirror found in scene")
 		return
 
-	var click_pos: Vector2 = (mirror.segment.start + mirror.segment.end) / 2.0
+	var click_pos: Vector2 = (mirror.segment.start.coords + mirror.segment.end.coords) / 2.0
 	var side: Side.Value = mirror.segment.determine_side(click_pos + Vector2(1, 0))
 	var config_check: SideConfig = mirror.active_side_config(side, GameState.new())
 	if not config_check.interactive:

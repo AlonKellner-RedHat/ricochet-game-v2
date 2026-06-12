@@ -11,14 +11,14 @@ static func is_arc(start: Vector2, via: Vector2, end_v: Vector2) -> bool:
 		return false
 	if start.distance_squared_to(end_v) < 1e-10:
 		return false
-	var seg := Segment.new(start, end_v, via)
+	var seg := Segment.from_coords(start, end_v, via)
 	var carrier := seg.get_carrier()
 	if carrier.is_line():
 		return false
 	return carrier.radius() < MAX_ARC_RADIUS
 
 static func arc_params(start: Vector2, via: Vector2, end_v: Vector2) -> Dictionary:
-	var seg := Segment.new(start, end_v, via)
+	var seg := Segment.from_coords(start, end_v, via)
 	var carrier := seg.get_carrier()
 	if carrier.is_line():
 		return {"center": Vector2.ZERO, "radius": 0.0, "start_angle": 0.0, "end_angle": 0.0, "clockwise": false, "point_count": 2, "span": 0.0}

@@ -10,27 +10,27 @@ func _build_scene_surfaces() -> Array:
 	surfs.append_array(RoomBuilder.create_room_surfaces(Rect2(160, 90, 1600, 900)))
 	# mirror_lines (left-side reflect)
 	for def in [Vector4(500, 200, 500, 700), Vector4(1400, 300, 1400, 800), Vector4(700, 800, 1200, 800)]:
-		var seg := Segment.new(Vector2(def.x, def.y), Vector2(def.z, def.w),
+		var seg := Segment.from_coords(Vector2(def.x, def.y), Vector2(def.z, def.w),
 			Vector2((def.x + def.z) / 2.0, (def.y + def.w) / 2.0))
 		var carrier := seg.get_carrier()
 		var refl := ReflectionEffect.new(carrier)
 		surfs.append(Surface.new(seg, SideConfig.new(refl, true), SideConfig.new(null, false), false, false))
 	# mirror_right_lines
 	for def in [Vector4(960, 200, 960, 500)]:
-		var seg := Segment.new(Vector2(def.x, def.y), Vector2(def.z, def.w),
+		var seg := Segment.from_coords(Vector2(def.x, def.y), Vector2(def.z, def.w),
 			Vector2((def.x + def.z) / 2.0, (def.y + def.w) / 2.0))
 		var carrier := seg.get_carrier()
 		var refl := ReflectionEffect.new(carrier)
 		surfs.append(Surface.new(seg, SideConfig.new(null, false), SideConfig.new(refl, true), false, false))
 	# inversion_left_arcs: (1100, 400, 1100, 700, 1230, 550)
-	var inv_seg := Segment.new(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
+	var inv_seg := Segment.from_coords(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
 	var inv_carrier := inv_seg.get_carrier()
 	var inv_effect := CircleInversionEffect.new(inv_carrier)
 	surfs.append(Surface.new(inv_seg, SideConfig.new(inv_effect, true), SideConfig.new(null, false), false, false))
 	# Screen boundary pass-throughs
 	for def in [Vector4(0, 0, 1920, 0), Vector4(1920, 0, 1920, 1080),
 				Vector4(1920, 1080, 0, 1080), Vector4(0, 1080, 0, 0)]:
-		var seg := Segment.new(Vector2(def.x, def.y), Vector2(def.z, def.w),
+		var seg := Segment.from_coords(Vector2(def.x, def.y), Vector2(def.z, def.w),
 			Vector2((def.x + def.z) / 2.0, (def.y + def.w) / 2.0))
 		surfs.append(Surface.new(seg, SideConfig.new(null, false), SideConfig.new(null, false), false, false))
 	return surfs
@@ -41,7 +41,7 @@ func test_step1_reproduce_infinite_loop() -> void:
 	var surfs := _build_scene_surfaces()
 	var player := Vector2(1309.974, 816.636)
 	var cursor := Vector2(1244.296, 594.100)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
 	gut.p("Step count: %d" % path.steps.size())
 	assert_lt(path.steps.size(), 50, "Trace should not produce hundreds of steps (got %d)" % path.steps.size())
@@ -52,7 +52,7 @@ func test_step2_trace_diagnostics() -> void:
 	var surfs := _build_scene_surfaces()
 	var player := Vector2(1309.974, 816.636)
 	var cursor := Vector2(1244.296, 594.100)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
 	gut.p("Total steps: %d" % path.steps.size())
 	var limit: int = mini(path.steps.size(), 20)
@@ -77,7 +77,7 @@ func test_step2_trace_diagnostics() -> void:
 
 func test_step3_self_inversion_precision() -> void:
 	# The scene's inversion circle: start=(1100,400) end=(1100,700) via=(1230,550)
-	var seg := Segment.new(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
+	var seg := Segment.from_coords(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
 	var carrier := seg.get_carrier()
 	var center := carrier.center()
 	var radius := carrier.radius()
@@ -110,7 +110,7 @@ func test_step3_self_inversion_precision() -> void:
 # === Cache round-trip tests ===
 
 func test_cache_self_inverse_roundtrip_exact() -> void:
-	var seg := Segment.new(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
+	var seg := Segment.from_coords(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
 	var carrier := seg.get_carrier()
 	var inv := CircleInversionEffect.new(carrier)
 	var mobius := inv.get_mobius()
@@ -126,7 +126,7 @@ func test_cache_self_inverse_roundtrip_exact() -> void:
 			"Self-inverse round-trip must be EXACT for angle %.1f (p=%s rt=%s)" % [angle, p, roundtrip])
 
 func test_cache_non_carrier_point_roundtrip() -> void:
-	var seg := Segment.new(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
+	var seg := Segment.from_coords(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
 	var carrier := seg.get_carrier()
 	var inv := CircleInversionEffect.new(carrier)
 	var mobius := inv.get_mobius()
@@ -141,7 +141,7 @@ func test_cache_non_carrier_point_roundtrip() -> void:
 
 func test_step4_segment_exclusion_after_renorm() -> void:
 	# Minimal scene: just the inversion surface + walls
-	var inv_seg := Segment.new(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
+	var inv_seg := Segment.from_coords(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
 	var inv_carrier := inv_seg.get_carrier()
 	var inv_effect := CircleInversionEffect.new(inv_carrier)
 	var inv_surf := Surface.new(inv_seg, SideConfig.new(inv_effect, true), SideConfig.new(null, false), false, false)
@@ -151,7 +151,7 @@ func test_step4_segment_exclusion_after_renorm() -> void:
 	# Use a ray that approaches the arc from OUTSIDE (to trigger the effect)
 	var player := Vector2(1400, 550)
 	var cursor := Vector2(900, 550)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
 
 	gut.p("Step count: %d" % path.steps.size())
@@ -178,7 +178,7 @@ func test_bug2_reproduce_aim_ignores_surfaces() -> void:
 	var surfs := _build_scene_surfaces()
 	var player := Vector2(1301.632, 932.631)
 	var cursor := Vector2(1112.158, 507.941)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
 	gut.p("Steps: %d" % path.steps.size())
 	for i in path.steps.size():
@@ -204,8 +204,8 @@ func test_bug2_aim_point_frame_analysis() -> void:
 	var surfs := _build_scene_surfaces()
 	var player := Vector2(1301.632, 932.631)
 	var cursor := Vector2(1112.158, 507.941)
-	var aim := Direction.new(player, cursor)
-	gut.p("aim_point (direction.end) = %s" % aim.end)
+	var aim := Direction.from_coords(player, cursor)
+	gut.p("aim_point (direction.end) = %s" % aim.end.coords)
 	gut.p("Player = %s, Cursor = %s" % [player, cursor])
 
 	# Trace and capture per-step details about aim injection
@@ -233,11 +233,11 @@ func test_bug2_aim_point_frame_analysis() -> void:
 			"hit" if post.hit != null else "NO HIT",
 			post.is_arc_step])
 		# The post-inversion step ends at the aim image — check if that's where it ends
-		var inv_seg := Segment.new(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
+		var inv_seg := Segment.from_coords(Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550))
 		var inv_carrier := inv_seg.get_carrier()
 		var inv_eff := CircleInversionEffect.new(inv_carrier)
 		var aim_image := inv_eff.get_mobius().apply(cursor)
-		gut.p("aim_point = %s" % aim.end)
+		gut.p("aim_point = %s" % aim.end.coords)
 		gut.p("aim_image (M(cursor)) = %s" % aim_image)
 		gut.p("Post-inversion step end = %s" % post.end)
 		gut.p("Distance to aim_image: %.4f" % post.end.distance_to(aim_image))
@@ -248,7 +248,7 @@ func test_bug2_aim_point_frame_analysis() -> void:
 
 func _trace_and_diagnose(player: Vector2, cursor: Vector2, label: String) -> Tracer.TracedPath:
 	var surfs := _build_scene_surfaces()
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
 	gut.p("--- %s ---" % label)
 	gut.p("Player=%s Cursor=%s Steps=%d" % [player, cursor, path.steps.size()])
@@ -261,7 +261,7 @@ func _trace_and_diagnose(player: Vector2, cursor: Vector2, label: String) -> Tra
 		gut.p("  [%d] fid=%d arc=%s %s->%s %s" % [
 			i, s.frame_id, s.is_arc_step, s.start, s.end, hit_info])
 	# Check: is the first post-inversion step an aim virtual hit?
-	var inv_carrier := Segment.new(
+	var inv_carrier := Segment.from_coords(
 		Vector2(1100, 400), Vector2(1100, 700), Vector2(1230, 550)).get_carrier()
 	var inv_mobius := CircleInversionEffect.new(inv_carrier).get_mobius()
 	var aim_image := inv_mobius.apply(cursor)
@@ -334,14 +334,14 @@ func test_bug3_case3_arc_direction_flip() -> void:
 func test_step4_plan_matched_after_reflection() -> void:
 	# Simple reflection scene (no inversion) — empty plan
 	var walls := RoomBuilder.create_room_surfaces(Rect2(160, 90, 1600, 900))
-	var mirror_seg := Segment.new(Vector2(960, 200), Vector2(960, 800), Vector2(960, 500))
+	var mirror_seg := Segment.from_coords(Vector2(960, 200), Vector2(960, 800), Vector2(960, 500))
 	var carrier := mirror_seg.get_carrier()
 	var refl := ReflectionEffect.new(carrier)
 	var mirror := Surface.new(mirror_seg, SideConfig.new(refl, true), SideConfig.new(null, false), false, false)
 	var surfs: Array = walls + [mirror]
 	var player := Vector2(800, 500)
 	var cursor := Vector2(700, 500)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	# Empty plan — what happens to plan_matched after reflection?
 	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
 	gut.p("Reflection test — Steps: %d" % path.steps.size())

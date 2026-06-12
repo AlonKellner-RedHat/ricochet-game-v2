@@ -4,7 +4,7 @@ func before_each() -> void:
 	Surface.reset_id_counter()
 
 func _make_block_surface(start: Vector2, end_v: Vector2) -> Surface:
-	var seg := Segment.new(start, end_v, (start + end_v) / 2.0)
+	var seg := Segment.from_coords(start, end_v, (start + end_v) / 2.0)
 	var terminal := TerminalEffect.new()
 	var left := SideConfig.new(terminal)
 	var right := SideConfig.new(terminal)

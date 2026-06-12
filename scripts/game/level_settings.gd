@@ -28,7 +28,7 @@ func _ready() -> void:
 		add_child(node)
 		node.setup(surf)
 	for line_def in mirror_lines:
-		var seg := Segment.new(
+		var seg := Segment.from_coords(
 			Vector2(line_def.x, line_def.y),
 			Vector2(line_def.z, line_def.w),
 			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))
@@ -44,7 +44,7 @@ func _ready() -> void:
 		add_child(node)
 		node.setup(surf)
 	for line_def in mirror_right_lines:
-		var seg := Segment.new(
+		var seg := Segment.from_coords(
 			Vector2(line_def.x, line_def.y),
 			Vector2(line_def.z, line_def.w),
 			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))
@@ -60,7 +60,7 @@ func _ready() -> void:
 		add_child(node)
 		node.setup(surf)
 	for i in range(0, inversion_left_arcs.size(), 6):
-		var seg := Segment.new(
+		var seg := Segment.from_coords(
 			Vector2(inversion_left_arcs[i], inversion_left_arcs[i + 1]),
 			Vector2(inversion_left_arcs[i + 2], inversion_left_arcs[i + 3]),
 			Vector2(inversion_left_arcs[i + 4], inversion_left_arcs[i + 5]))
@@ -83,7 +83,7 @@ func _ready() -> void:
 		Vector4(0, 1080, 0, 0),
 	]
 	for line_def in screen_bounds:
-		var seg := Segment.new(
+		var seg := Segment.from_coords(
 			Vector2(line_def.x, line_def.y),
 			Vector2(line_def.z, line_def.w),
 			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))
@@ -92,7 +92,7 @@ func _ready() -> void:
 		surfaces.append(surf)
 
 	for line_def in passthrough_lines:
-		var seg := Segment.new(
+		var seg := Segment.from_coords(
 			Vector2(line_def.x, line_def.y),
 			Vector2(line_def.z, line_def.w),
 			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))

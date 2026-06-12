@@ -5,7 +5,7 @@ func before_each() -> void:
 	MobiusTransform.reset_id_counter()
 
 func _mirror(x: float) -> Surface:
-	var seg := Segment.new(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 	var carrier := seg.get_carrier()
 	var refl := ReflectionEffect.new(carrier)
 	var config := SideConfig.new(refl, true)
@@ -21,7 +21,7 @@ func test_stage31_arrow_follows_physical_trace_with_plan() -> void:
 	var w := _wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, null, -1.0,
@@ -36,7 +36,7 @@ func test_stage31_aligned_plan_matches_physical() -> void:
 	var surfaces: Array = room + [m]
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var bounds := Rect2(0, 0, 800, 600)
 	var cache := TransformCache.new()
@@ -63,7 +63,7 @@ func test_stage31_determinism_with_plan() -> void:
 	var w := _wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
-	var aim := Direction.new(player, cursor)
+	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var path1 := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, null, -1.0,

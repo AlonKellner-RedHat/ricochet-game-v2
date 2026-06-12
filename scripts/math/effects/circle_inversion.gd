@@ -2,6 +2,7 @@ class_name CircleInversionEffect
 extends TransformativeEffect
 
 var _mobius: MobiusTransform
+var _tracked: TrackedTransform
 
 func _init(carrier: GeneralizedCircle) -> void:
 	assert(not carrier.is_line(), "CircleInversionEffect requires a circle carrier (a != 0)")
@@ -15,12 +16,16 @@ func _init(carrier: GeneralizedCircle) -> void:
 	var delta := Vector2(-ctr.x, ctr.y)
 
 	_mobius = MobiusTransform.new(alpha, beta, gamma, delta, true)
+	_tracked = TrackedTransform.from_self_inverse(_mobius)
 
 func get_mobius() -> MobiusTransform:
 	return _mobius
 
 func get_inverse_mobius() -> MobiusTransform:
 	return _mobius
+
+func get_tracked_transform() -> TrackedTransform:
+	return _tracked
 
 func normalized(carrier: GeneralizedCircle) -> Effect:
 	return CircleInversionEffect.new(carrier)

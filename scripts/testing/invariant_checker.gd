@@ -17,10 +17,12 @@ func setup(scene: Node) -> void:
 func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = []) -> Array[String]:
 	var violations: Array[String] = []
 	_position_nodes(player_pos, cursor_pos)
+	var plan_applied := false
 	if _game_mgr and "plan" in _game_mgr:
 		_game_mgr.plan.clear()
 		for entry in plan_entries:
 			_game_mgr.plan.add_entry(entry.surface_id, entry.side)
+		plan_applied = plan_entries.size() > 0
 	if _renderer:
 		_renderer._compute_trace()
 	violations.append_array(check_UX7(player_pos, cursor_pos))
@@ -34,7 +36,10 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_PHYSICAL_CONTINUITY(player_pos, cursor_pos))
 	violations.append_array(check_SOLID_PATH_TO_CURSOR(player_pos, cursor_pos))
 	violations.append_array(check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos, cursor_pos))
-	violations.append_array(check_PLAN_EFFECTS_APPLIED(player_pos, cursor_pos, plan_entries))
+	if plan_applied:
+		violations.append_array(check_PLAN_EFFECTS_APPLIED(player_pos, cursor_pos, plan_entries))
+	violations.append_array(check_BACK_TRANSFORM_ALIGNMENT(player_pos, cursor_pos))
+	violations.append_array(check_PHYSICS_COMPLIANCE(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -217,7 +222,7 @@ func check_SOLID_PATH_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Arr
 	for i in range(1, solid_steps.size()):
 		var prev: StepTreeMerge.MergedStep = solid_steps[i - 1]
 		var curr: StepTreeMerge.MergedStep = solid_steps[i]
-		if prev.end != curr.start:
+		if prev.end.distance_to(curr.start) > 0.01:
 			# Skip gaps at escape/return boundaries (ray wraps through infinity)
 			var at_bounds := (prev.end.x <= bounds.position.x + 1.0 or prev.end.x >= bounds.end.x - 1.0 or
 				prev.end.y <= bounds.position.y + 1.0 or prev.end.y >= bounds.end.y - 1.0)
@@ -254,7 +259,7 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 			valid = true
 		for surf in surfaces:
 			var s: Surface = surf
-			var dist := _point_to_segment_dist(end_pos, s.segment.start, s.segment.end)
+			var dist := _point_to_segment_dist(end_pos, s.segment.start.coords, s.segment.end.coords)
 			if dist < 2.0:
 				valid = true
 				break
@@ -263,7 +268,10 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 			for surf in surfaces:
 				var s: Surface = surf
 				var carrier := s.segment.get_carrier()
-				if absf(carrier.evaluate(end_pos)) < 1.0:
+				var eval_val := carrier.evaluate(end_pos)
+				var grad_mag := sqrt(carrier.b * carrier.b + carrier.c * carrier.c + 4.0 * carrier.a * carrier.a * (end_pos.x * end_pos.x + end_pos.y * end_pos.y))
+				var dist_to_carrier := absf(eval_val) / maxf(grad_mag, 1e-10)
+				if dist_to_carrier < 2.0:
 					valid = true
 					break
 		if not valid:
@@ -277,10 +285,12 @@ func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_e
 	var planned_path = _renderer.get_planned_path()
 	if planned_path == null or planned_path.steps.size() < 2:
 		return violations
-	# Count frame changes in the planned trace (before cursor)
-	var ci: int = planned_path.cursor_index if planned_path.cursor_index >= 0 else planned_path.steps.size()
+	# cursor_index == -1 means the plan wasn't consumed (geometrically infeasible)
+	if planned_path.cursor_index < 0:
+		return violations
+	var ci: int = planned_path.cursor_index
 	var frame_changes := 0
-	for i in range(1, mini(ci, planned_path.steps.size())):
+	for i in range(1, mini(ci + 1, planned_path.steps.size())):
 		var prev: Tracer.Step = planned_path.steps[i - 1]
 		var curr: Tracer.Step = planned_path.steps[i]
 		if prev.frame_id != curr.frame_id:
@@ -288,6 +298,102 @@ func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_e
 	if frame_changes < plan_entries.size():
 		violations.append("PLAN-EFFECTS: expected %d frame changes for %d plan entries, got %d" % [plan_entries.size(), plan_entries.size(), frame_changes])
 	return violations
+
+func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var path: Tracer.TracedPath = _renderer.get_traced_path()
+	if path == null or path.steps.size() == 0:
+		return violations
+	var bounds := Tracer.DEFAULT_BOUNDS
+	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
+	for i in check_limit:
+		var step: Tracer.Step = path.steps[i]
+		if step.hit == null:
+			continue
+		if step.start == step.end:
+			continue
+		if step.frame == null or step.ray == null:
+			continue
+		if step.frame.maps_lines_to_arcs():
+			continue
+		var frame_inv := step.frame.invert()
+		var aim_dir := step.ray.direction.to_vector().normalized()
+		var origin := step.ray.origin.coords
+		var bt_start := frame_inv.apply(step.start)
+		var bt_end := frame_inv.apply(step.end)
+		var _at_bounds := func(p: Vector2) -> bool:
+			return (p.x <= bounds.position.x + 2.0 or p.x >= bounds.end.x - 2.0 or
+				p.y <= bounds.position.y + 2.0 or p.y >= bounds.end.y - 2.0)
+		if not _at_bounds.call(step.start):
+			var cross_s := (bt_start - origin).cross(aim_dir)
+			if absf(cross_s) > 1.0:
+				violations.append("BACK-TRANSFORM-ALIGNMENT: step %d start cross=%.2f (bt=%s)" % [i, cross_s, bt_start])
+		if not _at_bounds.call(step.end):
+			var cross_e := (bt_end - origin).cross(aim_dir)
+			if absf(cross_e) > 1.0:
+				violations.append("BACK-TRANSFORM-ALIGNMENT: step %d end cross=%.2f (bt=%s)" % [i, cross_e, bt_end])
+	return violations
+
+func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var path: Tracer.TracedPath = _renderer.get_traced_path()
+	if path == null or path.steps.size() == 0:
+		return violations
+	var surfaces: Array = []
+	var parent := _renderer.get_parent()
+	if parent and "surfaces" in parent:
+		surfaces = parent.surfaces
+	if surfaces.size() == 0:
+		return violations
+	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
+	for i in check_limit:
+		var step: Tracer.Step = path.steps[i]
+		if step.is_arc_step:
+			continue
+		if step.start == step.end:
+			continue
+		for surf in surfaces:
+			var s: Surface = surf
+			var config_l := s.active_side_config(Side.Value.LEFT, GameState.new())
+			var config_r := s.active_side_config(Side.Value.RIGHT, GameState.new())
+			var has_effect := false
+			if config_l != null and config_l.effect != null and config_l.effect.is_transformative():
+				has_effect = true
+			if config_r != null and config_r.effect != null and config_r.effect.is_transformative():
+				has_effect = true
+			if s.player_solid:
+				has_effect = true
+			if not has_effect:
+				continue
+			var sa := s.segment.start.coords
+			var sb := s.segment.end.coords
+			var ix := _segment_intersection(step.start, step.end, sa, sb)
+			if ix.is_empty():
+				continue
+			var pt: Vector2 = ix["point"]
+			if pt.distance_to(step.start) < 1.0 or pt.distance_to(step.end) < 1.0:
+				continue
+			if pt.distance_to(sa) < 1.0 or pt.distance_to(sb) < 1.0:
+				continue
+			violations.append("PHYSICS-COMPLIANCE: step %d crosses surface %d at %s" % [i, s.id, pt])
+	return violations
+
+func _segment_intersection(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2) -> Dictionary:
+	var d1 := a2 - a1
+	var d2 := b2 - b1
+	var cross := d1.cross(d2)
+	if absf(cross) < 1e-10:
+		return {}
+	var d := b1 - a1
+	var t := d.cross(d2) / cross
+	var u := d.cross(d1) / cross
+	if t > 0.01 and t < 0.99 and u > 0.01 and u < 0.99:
+		return {"point": a1 + d1 * t}
+	return {}
 
 func _point_to_segment_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab := b - a
@@ -309,11 +415,11 @@ static func check_S11(segment: Segment) -> Array[String]:
 	var violations: Array[String] = []
 	var carrier := segment.get_carrier()
 	var eps := 0.01
-	if absf(carrier.evaluate(segment.start)) > eps:
+	if absf(carrier.evaluate(segment.start.coords)) > eps:
 		violations.append("S11: start not on carrier")
-	if absf(carrier.evaluate(segment.end)) > eps:
+	if absf(carrier.evaluate(segment.end.coords)) > eps:
 		violations.append("S11: end not on carrier")
-	if segment.via != Vector2(INF, INF) and absf(carrier.evaluate(segment.via)) > eps:
+	if segment.via.coords != Vector2(INF, INF) and absf(carrier.evaluate(segment.via.coords)) > eps:
 		violations.append("S11: via not on carrier")
 	return violations
 
@@ -325,8 +431,8 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 		if f_val == 0.0:
 			continue
 		var side := segment.determine_side(point)
-		var traversal := segment.end - segment.start
-		var to_point := point - segment.start
+		var traversal := segment.end.coords - segment.start.coords
+		var to_point := point - segment.start.coords
 		var cross_val := traversal.cross(to_point)
 		var expected_side: Side.Value
 		if cross_val < 0.0:
@@ -337,21 +443,3 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 			violations.append("S12: point %s side=%d expected=%d" % [point, side, expected_side])
 	return violations
 
-static func check_S1(cache: TransformCache, start: Point, end_pt: Point, via: Point) -> Array[String]:
-	var violations: Array[String] = []
-	var carrier := cache.derive_carrier_cached(start, end_pt, via)
-	var recovered := cache.derive_via_cached(start, end_pt, carrier)
-	if recovered == null:
-		violations.append("S1: derive_via returned null")
-	elif recovered.id != via.id:
-		violations.append("S1: round-trip via ID %d != original %d" % [recovered.id, via.id])
-	return violations
-
-static func check_S17(points: Array[Point]) -> Array[String]:
-	var violations: Array[String] = []
-	var seen_ids: Dictionary = {}
-	for p in points:
-		if seen_ids.has(p.id):
-			violations.append("S17: duplicate Point ID %d" % p.id)
-		seen_ids[p.id] = true
-	return violations

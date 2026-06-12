@@ -35,8 +35,8 @@ func detect_hover(cursor_pos: Vector2, surfaces: Array) -> Dictionary:
 	return detect_click(cursor_pos, surfaces)
 
 static func _distance_to_segment(point: Vector2, segment: Segment) -> float:
-	var a := segment.start
-	var b := segment.end
+	var a := segment.start.coords
+	var b := segment.end.coords
 	var ab := b - a
 	var ap := point - a
 	var ab_len_sq := ab.length_squared()

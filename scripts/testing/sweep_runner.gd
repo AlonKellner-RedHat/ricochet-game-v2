@@ -92,12 +92,18 @@ func _extract_points_of_interest(scene: Node) -> Array[Vector2]:
 		for corner in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
 			_add_unique(points, seen, corner)
 
+	var screen := Tracer.DEFAULT_BOUNDS
+	for corner in [screen.position, Vector2(screen.end.x, screen.position.y),
+			screen.end, Vector2(screen.position.x, screen.end.y)]:
+		_add_unique(points, seen, corner)
+
 	if "surfaces" in scene:
 		for surf in scene.surfaces:
-			_add_unique(points, seen, surf.segment.start)
-			_add_unique(points, seen, surf.segment.end)
-			if not is_inf(surf.segment.via.x) and not is_inf(surf.segment.via.y):
-				_add_unique(points, seen, surf.segment.via)
+			var s: Surface = surf
+			_add_unique(points, seen, s.segment.start.coords)
+			_add_unique(points, seen, s.segment.end.coords)
+			if not is_inf(s.segment.via.coords.x) and not is_inf(s.segment.via.coords.y):
+				_add_unique(points, seen, s.segment.via.coords)
 
 	return points
 

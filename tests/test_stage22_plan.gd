@@ -4,7 +4,7 @@ func before_each() -> void:
 	Surface.reset_id_counter()
 
 func _make_mirror(x: float) -> Surface:
-	var seg := Segment.new(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 	var carrier := seg.get_carrier()
 	var refl := ReflectionEffect.new(carrier)
 	var left := SideConfig.new(refl, true)
@@ -12,14 +12,14 @@ func _make_mirror(x: float) -> Surface:
 	return Surface.new(seg, left, right, false, false)
 
 func _make_double_mirror(x: float) -> Surface:
-	var seg := Segment.new(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 	var carrier := seg.get_carrier()
 	var refl := ReflectionEffect.new(carrier)
 	var config := SideConfig.new(refl, true)
 	return Surface.new(seg, config, config, false, false)
 
 func _make_passthrough(x: float) -> Surface:
-	var seg := Segment.new(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 	var config := SideConfig.new(null, false)
 	return Surface.new(seg, config, config, false, false)
 

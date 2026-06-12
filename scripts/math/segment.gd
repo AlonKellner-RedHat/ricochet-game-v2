@@ -1,20 +1,31 @@
 class_name Segment
 extends RefCounted
 
-var start: Vector2
-var end: Vector2
-var via: Vector2
+var start: Point
+var end: Point
+var via: Point
 
 var _carrier: GeneralizedCircle = null
 
-func _init(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> void:
+func _init(p_start: Point, p_end: Point, p_via: Point) -> void:
 	start = p_start
 	end = p_end
 	via = p_via
 
+static func from_coords(s: Vector2, e: Vector2, v: Vector2) -> Segment:
+	return Segment.new(Point.at(s), Point.at(e), Point.at(v))
+
+func transformed(t: TrackedTransform) -> Segment:
+	var new_via: Point
+	if is_inf(via.coords.x) or is_inf(via.coords.y):
+		new_via = via
+	else:
+		new_via = via.transformed(t)
+	return Segment.new(start.transformed(t), end.transformed(t), new_via)
+
 func get_carrier() -> GeneralizedCircle:
 	if _carrier == null:
-		_carrier = derive_carrier(start, end, via)
+		_carrier = derive_carrier(start.coords, end.coords, via.coords)
 	return _carrier
 
 func is_line() -> bool:
@@ -31,10 +42,10 @@ func determine_side(point: Vector2) -> Side.Value:
 		return Side.Value.RIGHT if f_val > 0.0 else Side.Value.LEFT
 
 func _compute_winding() -> float:
-	var w := (via - start).cross(end - start)
+	var w := (via.coords - start.coords).cross(end.coords - start.coords)
 	if get_carrier().is_line():
 		var carrier := get_carrier()
-		var traversal := end - start
+		var traversal := end.coords - start.coords
 		var normal := Vector2(carrier.b, carrier.c)
 		w = -traversal.cross(normal)
 	return w

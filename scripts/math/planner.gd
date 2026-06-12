@@ -22,15 +22,15 @@ static func _compute_image(target: Vector2, entries: Array, surfaces: Array, gam
 
 static func compute_aim_direction(origin: Vector2, cursor: Vector2, plan_entries: Array, surfaces: Array, game_state: GameState, cache: TransformCache = null) -> Direction:
 	if plan_entries.size() == 0:
-		return Direction.new(origin, cursor)
+		return Direction.from_coords(origin, cursor)
 
 	var image = _compute_image(cursor, plan_entries, surfaces, game_state, cache)
 	if image == null:
-		return Direction.new(origin, cursor)
+		return Direction.from_coords(origin, cursor)
 
-	var dir := Direction.new(origin, image)
+	var dir := Direction.from_coords(origin, image)
 	if dir.is_zero_length():
-		return Direction.new(origin, cursor)
+		return Direction.from_coords(origin, cursor)
 	return dir
 
 static func plan_transformative_subchain(
@@ -52,11 +52,11 @@ static func plan_transformative_subchain(
 	if image == null:
 		return path
 
-	var aim_dir := Direction.new(sub_origin, image)
+	var aim_dir := Direction.from_coords(sub_origin, image)
 	if aim_dir.is_zero_length():
 		return path
 
-	var aim_ray := Ray.new(sub_origin, aim_dir)
+	var aim_ray := Ray.from_coords(sub_origin, aim_dir)
 	var current_point := sub_origin
 
 	for i in entries.size():
@@ -81,10 +81,10 @@ static func plan_transformative_subchain(
 		image = cache.apply_point_cached(mobius, image) if cache else mobius.apply(image)
 
 		current_point = bounce_point
-		aim_dir = Direction.new(current_point, image)
+		aim_dir = Direction.from_coords(current_point, image)
 		if aim_dir.is_zero_length():
 			break
-		aim_ray = Ray.new(current_point, aim_dir)
+		aim_ray = Ray.from_coords(current_point, aim_dir)
 
 	if current_point != sub_target:
 		var final_step := Tracer.Step.new(current_point, sub_target, MobiusTransform.IDENTITY_ID, null)

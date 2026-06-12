@@ -8,7 +8,7 @@ func _wall(x: float) -> Surface:
 	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 
 func _mirror(x: float) -> Surface:
-	var seg := Segment.new(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 	var carrier := seg.get_carrier()
 	var refl := ReflectionEffect.new(carrier)
 	var config := SideConfig.new(refl, true)
@@ -24,8 +24,8 @@ func test_planned_empty_plan_no_effects() -> void:
 	var w := _wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
-	var aim := Direction.new(player, cursor)
-	var ray := Ray.new(player, aim)
+	var aim := Direction.from_coords(player, cursor)
+	var ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
@@ -39,8 +39,8 @@ func test_planned_empty_plan_physical_after_cursor() -> void:
 	var w := _wall(100)
 	var player := Vector2(600, 300)
 	var cursor := Vector2(500, 300)
-	var aim := Direction.new(player, cursor)
-	var ray := Ray.new(player, aim)
+	var aim := Direction.from_coords(player, cursor)
+	var ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
@@ -57,12 +57,14 @@ func test_planned_empty_plan_physical_after_cursor() -> void:
 func test_planned_mirror_in_plan() -> void:
 	var m := _mirror(400)
 	var w := _wall(100)
+	var player := Vector2(600, 300)
+	var cursor := Vector2(200, 300)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
-	var aim := Planner.compute_aim_direction(Vector2(600, 300), Vector2(200, 300), plan, [m, w], GameState.new())
-	var ray := Ray.new(Vector2(600, 300), aim)
-	var path := Tracer.trace(ray.origin, aim, [m, w], GameState.new(),
+	var aim := Planner.compute_aim_direction(player, cursor, plan, [m, w], GameState.new())
+	var ray := Ray.from_coords(player, aim)
+	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, null, cursor)
 	var found_frame_change := false
 	var first_fid: int = _step(path, 0).frame_id
 	for i in range(1, path.steps.size()):
@@ -76,8 +78,8 @@ func test_planned_mirror_not_in_plan_passthrough() -> void:
 	var w := _wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(600, 300)
-	var aim := Direction.new(player, cursor)
-	var ray := Ray.new(player, aim)
+	var aim := Direction.from_coords(player, cursor)
+	var ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
@@ -92,8 +94,8 @@ func test_hitpoint_alignment_no_effects() -> void:
 	var w := _wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(400, 300)
-	var aim := Direction.new(player, cursor)
-	var ray := Ray.new(player, aim)
+	var aim := Direction.from_coords(player, cursor)
+	var ray := Ray.from_coords(player, aim)
 	var cache := TransformCache.new()
 	var physical := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray,
 		-1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache)
@@ -117,10 +119,10 @@ func test_plan_entries_order() -> void:
 	var player := Vector2(450, 300)
 	var cursor := Vector2(200, 300)
 	var aim := Planner.compute_aim_direction(player, cursor, plan, [m1, m2], GameState.new())
-	var ray := Ray.new(player, aim)
+	var ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, [m1, m2], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
+		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, null, cursor)
 	var frame_changes := 0
 	for i in range(1, path.steps.size()):
 		if _step(path, i).frame_id != _step(path, i - 1).frame_id:
@@ -133,8 +135,8 @@ func test_terminal_stops_physical_not_planned() -> void:
 	var w := _wall(400)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(600, 300)
-	var aim := Direction.new(player, cursor)
-	var ray := Ray.new(player, aim)
+	var aim := Direction.from_coords(player, cursor)
+	var ray := Ray.from_coords(player, aim)
 	var physical := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	var planned := Tracer.trace(player, aim, [w], GameState.new(),
 		Tracer.DEFAULT_BOUNDS, ray, -1.0,

@@ -87,6 +87,12 @@ func _input(event: InputEvent) -> void:
 				_arrow_animator.speed_up()
 		return
 
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_TAB:
+		if _path_renderer:
+			_path_renderer.cycle_display_mode()
+		get_viewport().set_input_as_handled()
+		return
+
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_F12:
 		_dump_debug_state()
 		return
@@ -234,10 +240,18 @@ func _update_surface_overlays() -> void:
 func _dump_debug_state() -> void:
 	var lines: PackedStringArray = []
 	lines.append("=== DEBUG STATE (F12) ===")
+
+	var player_pos := Vector2.ZERO
+	var cursor_pos := Vector2.ZERO
 	if _player:
-		lines.append("Player: %s" % _player.global_position)
+		player_pos = _player.global_position
+		lines.append("Player: %s" % player_pos)
 	if _cursor:
-		lines.append("Cursor: %s" % _cursor.global_position)
+		cursor_pos = _cursor.global_position
+		lines.append("Cursor: %s" % cursor_pos)
+	if _player and _cursor:
+		var aim_vec := (cursor_pos - player_pos)
+		lines.append("Aim vector: %s (len=%.2f)" % [aim_vec.normalized(), aim_vec.length()])
 
 	var surfaces := _get_surfaces()
 	lines.append("Surfaces: %d" % surfaces.size())
@@ -245,26 +259,102 @@ func _dump_debug_state() -> void:
 		var state := GameState.new()
 		var left: SideConfig = surf.active_side_config(Side.Value.LEFT, state)
 		var right: SideConfig = surf.active_side_config(Side.Value.RIGHT, state)
-		var left_type := _effect_name(left.effect)
-		var right_type := _effect_name(right.effect)
-		lines.append("  Surface %d: (%s → %s) L=%s R=%s" % [
-			surf.id, surf.segment.start, surf.segment.end, left_type, right_type])
+		var left_type := _effect_name(left.effect if left else null)
+		var right_type := _effect_name(right.effect if right else null)
+		var seg_len: float = surf.segment.start.coords.distance_to(surf.segment.end.coords)
+		var solid_str := " SOLID" if surf.player_solid else ""
+		var target_str := " TARGET" if surf.is_target else ""
+		lines.append("  Surface %d: (%s → %s) len=%.1f L=%s R=%s%s%s" % [
+			surf.id, surf.segment.start.coords, surf.segment.end.coords,
+			seg_len, left_type, right_type, solid_str, target_str])
 
 	lines.append("Plan: %d entries" % plan.size())
 	for i in plan.size():
 		var entry: PlanManager.PlanEntry = plan.get_entry(i)
-		lines.append("  [%d] surface_id=%d side=%d" % [i, entry.surface_id, entry.side])
+		var side_name := "LEFT" if entry.side == Side.Value.LEFT else "RIGHT"
+		lines.append("  [%d] surface_id=%d side=%s" % [i, entry.surface_id, side_name])
 
-	if _path_renderer and _path_renderer.get_traced_path():
-		var path: Tracer.TracedPath = _path_renderer.get_traced_path()
-		lines.append("Traced path: %d steps" % path.steps.size())
-		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
-			var hit_info := "escape" if step.hit == null else "hit"
-			lines.append("  Step %d: %s → %s [%s]" % [i, step.start, step.end, hit_info])
+	if _path_renderer:
+		lines.append("Display mode: %s (F11 to cycle)" % _path_renderer.DISPLAY_MODE_NAMES[_path_renderer.display_mode])
 
+	# Aim direction from planner
+	if _player and _cursor and _path_renderer:
+		var plan_entries: Array = []
+		var p: PlanManager = _path_renderer._get_plan()
+		if p and not p.is_empty():
+			plan_entries = p.entries
+		var aim_dir: Direction = Planner.compute_aim_direction(
+			player_pos, cursor_pos, plan_entries, surfaces, GameState.new())
+		lines.append("Planner aim: direction=%s end=%s" % [aim_dir.to_normalized(), aim_dir.end.coords])
+		if plan_entries.size() > 0:
+			var image = aim_dir.end.coords
+			lines.append("  Image (aim target): %s" % image)
+			lines.append("  Cursor→Image dist: %.2f" % cursor_pos.distance_to(image))
+
+	_dump_trace(lines, "Physical", "P", _path_renderer.get_traced_path() if _path_renderer else null, surfaces)
+	_dump_trace(lines, "Planned", "L", _path_renderer.get_planned_path() if _path_renderer else null, surfaces)
+	_dump_merged(lines)
+
+	lines.append("=== END DEBUG STATE ===")
 	var output := "\n".join(lines)
 	print(output)
+
+func _dump_trace(lines: PackedStringArray, trace_name: String, prefix: String, path: Tracer.TracedPath, surfaces: Array) -> void:
+	if path == null:
+		lines.append("%s trace: (null)" % trace_name)
+		return
+	lines.append("%s trace: %d steps, cursor_index=%d, targets_hit=%s" % [
+		trace_name, path.steps.size(), path.cursor_index, path.targets_hit])
+	for i in path.steps.size():
+		var step: Tracer.Step = path.steps[i]
+		var parts: PackedStringArray = []
+		parts.append("  %s%d: %s → %s" % [prefix, i, step.start, step.end])
+		var seg_len := step.start.distance_to(step.end)
+		parts.append("len=%.1f" % seg_len)
+		parts.append("fid=%d" % step.frame_id)
+		if step.is_arc_step:
+			parts.append("ARC")
+		if step.frame and step.frame.conjugating:
+			parts.append("CONJ")
+		if step.hit == null:
+			parts.append("[virt]")
+		else:
+			var hit: Intersection.HitRecord = step.hit
+			var side_name := "L" if hit.side == Side.Value.LEFT else "R"
+			var on_seg_str := "on" if hit.on_segment else "off"
+			var surf_id := _find_surface_id_for_segment(hit.segment, surfaces)
+			parts.append("[hit t=%.4f side=%s %s-seg surf=%s]" % [hit.t, side_name, on_seg_str, surf_id])
+		if i == path.cursor_index:
+			parts.append("<-- CURSOR")
+		lines.append(" ".join(parts))
+
+func _dump_merged(lines: PackedStringArray) -> void:
+	if not _path_renderer:
+		return
+	var typed: Array = _path_renderer.get_typed_steps()
+	if typed.size() == 0:
+		lines.append("Merged: (empty)")
+		return
+	var type_names := {
+		StepTypes.Type.ALIGNED: "ALIGNED",
+		StepTypes.Type.ALIGNED_POST_PLANNED: "ALIGNED_POST",
+		StepTypes.Type.DIVERGED_PHYSICAL: "DIV_PHYS",
+		StepTypes.Type.DIVERGED_PLANNED: "DIV_PLAN",
+		StepTypes.Type.DIVERGED_POST_PLANNED: "DIV_POST",
+	}
+	lines.append("Merged: %d steps" % typed.size())
+	for i in typed.size():
+		var ms: StepTreeMerge.MergedStep = typed[i]
+		var tname: String = type_names.get(ms.type, "?%d" % ms.type)
+		var solid_str := "solid" if StepTypes.is_solid(ms.type) else "dash"
+		lines.append("  M%d: %s → %s [%s %s] fid=%d" % [
+			i, ms.start, ms.end, tname, solid_str, ms.frame_id])
+
+func _find_surface_id_for_segment(seg: Segment, surfaces: Array) -> String:
+	for surf in surfaces:
+		if surf.segment == seg:
+			return str(surf.id)
+	return "?"
 
 static func _effect_name(effect: RefCounted) -> String:
 	if effect == null:

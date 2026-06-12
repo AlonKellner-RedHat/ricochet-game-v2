@@ -2,7 +2,7 @@ class_name RoomBuilder
 extends RefCounted
 
 static func create_block_surface(start: Vector2, end_v: Vector2, via: Vector2) -> Surface:
-	var seg := Segment.new(start, end_v, via)
+	var seg := Segment.from_coords(start, end_v, via)
 	var terminal := TerminalEffect.new()
 	var left_config := SideConfig.new(terminal)
 	var right_config := SideConfig.new(terminal)

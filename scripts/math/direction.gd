@@ -1,18 +1,21 @@
 class_name Direction
 extends RefCounted
 
-var start: Vector2
-var end: Vector2
+var start: Point
+var end: Point
 
-func _init(p_start: Vector2, p_end: Vector2) -> void:
+func _init(p_start: Point, p_end: Point) -> void:
 	start = p_start
 	end = p_end
 
+static func from_coords(p_start: Vector2, p_end: Vector2) -> Direction:
+	return Direction.new(Point.at(p_start), Point.at(p_end))
+
 func is_zero_length() -> bool:
-	return start == end
+	return start.coords == end.coords
 
 func to_vector() -> Vector2:
-	return end - start
+	return end.coords - start.coords
 
 func to_normalized() -> Vector2:
 	var v := to_vector()
