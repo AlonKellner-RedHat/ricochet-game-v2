@@ -7,6 +7,13 @@ const ARROW_HEAD_LENGTH := 16.0
 
 signal flight_completed
 
+class AdvanceResult extends RefCounted:
+	var step_index: int
+	var progress: float
+	var position: Vector2
+	var direction: Vector2
+	var finished: bool
+
 var _path: Tracer.TracedPath = null
 var _current_step_index := 0
 var _progress_along_step := 0.0
@@ -14,17 +21,19 @@ var _flying := false
 var _arrow_position := Vector2.ZERO
 var _arrow_direction := Vector2.RIGHT
 var _speed_multiplier := 1.0
+var _bounds: Rect2 = Tracer.DEFAULT_BOUNDS
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
 
-func start_flight(path: Tracer.TracedPath) -> void:
+func start_flight(path: Tracer.TracedPath, bounds: Rect2 = Tracer.DEFAULT_BOUNDS) -> void:
 	_path = path
 	_current_step_index = 0
 	_progress_along_step = 0.0
 	_flying = true
 	_speed_multiplier = 1.0
+	_bounds = bounds
 	visible = true
 	if _path.steps.size() > 0:
 		var step: Tracer.Step = _path.steps[0]
@@ -45,43 +54,68 @@ func get_arrow_position() -> Vector2:
 func _process(delta: float) -> void:
 	if not _flying or _path == null:
 		return
-
-	var screen := Rect2(0, 0, 1920, 1080)
 	var distance := ARROW_SPEED * _speed_multiplier * delta
-	while distance > 0.0 and _current_step_index < _path.steps.size():
-		var step: Tracer.Step = _path.steps[_current_step_index]
-		var step_length: float = step.start.distance_to(step.end)
-		var remaining_in_step: float = step_length - _progress_along_step
+	var r := advance(_path.steps, _current_step_index, _progress_along_step,
+		_arrow_position, distance, _bounds)
+	_current_step_index = r.step_index
+	_progress_along_step = r.progress
+	_arrow_position = r.position
+	_arrow_direction = r.direction
+	queue_redraw()
+	if r.finished:
+		_finish_flight()
 
-		# If arrow is currently off-screen, skip to end of step instantly
-		if not screen.has_point(_arrow_position):
-			_arrow_position = step.end
-			_current_step_index += 1
-			_progress_along_step = 0.0
-			if _current_step_index < _path.steps.size():
-				var next_step: Tracer.Step = _path.steps[_current_step_index]
-				_arrow_direction = (next_step.end - next_step.start).normalized()
-			continue
+static func advance(steps: Array, step_index: int, progress: float,
+		pos: Vector2, distance: float, bounds: Rect2) -> AdvanceResult:
+	var tolerant := bounds.grow(2.0)
+	var r := AdvanceResult.new()
+	r.step_index = step_index
+	r.progress = progress
+	r.position = pos
+	r.direction = Vector2.RIGHT
 
-		if distance < remaining_in_step:
-			_progress_along_step += distance
-			var t: float = _progress_along_step / step_length if step_length > 0.0 else 1.0
-			_arrow_position = step.start.lerp(step.end, t)
-			_arrow_direction = (step.end - step.start).normalized()
+	while distance > 0.0 and r.step_index < steps.size():
+		var step: Tracer.Step = steps[r.step_index]
+		var step_length := step.start.distance_to(step.end)
+		var remaining := step_length - r.progress
+
+		if distance < remaining:
+			r.progress += distance
+			var t := r.progress / step_length if step_length > 0.0 else 1.0
+			r.position = step.start.lerp(step.end, t)
+			r.direction = (step.end - step.start).normalized()
 			distance = 0.0
 		else:
-			distance -= remaining_in_step
-			_arrow_position = step.end
-			_current_step_index += 1
-			_progress_along_step = 0.0
-			if _current_step_index < _path.steps.size():
-				var next_step: Tracer.Step = _path.steps[_current_step_index]
-				_arrow_direction = (next_step.end - next_step.start).normalized()
+			distance -= remaining
+			r.position = step.end
+			r.step_index += 1
+			r.progress = 0.0
 
-	queue_redraw()
+		if not tolerant.has_point(r.position):
+			# Complete current step if mid-way through
+			if r.progress > 0.0 and r.step_index < steps.size():
+				r.position = steps[r.step_index].end
+				r.step_index += 1
+				r.progress = 0.0
+			# Skip through off-bounds step endpoints until finding an on-bounds start
+			while not tolerant.has_point(r.position) and r.step_index < steps.size():
+				if tolerant.has_point(steps[r.step_index].start):
+					r.position = steps[r.step_index].start
+					r.progress = 0.0
+					break
+				r.position = steps[r.step_index].end
+				r.step_index += 1
+				r.progress = 0.0
 
-	if _current_step_index >= _path.steps.size():
-		_finish_flight()
+		_update_direction(r, steps)
+
+	r.finished = r.step_index >= steps.size()
+	return r
+
+static func _update_direction(r: AdvanceResult, steps: Array) -> void:
+	if r.step_index < steps.size():
+		var s: Tracer.Step = steps[r.step_index]
+		r.direction = (s.end - s.start).normalized()
 
 func _finish_flight() -> void:
 	_flying = false

@@ -173,7 +173,10 @@ func _try_fire() -> void:
 	get_tree().paused = true
 
 	if _arrow_animator:
-		_arrow_animator.start_flight(path)
+		var bounds: Rect2 = Tracer.DEFAULT_BOUNDS
+		if _level_settings and "level_bounds" in _level_settings:
+			bounds = _level_settings.level_bounds
+		_arrow_animator.start_flight(path, bounds)
 
 func _on_flight_completed() -> void:
 	get_tree().paused = false

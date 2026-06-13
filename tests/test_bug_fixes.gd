@@ -1,6 +1,7 @@
 extends GutTest
 
 const H := preload("res://tests/test_helpers.gd")
+const AA := preload("res://scripts/game/arrow_animator.gd")
 
 func before_each() -> void:
 	H.reset_counters()
@@ -365,3 +366,162 @@ func test_player_waypoint_after_reflection() -> void:
 			has_hit_after_escape = true
 	assert_true(has_hit_after_escape,
 		"After reflections + escape, trace should hit a real surface")
+
+# --- Arrow animation through infinity: floating-point at screen boundary ---
+
+func _setup_three_mirrors_with_screen_bounds() -> Array:
+	var surfaces := _setup_three_mirrors()
+	var screen_bounds: Array[Vector4] = [
+		Vector4(0, 0, 1920, 0),
+		Vector4(1920, 0, 1920, 1080),
+		Vector4(1920, 1080, 0, 1080),
+		Vector4(0, 1080, 0, 0),
+	]
+	for line_def in screen_bounds:
+		var seg := Segment.from_coords(
+			Vector2(line_def.x, line_def.y),
+			Vector2(line_def.z, line_def.w),
+			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))
+		var config := SideConfig.new(null, false)
+		surfaces.append(Surface.new(seg, config, config, false, false))
+	return surfaces
+
+func test_repro_infinity_animation_buggy_position():
+	var surfaces := _setup_three_mirrors_with_screen_bounds()
+	var player := Vector2(1156.668, 827.9246)
+	var aim_end := Vector2(-226.4858, 488.9054)
+	var aim := Direction.from_coords(player, aim_end)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	assert_gt(path.steps.size(), 0, "Should have steps")
+
+func test_rect2_has_point_boundary_sensitivity():
+	# Demonstrates the root cause: Rect2.has_point uses strict >= for lower bounds.
+	# A Möbius-mapped coordinate at x=-0.000061 (sub-pixel error) is rejected.
+	var screen := Rect2(0, 0, 1920, 1080)
+
+	# Point exactly on boundary — passes
+	assert_true(screen.has_point(Vector2(0.0, 500.0)),
+		"Exact boundary x=0.0 should be on-screen")
+	assert_true(screen.has_point(Vector2(500.0, 0.0)),
+		"Exact boundary y=0.0 should be on-screen")
+
+	# Point with sub-pixel floating-point error — FAILS (this is the bug)
+	assert_false(screen.has_point(Vector2(-0.000061, 642.4609)),
+		"x=-0.000061 is rejected by strict >= check — this is the animation bug")
+	assert_false(screen.has_point(Vector2(500.0, -0.00003)),
+		"y=-0.00003 is also rejected")
+
+	# The arrow animator uses screen.has_point() to decide whether to skip steps.
+	# When a Möbius transform maps a screen-edge hit to x=-0.000061 instead of
+	# x=0.0, the step is incorrectly skipped, killing the return animation.
+	# Fix: expand the screen rect by ~1px tolerance.
+	var tolerant_screen := Rect2(-1, -1, 1922, 1082)
+	assert_true(tolerant_screen.has_point(Vector2(-0.000061, 642.4609)),
+		"With 1px tolerance, sub-pixel error is accepted")
+
+func test_repro_infinity_animation_working_position():
+	var surfaces := _setup_three_mirrors_with_screen_bounds()
+	var player := Vector2(1253.336, 827.9246)
+	var cursor := Vector2(1494.557, 433.8034)
+	var m1: Surface = surfaces[3]
+	var m3: Surface = surfaces[5]
+	var plan: Array = [
+		PlanManager.PlanEntry.new(m1.id, Side.Value.LEFT),
+		PlanManager.PlanEntry.new(m3.id, Side.Value.RIGHT),
+		PlanManager.PlanEntry.new(m1.id, Side.Value.LEFT),
+	]
+	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	assert_gt(path.steps.size(), 0, "Should have steps")
+
+# --- AA.advance() unit tests ---
+
+func _make_step(s: Vector2, e: Vector2) -> Tracer.Step:
+	return Tracer.Step.new(s, e)
+
+func test_advance_basic_interpolation():
+	var steps: Array = [
+		_make_step(Vector2(100, 100), Vector2(400, 100)),
+		_make_step(Vector2(400, 100), Vector2(700, 100)),
+		_make_step(Vector2(700, 100), Vector2(1000, 100)),
+	]
+	var bounds := Rect2(0, 0, 1920, 1080)
+	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 150.0, bounds)
+	assert_almost_eq(r.position.x, 250.0, 1.0, "Arrow at midpoint of step 0")
+	assert_almost_eq(r.position.y, 100.0, 1.0)
+	assert_eq(r.step_index, 0, "Still on step 0")
+	assert_false(r.finished, "Not finished")
+
+func test_advance_completes_all_steps():
+	var steps: Array = [
+		_make_step(Vector2(100, 100), Vector2(400, 100)),
+		_make_step(Vector2(400, 100), Vector2(700, 100)),
+		_make_step(Vector2(700, 100), Vector2(1000, 100)),
+	]
+	var bounds := Rect2(0, 0, 1920, 1080)
+	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 99999.0, bounds)
+	assert_almost_eq(r.position.x, 1000.0, 1.0, "Arrow at last step end")
+	assert_true(r.finished, "Animation complete")
+
+func test_advance_offbounds_fast_forward():
+	var steps: Array = [
+		_make_step(Vector2(100, 100), Vector2(500, 100)),
+		_make_step(Vector2(500, 100), Vector2(2500, 100)),
+		_make_step(Vector2(2500, 100), Vector2(3000, 100)),
+		_make_step(Vector2(100, 500), Vector2(400, 500)),
+	]
+	var bounds := Rect2(0, 0, 1920, 1080)
+	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 99999.0, bounds)
+	assert_almost_eq(r.position.x, 400.0, 1.0, "Arrow at last step end after fast-forward")
+	assert_almost_eq(r.position.y, 500.0, 1.0)
+	assert_true(r.finished, "Animation complete")
+
+func test_advance_partial_step_goes_offbounds():
+	var steps: Array = [
+		_make_step(Vector2(1800, 500), Vector2(2100, 500)),
+	]
+	var bounds := Rect2(0, 0, 1920, 1080)
+	var r := AA.advance(steps, 0, 0.0, Vector2(1800, 500), 200.0, bounds)
+	assert_true(r.finished, "Single step that goes off-bounds should finish")
+
+func test_advance_boundary_floating_point():
+	var steps: Array = [
+		_make_step(Vector2(-806.0, 840.0), Vector2(-0.000061, 642.46)),
+		_make_step(Vector2(-0.000061, 642.46), Vector2(560.0, 505.0)),
+	]
+	var bounds := Rect2(0, 0, 1920, 1080)
+	var step0_len := Vector2(-806.0, 840.0).distance_to(Vector2(-0.000061, 642.46))
+	var r := AA.advance(steps, 0, 0.0, Vector2(-806.0, 840.0), step0_len + 100.0, bounds)
+	assert_eq(r.step_index, 1, "Arrow in step 1 (not skipped past it)")
+	assert_false(r.finished, "Not finished — still mid-step 1")
+	assert_gt(r.position.x, 0.0, "Arrow past the left edge")
+	assert_lt(r.position.x, 560.0, "Arrow before step 1 end")
+
+func test_advance_wrap_through_infinity():
+	var steps: Array = [
+		_make_step(Vector2(500, 200), Vector2(1910, 100)),
+		_make_step(Vector2(1910, 100), Vector2(2500, -50)),
+		_make_step(Vector2(-500, 1100), Vector2(-100, 900)),
+		_make_step(Vector2(-100, 900), Vector2(50, 700)),
+		_make_step(Vector2(50, 700), Vector2(400, 600)),
+		_make_step(Vector2(400, 600), Vector2(700, 500)),
+	]
+	var bounds := Rect2(0, 0, 1920, 1080)
+	var r := AA.advance(steps, 0, 0.0, Vector2(500, 200), 99999.0, bounds)
+	assert_almost_eq(r.position.x, 700.0, 1.0, "Arrow at final step end")
+	assert_almost_eq(r.position.y, 500.0, 1.0)
+	assert_true(r.finished, "Animation complete after wrap")
+
+func test_advance_preserves_distance_after_fast_forward():
+	var steps: Array = [
+		_make_step(Vector2(100, 100), Vector2(500, 100)),
+		_make_step(Vector2(500, 100), Vector2(2500, 100)),
+		_make_step(Vector2(2500, 100), Vector2(3000, 100)),
+		_make_step(Vector2(100, 500), Vector2(400, 500)),
+	]
+	var bounds := Rect2(0, 0, 1920, 1080)
+	# 400 (step 0) + 2000 (step 1) = 2400 consumed; 200 remaining for step 3
+	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 2600.0, bounds)
+	assert_almost_eq(r.position.x, 300.0, 1.0, "Distance preserved: 200px into 300px step")
+	assert_almost_eq(r.position.y, 500.0, 1.0)
+	assert_false(r.finished, "Not finished — still mid-step 3")
