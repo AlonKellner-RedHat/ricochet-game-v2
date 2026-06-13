@@ -52,23 +52,16 @@ func get_normalized(frame_id: int) -> Variant:
 func set_normalized(frame_id: int, surfaces: Array, mapping: Dictionary) -> void:
 	_norm_cache[frame_id] = {"surfaces": surfaces, "mapping": mapping}
 
-func apply_point_cached(transform: MobiusTransform, point: Vector2) -> Vector2:
+func apply_point(transform: MobiusTransform, point: Vector2, bidirectional: bool = true) -> Vector2:
 	var key := _point_key(transform.id, point)
 	if _point_cache.has(key):
 		return _point_cache[key]
 	var result := transform.apply(point)
 	_point_cache[key] = result
-	var rev_key := _point_key(transform.id, result)
-	if not _point_cache.has(rev_key):
-		_point_cache[rev_key] = point
-	return result
-
-func apply_point_forward(transform: MobiusTransform, point: Vector2) -> Vector2:
-	var key := _point_key(transform.id, point)
-	if _point_cache.has(key):
-		return _point_cache[key]
-	var result := transform.apply(point)
-	_point_cache[key] = result
+	if bidirectional:
+		var rev_key := _point_key(transform.id, result)
+		if not _point_cache.has(rev_key):
+			_point_cache[rev_key] = point
 	return result
 
 static func _point_key(tid: int, p: Vector2) -> String:

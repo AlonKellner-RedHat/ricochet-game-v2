@@ -1,21 +1,10 @@
 class_name StepTreeMerge
 extends RefCounted
 
-class MergedStep extends RefCounted:
-	var start: Vector2
-	var end: Vector2
-	var via: Vector2
-	var type: StepTypes.Type
-	var frame_id: int
-	var is_arc_step: bool
-
-	func _init(p_start: Vector2, p_end: Vector2, p_type: StepTypes.Type, p_frame_id: int = 0, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
-		start = p_start
-		end = p_end
-		type = p_type
-		frame_id = p_frame_id
-		via = p_via if p_via != Vector2.ZERO else (p_start + p_end) / 2.0
-		is_arc_step = p_is_arc
+static func _step_with_type(s: Tracer.Step, step_type: int) -> Tracer.Step:
+	var ms := Tracer.Step.new(s.start, s.end, s.frame_id, s.hit, s.ray, s.frame, s.via, s.is_arc_step)
+	ms.type = step_type
+	return ms
 
 static func classify_physical(path: Tracer.TracedPath) -> Array:
 	var result: Array = []
@@ -24,12 +13,12 @@ static func classify_physical(path: Tracer.TracedPath) -> Array:
 		ci = path.steps.size()
 	for idx in path.steps.size():
 		var s: Tracer.Step = path.steps[idx]
-		var step_type: StepTypes.Type
+		var step_type: int
 		if idx < ci:
 			step_type = StepTypes.Type.ALIGNED
 		else:
 			step_type = StepTypes.Type.ALIGNED_POST_PLANNED
-		result.append(MergedStep.new(s.start, s.end, step_type, s.frame_id, s.via, s.is_arc_step))
+		result.append(_step_with_type(s, step_type))
 	return result
 
 static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int) -> Array:
@@ -43,22 +32,22 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 		var past_cursor: bool = idx >= cursor_index
 
 		if not diverged and p != null and r != null and p.frame_id == r.frame_id:
-			var step_type: StepTypes.Type
+			var step_type: int
 			if past_cursor:
 				step_type = StepTypes.Type.ALIGNED_POST_PLANNED
 			else:
 				step_type = StepTypes.Type.ALIGNED
-			merged.append(MergedStep.new(p.start, p.end, step_type, p.frame_id, p.via, p.is_arc_step))
+			merged.append(_step_with_type(p, step_type))
 		else:
 			diverged = true
 			if p != null:
-				var div_type: StepTypes.Type
+				var div_type: int
 				if past_cursor:
 					div_type = StepTypes.Type.DIVERGED_POST_PLANNED
 				else:
 					div_type = StepTypes.Type.DIVERGED_PLANNED
-				merged.append(MergedStep.new(p.start, p.end, div_type, p.frame_id, p.via, p.is_arc_step))
+				merged.append(_step_with_type(p, div_type))
 			if r != null:
-				merged.append(MergedStep.new(r.start, r.end, StepTypes.Type.DIVERGED_PHYSICAL, r.frame_id, r.via, r.is_arc_step))
+				merged.append(_step_with_type(r, StepTypes.Type.DIVERGED_PHYSICAL))
 
 	return merged

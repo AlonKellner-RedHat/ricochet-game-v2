@@ -120,8 +120,8 @@ func test_cache_self_inverse_roundtrip_exact() -> void:
 	var test_angles := [0.0, 0.7, 1.4, 2.1, 2.8, 3.5, 4.2, 5.0]
 	for angle in test_angles:
 		var p := center + Vector2(cos(angle), sin(angle)) * radius
-		var q := cache.apply_point_cached(mobius, p)
-		var roundtrip := cache.apply_point_cached(mobius, q)
+		var q := cache.apply_point(mobius, p)
+		var roundtrip := cache.apply_point(mobius, q)
 		assert_eq(roundtrip, p,
 			"Self-inverse round-trip must be EXACT for angle %.1f (p=%s rt=%s)" % [angle, p, roundtrip])
 
@@ -132,8 +132,8 @@ func test_cache_non_carrier_point_roundtrip() -> void:
 	var mobius := inv.get_mobius()
 	var cache := TransformCache.new()
 	var p := Vector2(500, 300)
-	var q := cache.apply_point_cached(mobius, p)
-	var roundtrip := cache.apply_point_cached(mobius, q)
+	var q := cache.apply_point(mobius, p)
+	var roundtrip := cache.apply_point(mobius, q)
 	assert_eq(roundtrip, p,
 		"Self-inverse round-trip must be EXACT for off-carrier points too")
 

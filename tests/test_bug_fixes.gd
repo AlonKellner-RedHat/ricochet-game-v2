@@ -114,7 +114,7 @@ func test_physical_preview_matches() -> void:
 
 	var non_red: Array = []
 	for i in merged.size():
-		var ms: StepTreeMerge.MergedStep = merged[i]
+		var ms: Tracer.Step = merged[i]
 		if ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED or ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
 			non_red.append(ms)
 

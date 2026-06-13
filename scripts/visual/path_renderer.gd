@@ -91,7 +91,7 @@ func _draw_merged() -> void:
 	if _merged_steps.size() == 0:
 		return
 	for i in _merged_steps.size():
-		var ms: StepTreeMerge.MergedStep = _merged_steps[i]
+		var ms: Tracer.Step = _merged_steps[i]
 		var from := ms.start - global_position
 		var to := ms.end - global_position
 		if from == to:
@@ -111,7 +111,7 @@ func _draw_merged() -> void:
 				_draw_dashed(from, to, col)
 
 	for i in _merged_steps.size():
-		var ms: StepTreeMerge.MergedStep = _merged_steps[i]
+		var ms: Tracer.Step = _merged_steps[i]
 		var col := StepTypes.color(ms.type)
 		col.a = 0.4
 		draw_circle(ms.start - global_position, 4.0, col)
@@ -199,13 +199,13 @@ func has_line() -> bool:
 
 func get_line_from() -> Vector2:
 	if _merged_steps.size() > 0:
-		var ms: StepTreeMerge.MergedStep = _merged_steps[0]
+		var ms: Tracer.Step = _merged_steps[0]
 		return ms.start
 	return Vector2.ZERO
 
 func get_line_direction() -> Vector2:
 	if _merged_steps.size() > 0:
-		var ms: StepTreeMerge.MergedStep = _merged_steps[0]
+		var ms: Tracer.Step = _merged_steps[0]
 		return (ms.end - ms.start).normalized()
 	return Vector2.ZERO
 

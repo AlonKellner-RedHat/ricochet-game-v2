@@ -1,5 +1,5 @@
 class_name ReflectionEffect
-extends TransformativeEffect
+extends Effect
 
 var _mobius: MobiusTransform
 var _tracked: TrackedTransform
@@ -20,6 +20,9 @@ func _init(carrier: GeneralizedCircle) -> void:
 
 	_mobius = MobiusTransform.new(alpha, beta, gamma, delta, true)
 	_tracked = TrackedTransform.from_self_inverse(_mobius)
+
+func is_transformative() -> bool:
+	return true
 
 func get_mobius() -> MobiusTransform:
 	return _mobius

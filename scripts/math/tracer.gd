@@ -10,6 +10,7 @@ class Step extends RefCounted:
 	var ray: Ray
 	var frame: MobiusTransform
 	var is_arc_step: bool
+	var type: int = StepTypes.Type.ALIGNED
 
 	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: RefCounted = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 		start = p_start
@@ -108,12 +109,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if carrier_hits.size() == 0 and not cursor_reachable:
 			var vis_origin := frame.apply(ray.origin.coords)
 			var vis_dir := (frame.apply(ray.origin.coords + ray.direction.to_vector().normalized()) - vis_origin).normalized()
-			var escape_end := _clip_to_bounds(vis_origin, vis_dir, bounds)
-			var return_start := _clip_to_bounds(vis_origin, -vis_dir, bounds)
-			if vis_origin != escape_end:
-				path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, shared_ray, frame, (vis_origin + escape_end) / 2.0, false))
-			if return_start != vis_origin:
-				path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame, (return_start + vis_origin) / 2.0, false))
+			_add_escape_steps(path, vis_origin, vis_dir, frame, shared_ray, bounds)
 			break
 
 		# Assemble and sort hitpoint list
@@ -155,12 +151,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				if is_origin:
 					if hp_idx == 0:
 						var vis_dir2 := (frame.apply(step_origin_pos + ray.direction.to_vector().normalized()) - vis_start).normalized()
-						var escape_end := _clip_to_bounds(vis_start, vis_dir2, bounds)
-						var return_start := _clip_to_bounds(vis_start, -vis_dir2, bounds)
-						if vis_start != escape_end:
-							path.steps.append(Step.new(vis_start, escape_end, frame.id, null, shared_ray, frame, (vis_start + escape_end) / 2.0, false))
-						if return_start != vis_start:
-							path.steps.append(Step.new(return_start, vis_start, frame.id, null, shared_ray, frame, (return_start + vis_start) / 2.0, false))
+						_add_escape_steps(path, vis_start, vis_dir2, frame, shared_ray, bounds)
 					trace_done = true
 					break
 				if is_cursor:
@@ -178,31 +169,18 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if is_origin:
 				if has_wrapped:
 					if is_wrap:
-						var vis_dir := (vis_end - vis_start).normalized()
-						var esc := _clip_to_bounds(vis_start, -vis_dir, bounds)
-						var ret := _clip_to_bounds(vis_end, vis_dir, bounds)
-						path.steps.append(Step.new(vis_start, esc, frame.id, null, shared_ray, frame, (vis_start + esc) / 2.0, false))
-						path.steps.append(Step.new(ret, vis_end, frame.id, null, shared_ray, frame, (ret + vis_end) / 2.0, false))
+						_add_wrap_steps(path, vis_start, vis_end, frame, shared_ray, bounds)
 					else:
 						path.steps.append(Step.new(vis_start, vis_end, frame.id, null, shared_ray, frame, vis_via, _arc))
 				else:
 					var vis_dir2 := (frame.apply(step_origin_pos + ray.direction.to_vector().normalized()) - vis_start).normalized()
-					var escape_end := _clip_to_bounds(vis_start, vis_dir2, bounds)
-					var return_start := _clip_to_bounds(vis_start, -vis_dir2, bounds)
-					if vis_start != escape_end:
-						path.steps.append(Step.new(vis_start, escape_end, frame.id, null, shared_ray, frame, (vis_start + escape_end) / 2.0, false))
-					if return_start != vis_start:
-						path.steps.append(Step.new(return_start, vis_start, frame.id, null, shared_ray, frame, (return_start + vis_start) / 2.0, false))
+					_add_escape_steps(path, vis_start, vis_dir2, frame, shared_ray, bounds)
 				trace_done = true
 				break
 
 			# --- Generate visual step ---
 			if is_wrap:
-				var vis_dir := (vis_end - vis_start).normalized()
-				var esc := _clip_to_bounds(vis_start, -vis_dir, bounds)
-				var ret := _clip_to_bounds(vis_end, vis_dir, bounds)
-				path.steps.append(Step.new(vis_start, esc, frame.id, null, shared_ray, frame, (vis_start + esc) / 2.0, false))
-				path.steps.append(Step.new(ret, vis_end, frame.id, step_hit, shared_ray, frame, (ret + vis_end) / 2.0, false))
+				_add_wrap_steps(path, vis_start, vis_end, frame, shared_ray, bounds, step_hit)
 			else:
 				path.steps.append(Step.new(vis_start, vis_end, frame.id, step_hit, shared_ray, frame, vis_via, _arc))
 
@@ -317,13 +295,13 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 		inv = frame.invert()
 	var result: Array = []
 	for surf in surfaces:
-		var s := cache.apply_point_forward(inv, surf.segment.start.coords) if cache else inv.apply(surf.segment.start.coords)
-		var e := cache.apply_point_forward(inv, surf.segment.end.coords) if cache else inv.apply(surf.segment.end.coords)
+		var s := cache.apply_point(inv, surf.segment.start.coords, false) if cache else inv.apply(surf.segment.start.coords)
+		var e := cache.apply_point(inv, surf.segment.end.coords, false) if cache else inv.apply(surf.segment.end.coords)
 		var v: Vector2
 		if is_inf(surf.segment.via.coords.x) or is_inf(surf.segment.via.coords.y):
 			v = Vector2(INF, INF)
 		else:
-			v = cache.apply_point_forward(inv, surf.segment.via.coords) if cache else inv.apply(surf.segment.via.coords)
+			v = cache.apply_point(inv, surf.segment.via.coords, false) if cache else inv.apply(surf.segment.via.coords)
 		var new_seg := Segment.from_coords(s, e, v)
 		var state := GameState.new()
 		var left := _normalize_config(surf.active_side_config(Side.Value.LEFT, state), new_seg)
@@ -340,6 +318,21 @@ static func _normalize_config(config: SideConfig, norm_seg: Segment) -> SideConf
 	if norm_effect != config.effect:
 		return SideConfig.new(norm_effect, config.interactive)
 	return config
+
+static func _add_escape_steps(path: TracedPath, vis_origin: Vector2, vis_dir: Vector2, frame: MobiusTransform, shared_ray: Ray, bounds: Rect2) -> void:
+	var escape_end := _clip_to_bounds(vis_origin, vis_dir, bounds)
+	var return_start := _clip_to_bounds(vis_origin, -vis_dir, bounds)
+	if vis_origin != escape_end:
+		path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, shared_ray, frame, (vis_origin + escape_end) / 2.0, false))
+	if return_start != vis_origin:
+		path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame, (return_start + vis_origin) / 2.0, false))
+
+static func _add_wrap_steps(path: TracedPath, vis_start: Vector2, vis_end: Vector2, frame: MobiusTransform, shared_ray: Ray, bounds: Rect2, hit: RefCounted = null) -> void:
+	var vis_dir := (vis_end - vis_start).normalized()
+	var esc := _clip_to_bounds(vis_start, -vis_dir, bounds)
+	var ret := _clip_to_bounds(vis_end, vis_dir, bounds)
+	path.steps.append(Step.new(vis_start, esc, frame.id, null, shared_ray, frame, (vis_start + esc) / 2.0, false))
+	path.steps.append(Step.new(ret, vis_end, frame.id, hit, shared_ray, frame, (ret + vis_end) / 2.0, false))
 
 static func _clip_to_bounds(origin: Vector2, dir: Vector2, bounds: Rect2) -> Vector2:
 	var min_t := INF

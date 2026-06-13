@@ -17,7 +17,7 @@ static func _compute_image(target: Vector2, entries: Array, surfaces: Array, gam
 		if config == null or config.effect == null or not config.effect.is_transformative():
 			return null
 		var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
-		image = cache.apply_point_cached(inv_mobius, image) if cache else inv_mobius.apply(image)
+		image = cache.apply_point(inv_mobius, image) if cache else inv_mobius.apply(image)
 	return image
 
 static func compute_aim_direction(origin: Vector2, cursor: Vector2, plan_entries: Array, surfaces: Array, game_state: GameState, cache: TransformCache = null) -> Direction:
@@ -78,7 +78,7 @@ static func plan_transformative_subchain(
 
 		var config: SideConfig = surf.active_side_config(entry.side, game_state)
 		var mobius: MobiusTransform = config.effect.get_mobius()
-		image = cache.apply_point_cached(mobius, image) if cache else mobius.apply(image)
+		image = cache.apply_point(mobius, image) if cache else mobius.apply(image)
 
 		current_point = bounce_point
 		aim_dir = Direction.from_coords(current_point, image)
