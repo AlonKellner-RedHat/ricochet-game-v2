@@ -4,6 +4,24 @@ func before_each() -> void:
 	Surface.reset_id_counter()
 	MobiusTransform.reset_id_counter()
 
+func _find_nearest(ray: Ray, segments: Array, skip_segment: Segment = null) -> Intersection.HitRecord:
+	var hits := Intersection.find_all_hits(ray, segments, skip_segment)
+	if hits.is_empty():
+		return null
+	var forward: Array = []
+	var beyond: Array = []
+	for h in hits:
+		if h.t > 0.0:
+			forward.append(h)
+		else:
+			beyond.append(h)
+	var pool := forward if not forward.is_empty() else beyond
+	var best: Intersection.HitRecord = pool[0]
+	for i in range(1, pool.size()):
+		if pool[i].t < best.t or (pool[i].t == best.t and pool[i].segment.get_instance_id() < best.segment.get_instance_id()):
+			best = pool[i]
+	return best
+
 # --- Helpers ---
 
 func _horiz_segment() -> Segment:
@@ -136,7 +154,7 @@ func test_hitrecord_interior_fully_blocked() -> void:
 	var seg := _horiz_segment()
 	var ray := Ray.from_coords(Vector2(200, 100), Direction.from_coords(Vector2(200, 100), Vector2(200, 300)))
 	var segments: Array = [seg]
-	var hit := Intersection.find_nearest_hit(ray, segments)
+	var hit := _find_nearest(ray, segments)
 	assert_not_null(hit, "Should find a hit")
 	assert_true(hit.on_segment, "Interior hit should be on segment")
 	assert_true(hit.is_fully_blocked(), "Interior hit should be fully blocked")
@@ -146,7 +164,7 @@ func test_hitrecord_endpoint_partial_blocked() -> void:
 	# Ray going down at x=100, will hit the carrier at the start endpoint
 	var ray := Ray.from_coords(Vector2(100, 100), Direction.from_coords(Vector2(100, 100), Vector2(100, 300)))
 	var segments: Array = [seg]
-	var hit := Intersection.find_nearest_hit(ray, segments)
+	var hit := _find_nearest(ray, segments)
 	assert_not_null(hit, "Should find a hit")
 	assert_true(hit.on_segment, "Endpoint hit is geometrically on segment")
 	assert_false(hit.is_fully_blocked(), "Endpoint hit should NOT be fully blocked")
@@ -156,7 +174,7 @@ func test_hitrecord_off_segment_not_blocked() -> void:
 	# Ray going down at x=500, will hit the carrier off-segment
 	var ray := Ray.from_coords(Vector2(500, 100), Direction.from_coords(Vector2(500, 100), Vector2(500, 300)))
 	var segments: Array = [seg]
-	var hit := Intersection.find_nearest_hit(ray, segments)
+	var hit := _find_nearest(ray, segments)
 	assert_not_null(hit, "Should find a carrier hit")
 	assert_false(hit.on_segment, "Should be off-segment")
 	assert_false(hit.is_fully_blocked(), "Off-segment should not be fully blocked")
@@ -565,7 +583,7 @@ func test_repro_player_block_at_screen_corner_case2() -> void:
 		"Planned trace should not hit MAX_HITS (got %d)" % planned.steps.size())
 
 func test_repro_first_hit_from_origin() -> void:
-	# Diagnostic: what does find_nearest_hit return for a ray starting at (0,0)?
+	# Diagnostic: what does the nearest hit look like for a ray starting at (0,0)?
 	var surfaces := _mirror_and_wall_surfaces()
 	var player := Vector2(0, 0)
 	var cursor := Vector2(1360, 840)
@@ -581,7 +599,7 @@ func test_repro_first_hit_from_origin() -> void:
 		segments.append(s.segment)
 		print("  Surface id=%d: (%s)->(%s) solid=%s" % [s.id, s.segment.start.coords, s.segment.end.coords, s.player_solid])
 
-	var hit := Intersection.find_nearest_hit(ray, segments)
+	var hit := _find_nearest(ray, segments)
 	if hit:
 		print("  First hit: t=%.4f point=%s on_seg=%s ep=%d bl=%s br=%s seg=(%s)->(%s)" % [
 			hit.t, hit.point.coords, hit.on_segment, hit.at_endpoint,

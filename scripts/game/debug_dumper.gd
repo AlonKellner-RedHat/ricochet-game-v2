@@ -37,9 +37,9 @@ static func dump(gm) -> void:
 			seg_len, left_type, right_type, solid_str, target_str])
 
 	var plan: PlanManager = gm.plan
-	lines.append("Plan: %d entries" % plan.size())
-	for i in plan.size():
-		var entry: PlanManager.PlanEntry = plan.get_entry(i)
+	lines.append("Plan: %d entries" % plan.entries.size())
+	for i in plan.entries.size():
+		var entry: PlanManager.PlanEntry = plan.entries[i]
 		var side_name := "LEFT" if entry.side == Side.Value.LEFT else "RIGHT"
 		lines.append("  [%d] surface_id=%d side=%s" % [i, entry.surface_id, side_name])
 
@@ -126,10 +126,4 @@ static func _find_surface_id(seg: Segment, surfaces: Array) -> String:
 static func _effect_name(effect: RefCounted) -> String:
 	if effect == null:
 		return "pass"
-	if effect is TerminalEffect:
-		return "block"
-	if effect is ReflectionEffect:
-		return "reflect"
-	if effect is CircleInversionEffect:
-		return "inversion"
-	return "unknown"
+	return effect.get_display_name()

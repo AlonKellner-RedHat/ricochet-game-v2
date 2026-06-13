@@ -71,10 +71,6 @@ func invert() -> MobiusTransform:
 	var inv_d := cdiv(a, det)
 	return MobiusTransform.new(inv_a, inv_b, inv_c, inv_d, conjugating)
 
-func determinant_mod2() -> float:
-	var det := cmul(a, d) - cmul(b, c)
-	return cmod2(det)
-
 static func cmul(v1: Vector2, v2: Vector2) -> Vector2:
 	return Vector2(v1.x * v2.x - v1.y * v2.y, v1.x * v2.y + v1.y * v2.x)
 

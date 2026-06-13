@@ -29,29 +29,29 @@ func _make_wall(x: float) -> Surface:
 func test_stage22_plan_add_entry() -> void:
 	var plan := PlanManager.new()
 	plan.add_entry(5, Side.Value.LEFT)
-	assert_eq(plan.size(), 1, "Plan should have 1 entry")
-	assert_eq(plan.get_entry(0).surface_id, 5, "Surface ID should match")
-	assert_eq(plan.get_entry(0).side, Side.Value.LEFT, "Side should match")
+	assert_eq(plan.entries.size(), 1, "Plan should have 1 entry")
+	assert_eq(plan.entries[0].surface_id, 5, "Surface ID should match")
+	assert_eq(plan.entries[0].side, Side.Value.LEFT, "Side should match")
 
 func test_stage22_plan_preserves_order() -> void:
 	var plan := PlanManager.new()
 	plan.add_entry(1, Side.Value.LEFT)
 	plan.add_entry(2, Side.Value.RIGHT)
 	plan.add_entry(3, Side.Value.LEFT)
-	assert_eq(plan.get_entry(0).surface_id, 1, "First entry")
-	assert_eq(plan.get_entry(1).surface_id, 2, "Second entry")
-	assert_eq(plan.get_entry(2).surface_id, 3, "Third entry")
+	assert_eq(plan.entries[0].surface_id, 1, "First entry")
+	assert_eq(plan.entries[1].surface_id, 2, "Second entry")
+	assert_eq(plan.entries[2].surface_id, 3, "Third entry")
 
 func test_stage22_duplicate_entries_allowed() -> void:
 	var plan := PlanManager.new()
 	plan.add_entry(1, Side.Value.LEFT)
 	plan.add_entry(1, Side.Value.LEFT)
-	assert_eq(plan.size(), 2, "Duplicates should be allowed")
+	assert_eq(plan.entries.size(), 2, "Duplicates should be allowed")
 
 func test_stage22_entry_references_by_id() -> void:
 	var plan := PlanManager.new()
 	plan.add_entry(42, Side.Value.RIGHT)
-	var entry: PlanManager.PlanEntry = plan.get_entry(0)
+	var entry: PlanManager.PlanEntry = plan.entries[0]
 	assert_eq(entry.surface_id, 42, "Should store surface ID, not object")
 
 func test_stage22_clear() -> void:
@@ -59,7 +59,7 @@ func test_stage22_clear() -> void:
 	plan.add_entry(1, Side.Value.LEFT)
 	plan.add_entry(2, Side.Value.RIGHT)
 	plan.clear()
-	assert_eq(plan.size(), 0, "Clear should empty the plan")
+	assert_eq(plan.entries.size(), 0, "Clear should empty the plan")
 
 func test_stage22_non_interactive_rejected() -> void:
 	var pt := _make_passthrough(400)
@@ -114,6 +114,6 @@ func test_stage22_plan_blocked_during_flight() -> void:
 	cursor.global_position = Vector2(1200, 540)
 	game_mgr._try_fire()
 	assert_true(arrow.is_flying(), "Arrow should be flying")
-	var plan_before: int = game_mgr.plan.size()
-	game_mgr._try_plan_click()
-	assert_eq(game_mgr.plan.size(), plan_before, "Plan should not change during flight")
+	var plan_before: int = game_mgr.plan.entries.size()
+	game_mgr._handle_plan_click(false)
+	assert_eq(game_mgr.plan.entries.size(), plan_before, "Plan should not change during flight")

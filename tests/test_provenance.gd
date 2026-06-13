@@ -239,7 +239,8 @@ func test_ray_from_coords_origin_is_point() -> void:
 func test_hit_record_point_is_point_type() -> void:
 	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
 	var ray := Ray.from_coords(Vector2(200, 300), Direction.from_coords(Vector2(200, 300), Vector2(600, 300)))
-	var hit := Intersection.find_nearest_hit(ray, [seg])
+	var hits := Intersection.find_all_hits(ray, [seg])
+	var hit: Intersection.HitRecord = hits[0] if not hits.is_empty() else null
 	assert_not_null(hit, "Should find a hit")
 	assert_true(hit.point is Point, "HitRecord.point should be Point")
 	assert_almost_eq(hit.point.coords.x, 400.0, 1.0, "Hit x should be near 400")

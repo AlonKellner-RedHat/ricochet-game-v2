@@ -24,26 +24,6 @@ class HitRecord extends RefCounted:
 	func is_fully_blocked() -> bool:
 		return blocked_left and blocked_right
 
-static func find_nearest_hit(ray: Ray, segments: Array, _skip_point: Vector2 = Vector2(NAN, NAN), skip_segment: Segment = null, t_offset: float = 0.0) -> HitRecord:
-	var forward: Array = []
-	var beyond: Array = []
-
-	for seg in segments:
-		if skip_segment != null and seg == skip_segment:
-			continue
-		var seg_hits := _find_segment_hits(ray, seg)
-		for record in seg_hits:
-			if record.t > t_offset:
-				forward.append(record)
-			else:
-				beyond.append(record)
-
-	if forward.size() > 0:
-		return _pick_nearest(forward)
-	elif beyond.size() > 0:
-		return _pick_nearest(beyond)
-	return null
-
 static func find_all_hits(ray: Ray, segments: Array, skip_segment: Segment = null) -> Array:
 	var results: Array = []
 	for seg in segments:
@@ -156,12 +136,6 @@ static func projective_sort(hits: Array) -> Array:
 	)
 	return sorted
 
-static func build_stage_hitpoints(ray: Ray, segments: Array, skip_segment: Segment = null) -> Array:
-	var hits := find_all_hits(ray, segments, skip_segment)
-	var origin_hit := HitRecord.new(0.0, ray.origin.coords, null, Side.Value.LEFT, false)
-	hits.append(origin_hit)
-	return projective_sort(hits)
-
 static func intersect_line_with_carrier(ray: Ray, carrier: GeneralizedCircle) -> Array:
 	return _intersect_ray_carrier(ray, carrier)
 
@@ -248,20 +222,10 @@ static func _determine_side(ray: Ray, point: Vector2, seg: Segment) -> Side.Valu
 	else:
 		return Side.Value.RIGHT if approach_f_sign > 0.0 else Side.Value.LEFT
 
-static func _pick_nearest(hits: Array) -> HitRecord:
-	var winner: HitRecord = hits[0]
-	for i in range(1, hits.size()):
-		var hit: HitRecord = hits[i]
-		if hit.t < winner.t:
-			winner = hit
-		elif hit.t == winner.t and hit.segment.get_instance_id() < winner.segment.get_instance_id():
-			winner = hit
-	return winner
-
 static func _hdet(zA: Vector2, wA: float, zB: Vector2, wB: float) -> Vector2:
 	return Vector2(zA.x * wB - zB.x * wA, zA.y * wB - zB.y * wA)
 
-static func at_which_endpoint(point: Vector2, segment: Segment, _eps: float = 0.01) -> int:
+static func at_which_endpoint(point: Vector2, segment: Segment) -> int:
 	if point == segment.start.coords:
 		return 1
 	if point == segment.end.coords:

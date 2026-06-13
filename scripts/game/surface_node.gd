@@ -13,9 +13,11 @@ const HOVER_WIDTH := 8.0
 var surface: Surface
 var _plan_indices: Array[int] = []
 var _hover_side: int = -1
+var _cached_left_outer: bool = true
 
 func setup(p_surface: Surface) -> void:
 	surface = p_surface
+	_cached_left_outer = _is_left_outer()
 	if surface.player_solid and surface.segment.is_line():
 		_add_collision_shape()
 	queue_redraw()
@@ -30,8 +32,8 @@ func clear_hover() -> void:
 
 func update_plan_overlay(plan: PlanManager) -> void:
 	_plan_indices.clear()
-	for i in plan.size():
-		var entry: PlanManager.PlanEntry = plan.get_entry(i)
+	for i in plan.entries.size():
+		var entry: PlanManager.PlanEntry = plan.entries[i]
 		if entry.surface_id == surface.id:
 			_plan_indices.append(i + 1)
 	queue_redraw()
@@ -54,41 +56,28 @@ func _draw() -> void:
 	else:
 		var left_alpha := 1.0 if left_config.interactive else 0.5
 		var right_alpha := 1.0 if right_config.interactive else 0.5
-		var left_is_outer := _is_left_outer()
 		if is_arc:
 			var p := _arc_params()
 			var outer_r: float = p["radius"] + SIDE_OFFSET
 			var inner_r: float = p["radius"] - SIDE_OFFSET
-			var outer_color := Color(left_color, left_alpha) if left_is_outer else Color(right_color, right_alpha)
-			var inner_color := Color(right_color, right_alpha) if left_is_outer else Color(left_color, left_alpha)
+			var outer_color := Color(left_color, left_alpha) if _cached_left_outer else Color(right_color, right_alpha)
+			var inner_color := Color(right_color, right_alpha) if _cached_left_outer else Color(left_color, left_alpha)
 			draw_arc(p["center"], outer_r, p["start_angle"], p["end_angle"], p["point_count"], outer_color, LINE_WIDTH * 0.5)
 			draw_arc(p["center"], inner_r, p["start_angle"], p["end_angle"], p["point_count"], inner_color, LINE_WIDTH * 0.5)
 		else:
-			var seg_dir := (surface.segment.end.coords - surface.segment.start.coords).normalized()
-			var normal := Vector2(-seg_dir.y, seg_dir.x)
-			var offset := normal * SIDE_OFFSET
-			var mid := (surface.segment.start.coords + surface.segment.end.coords) / 2.0
-			var side_at_normal: Side.Value = surface.segment.determine_side(mid + normal * SIDE_OFFSET)
-			if side_at_normal == Side.Value.LEFT:
-				draw_line(surface.segment.start.coords + offset, surface.segment.end.coords + offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
-				draw_line(surface.segment.start.coords - offset, surface.segment.end.coords - offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
-			else:
-				draw_line(surface.segment.start.coords + offset, surface.segment.end.coords + offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
-				draw_line(surface.segment.start.coords - offset, surface.segment.end.coords - offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
+			var left_offset := _line_side_offset(Side.Value.LEFT, SIDE_OFFSET)
+			var right_offset := _line_side_offset(Side.Value.RIGHT, SIDE_OFFSET)
+			draw_line(surface.segment.start.coords + left_offset, surface.segment.end.coords + left_offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
+			draw_line(surface.segment.start.coords + right_offset, surface.segment.end.coords + right_offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
 
 	if _hover_side >= 0:
 		if is_arc:
 			var p := _arc_params()
-			var is_outer := (_hover_side == Side.Value.LEFT) == _is_left_outer()
+			var is_outer := (_hover_side == Side.Value.LEFT) == _cached_left_outer
 			var hover_r: float = p["radius"] + (SIDE_OFFSET + 2.0) * (1.0 if is_outer else -1.0)
 			draw_arc(p["center"], hover_r, p["start_angle"], p["end_angle"], p["point_count"], HOVER_COLOR, HOVER_WIDTH)
 		else:
-			var seg_dir2 := (surface.segment.end.coords - surface.segment.start.coords).normalized()
-			var normal2 := Vector2(-seg_dir2.y, seg_dir2.x)
-			var mid2 := (surface.segment.start.coords + surface.segment.end.coords) / 2.0
-			var side_at_n2: Side.Value = surface.segment.determine_side(mid2 + normal2 * SIDE_OFFSET)
-			var sign2 := 1.0 if side_at_n2 == _hover_side else -1.0
-			var hover_offset := normal2 * (SIDE_OFFSET + 2.0) * sign2
+			var hover_offset := _line_side_offset(_hover_side, SIDE_OFFSET + 2.0)
 			draw_line(surface.segment.start.coords + hover_offset, surface.segment.end.coords + hover_offset, HOVER_COLOR, HOVER_WIDTH)
 
 	if _plan_indices.size() > 0:
@@ -115,16 +104,18 @@ func _is_left_outer() -> bool:
 	var test_point := ctr + (surface.segment.start.coords - ctr).normalized() * (carrier.radius() + SIDE_OFFSET)
 	return surface.segment.determine_side(test_point) == Side.Value.LEFT
 
+func _line_side_offset(side: Side.Value, dist: float) -> Vector2:
+	var seg_dir := (surface.segment.end.coords - surface.segment.start.coords).normalized()
+	var normal := Vector2(-seg_dir.y, seg_dir.x)
+	var mid := (surface.segment.start.coords + surface.segment.end.coords) / 2.0
+	var side_at_normal: Side.Value = surface.segment.determine_side(mid + normal * SIDE_OFFSET)
+	var sign_val := 1.0 if side_at_normal == side else -1.0
+	return normal * dist * sign_val
+
 func _effect_color(config: SideConfig) -> Color:
 	if config == null or config.effect == null:
 		return PASSTHROUGH_COLOR
-	if config.effect is TerminalEffect:
-		return BLOCK_COLOR
-	if config.effect is ReflectionEffect:
-		return REFLECTION_COLOR
-	if config.effect is CircleInversionEffect:
-		return INVERSION_COLOR
-	return PASSTHROUGH_COLOR
+	return config.effect.get_display_color()
 
 func _add_collision_shape() -> void:
 	var body := StaticBody2D.new()

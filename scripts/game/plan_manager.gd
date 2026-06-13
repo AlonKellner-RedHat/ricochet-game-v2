@@ -24,12 +24,6 @@ func remove_last_of(surface_id: int) -> void:
 func clear() -> void:
 	entries.clear()
 
-func size() -> int:
-	return entries.size()
-
-func get_entry(index: int) -> PlanEntry:
-	return entries[index]
-
 func is_empty() -> bool:
 	return entries.size() == 0
 

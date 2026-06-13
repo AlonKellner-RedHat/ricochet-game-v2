@@ -92,23 +92,9 @@ func _draw_merged() -> void:
 		return
 	for i in _merged_steps.size():
 		var ms: Tracer.Step = _merged_steps[i]
-		var from := ms.start - global_position
-		var to := ms.end - global_position
-		if from == to:
+		if ms.start == ms.end:
 			continue
-		var col := StepTypes.color(ms.type)
-		if ms.is_arc_step and not is_inf(ms.end.x) and not is_inf(ms.end.y):
-			var p := VisualConverter.arc_params(ms.start, ms.via, ms.end)
-			var arc_center: Vector2 = p["center"] - global_position
-			if StepTypes.is_solid(ms.type):
-				draw_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col, LINE_WIDTH)
-			else:
-				_draw_dashed_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col)
-		else:
-			if StepTypes.is_solid(ms.type):
-				draw_line(from, to, col, LINE_WIDTH)
-			else:
-				_draw_dashed(from, to, col)
+		_draw_step(ms, StepTypes.color(ms.type), not StepTypes.is_solid(ms.type))
 
 	for i in _merged_steps.size():
 		var ms: Tracer.Step = _merged_steps[i]
@@ -123,26 +109,12 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 	var cursor_idx := path.cursor_index if path.cursor_index >= 0 else path.steps.size()
 	for i in path.steps.size():
 		var step: Tracer.Step = path.steps[i]
-		var from := step.start - global_position
-		var to := step.end - global_position
-		if from == to:
+		if step.start == step.end:
 			continue
 		var col := base_color
 		if i >= cursor_idx:
 			col = Color(base_color, 0.35)
-		var is_virtual := step.hit == null
-		if step.is_arc_step and not is_inf(step.end.x) and not is_inf(step.end.y):
-			var p := VisualConverter.arc_params(step.start, step.via, step.end)
-			var arc_center: Vector2 = p["center"] - global_position
-			if is_virtual:
-				_draw_dashed_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col)
-			else:
-				draw_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col, LINE_WIDTH)
-		else:
-			if is_virtual:
-				_draw_dashed(from, to, col)
-			else:
-				draw_line(from, to, col, LINE_WIDTH)
+		_draw_step(step, col, step.hit == null)
 
 	for i in path.steps.size():
 		var step: Tracer.Step = path.steps[i]
@@ -157,6 +129,22 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 		if step.hit == null:
 			lbl += "*"
 		draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
+
+func _draw_step(step: Tracer.Step, col: Color, dashed: bool) -> void:
+	if step.is_arc_step and not is_inf(step.end.x) and not is_inf(step.end.y):
+		var p := VisualConverter.arc_params(step.start, step.via, step.end)
+		var arc_center: Vector2 = p["center"] - global_position
+		if dashed:
+			_draw_dashed_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col)
+		else:
+			draw_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col, LINE_WIDTH)
+	else:
+		var from := step.start - global_position
+		var to := step.end - global_position
+		if dashed:
+			_draw_dashed(from, to, col)
+		else:
+			draw_line(from, to, col, LINE_WIDTH)
 
 func _draw_dashed_arc(center: Vector2, radius: float, start_angle: float, end_angle: float, point_count: int, col: Color) -> void:
 	var span := end_angle - start_angle

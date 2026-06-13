@@ -78,7 +78,8 @@ func test_stage20a_S18_determinant_nonzero() -> void:
 	var carrier := GeneralizedCircle.from_line(1, 0, -200)
 	var refl := ReflectionEffect.new(carrier)
 	var m := refl.get_mobius()
-	assert_gt(m.determinant_mod2(), 0.0, "S18: Reflection determinant must be non-zero")
+	var det := MobiusTransform.cmul(m.a, m.d) - MobiusTransform.cmul(m.b, m.c)
+	assert_gt(MobiusTransform.cmod2(det), 0.0, "S18: Reflection determinant must be non-zero")
 
 func test_stage20a_transform_id_unique() -> void:
 	var ids: Dictionary = {}

@@ -140,7 +140,7 @@ func test_stage32_full_reset_restores_initial_state() -> void:
 	await get_tree().process_frame
 	assert_false(game_mgr.game_state.flags.has("wall_intact"),
 		"Reset restores initial game state (no wall_intact key)")
-	assert_eq(game_mgr.plan.size(), 0, "Plan cleared on reset")
+	assert_eq(game_mgr.plan.entries.size(), 0, "Plan cleared on reset")
 	assert_eq(game_mgr.targets_hit.size(), 0, "Targets cleared on reset")
 
 func test_stage32_checkpoint_saved_before_shot() -> void:
@@ -172,7 +172,7 @@ func test_stage32_undo_indistinguishable_from_pre_shot() -> void:
 
 	var pre_pos := player.global_position
 	var pre_vel := player.velocity
-	var pre_plan_size: int = game_mgr.plan.size()
+	var pre_plan_size: int = game_mgr.plan.entries.size()
 	var pre_targets_size: int = game_mgr.targets_hit.size()
 
 	cursor.global_position = player.global_position + Vector2(100, 0)
@@ -185,5 +185,5 @@ func test_stage32_undo_indistinguishable_from_pre_shot() -> void:
 	await get_tree().process_frame
 	assert_almost_eq(player.global_position, pre_pos, Vector2(1, 1), "Position restored")
 	assert_eq(player.velocity, pre_vel, "Velocity restored")
-	assert_eq(game_mgr.plan.size(), pre_plan_size, "Plan size restored")
+	assert_eq(game_mgr.plan.entries.size(), pre_plan_size, "Plan size restored")
 	assert_eq(game_mgr.targets_hit.size(), pre_targets_size, "Targets restored")

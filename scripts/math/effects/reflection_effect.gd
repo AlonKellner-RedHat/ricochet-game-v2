@@ -35,3 +35,9 @@ func get_tracked_transform() -> TrackedTransform:
 
 func normalized(carrier: GeneralizedCircle) -> Effect:
 	return ReflectionEffect.new(carrier)
+
+func get_display_name() -> String:
+	return "reflect"
+
+func get_display_color() -> Color:
+	return Color.BLUE

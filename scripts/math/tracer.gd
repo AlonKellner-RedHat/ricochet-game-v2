@@ -22,6 +22,11 @@ class Step extends RefCounted:
 		via = p_via if p_via != Vector2.ZERO else (p_start + p_end) / 2.0
 		is_arc_step = p_is_arc
 
+	func with_type(new_type: int) -> Step:
+		var copy := Step.new(start, end, frame_id, hit, ray, frame, via, is_arc_step)
+		copy.type = new_type
+		return copy
+
 class TracedPath extends RefCounted:
 	var steps: Array = []
 	var targets_hit: Dictionary = {}

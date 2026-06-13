@@ -32,3 +32,9 @@ func get_tracked_transform() -> TrackedTransform:
 
 func normalized(carrier: GeneralizedCircle) -> Effect:
 	return CircleInversionEffect.new(carrier)
+
+func get_display_name() -> String:
+	return "inversion"
+
+func get_display_color() -> Color:
+	return Color.PURPLE

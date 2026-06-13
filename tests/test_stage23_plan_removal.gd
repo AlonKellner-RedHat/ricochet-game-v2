@@ -9,9 +9,9 @@ func test_stage23_remove_latest_instance() -> void:
 	plan.add_entry(2, Side.Value.LEFT)
 	plan.add_entry(1, Side.Value.LEFT)
 	plan.remove_last_of(1)
-	assert_eq(plan.size(), 2, "Should have 2 entries after removing latest of surface 1")
-	assert_eq(plan.get_entry(0).surface_id, 1, "First entry should still be surface 1")
-	assert_eq(plan.get_entry(1).surface_id, 2, "Second entry should be surface 2")
+	assert_eq(plan.entries.size(), 2, "Should have 2 entries after removing latest of surface 1")
+	assert_eq(plan.entries[0].surface_id, 1, "First entry should still be surface 1")
+	assert_eq(plan.entries[1].surface_id, 2, "Second entry should be surface 2")
 
 func test_stage23_remove_only_instance() -> void:
 	var plan := PlanManager.new()
@@ -23,7 +23,7 @@ func test_stage23_remove_nonexistent() -> void:
 	var plan := PlanManager.new()
 	plan.add_entry(1, Side.Value.LEFT)
 	plan.remove_last_of(99)
-	assert_eq(plan.size(), 1, "Removing nonexistent surface should not change plan")
+	assert_eq(plan.entries.size(), 1, "Removing nonexistent surface should not change plan")
 
 func test_stage23_has_surface() -> void:
 	var plan := PlanManager.new()
@@ -70,10 +70,10 @@ func test_stage23_rightclick_planned_removes() -> void:
 		click_pos = click_pos - Vector2(2, 0)
 
 	game_mgr.plan.add_entry(mirror.id, Side.Value.LEFT)
-	assert_eq(game_mgr.plan.size(), 1, "Should have 1 entry")
+	assert_eq(game_mgr.plan.entries.size(), 1, "Should have 1 entry")
 	cursor.global_position = click_pos
-	game_mgr._try_plan_right_click()
-	assert_eq(game_mgr.plan.size(), 0, "Right-click on planned surface should remove entry")
+	game_mgr._handle_plan_click(true)
+	assert_eq(game_mgr.plan.entries.size(), 0, "Right-click on planned surface should remove entry")
 
 func test_stage23_rightclick_empty_space_clears() -> void:
 	var plan := PlanManager.new()

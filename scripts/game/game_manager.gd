@@ -58,7 +58,7 @@ func _update_hover() -> void:
 		return
 
 	var surfaces := _get_surfaces()
-	var result := click_detector.detect_hover(_cursor.global_position, surfaces)
+	var result := click_detector.detect_click(_cursor.global_position, surfaces)
 
 	_clear_all_hover()
 
@@ -122,42 +122,34 @@ func _input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			_try_plan_click()
+			_handle_plan_click(false)
 			return
 		if event.button_index == MOUSE_BUTTON_RIGHT:
-			_try_plan_right_click()
+			_handle_plan_click(true)
 			return
 
 	if event.is_action_pressed("fire"):
 		_try_fire()
 
-func _try_plan_click() -> void:
-	if not _cursor:
-		return
-	var surfaces := _get_surfaces()
-	var result := click_detector.detect_click(_cursor.global_position, surfaces)
-	if result.is_empty():
-		return
-	var surf: Surface = result.surface
-	var side: Side.Value = result.side
-	plan.add_entry(surf.id, side)
-	_update_hud()
-	_update_surface_overlays()
-
-func _try_plan_right_click() -> void:
+func _handle_plan_click(is_right_click: bool) -> void:
 	if not _cursor:
 		return
 	var surfaces := _get_surfaces()
 	var result := click_detector.detect_click(_cursor.global_position, surfaces)
 
 	if result.is_empty():
+		if not is_right_click:
+			return
 		plan.clear()
 	else:
 		var surf: Surface = result.surface
-		if plan.has_surface(surf.id):
-			plan.remove_last_of(surf.id)
+		if is_right_click:
+			if plan.has_surface(surf.id):
+				plan.remove_last_of(surf.id)
+			else:
+				plan.clear()
 		else:
-			plan.clear()
+			plan.add_entry(surf.id, result.side)
 
 	_update_hud()
 	_update_surface_overlays()

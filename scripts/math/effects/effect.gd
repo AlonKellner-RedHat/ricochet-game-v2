@@ -18,3 +18,9 @@ func get_tracked_transform() -> TrackedTransform:
 
 func normalized(_carrier: GeneralizedCircle) -> Effect:
 	return self
+
+func get_display_name() -> String:
+	return "pass"
+
+func get_display_color() -> Color:
+	return Color.GRAY

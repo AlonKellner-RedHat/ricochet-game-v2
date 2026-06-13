@@ -42,18 +42,20 @@ func test_stage12_side_config_terminal() -> void:
 	var config := SideConfig.new(TerminalEffect.new())
 	assert_true(config.effect is TerminalEffect, "Effect should be TerminalEffect")
 
-func test_stage12_fixed_resolver_left() -> void:
+func test_stage12_surface_config_left() -> void:
 	var left := SideConfig.new(TerminalEffect.new())
 	var right := SideConfig.new(null)
-	var resolver := ConfigResolver.FixedResolver.new(left, right)
-	var result := resolver.resolve(Side.Value.LEFT, GameState.new())
+	var seg := Segment.from_coords(Vector2(0, 0), Vector2(100, 0), Vector2(50, 0))
+	var surf := Surface.new(seg, left, right)
+	var result := surf.active_side_config(Side.Value.LEFT, GameState.new())
 	assert_eq(result, left, "LEFT should return left config")
 
-func test_stage12_fixed_resolver_right() -> void:
+func test_stage12_surface_config_right() -> void:
 	var left := SideConfig.new(TerminalEffect.new())
 	var right := SideConfig.new(null)
-	var resolver := ConfigResolver.FixedResolver.new(left, right)
-	var result := resolver.resolve(Side.Value.RIGHT, GameState.new())
+	var seg := Segment.from_coords(Vector2(0, 0), Vector2(100, 0), Vector2(50, 0))
+	var surf := Surface.new(seg, left, right)
+	var result := surf.active_side_config(Side.Value.RIGHT, GameState.new())
 	assert_eq(result, right, "RIGHT should return right config")
 
 func test_stage12_active_side_config_delegates() -> void:

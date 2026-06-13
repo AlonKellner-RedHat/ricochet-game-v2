@@ -1,11 +1,6 @@
 class_name StepTreeMerge
 extends RefCounted
 
-static func _step_with_type(s: Tracer.Step, step_type: int) -> Tracer.Step:
-	var ms := Tracer.Step.new(s.start, s.end, s.frame_id, s.hit, s.ray, s.frame, s.via, s.is_arc_step)
-	ms.type = step_type
-	return ms
-
 static func classify_physical(path: Tracer.TracedPath) -> Array:
 	var result: Array = []
 	var ci: int = path.cursor_index
@@ -18,7 +13,7 @@ static func classify_physical(path: Tracer.TracedPath) -> Array:
 			step_type = StepTypes.Type.ALIGNED
 		else:
 			step_type = StepTypes.Type.ALIGNED_POST_PLANNED
-		result.append(_step_with_type(s, step_type))
+		result.append(s.with_type(step_type))
 	return result
 
 static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int) -> Array:
@@ -37,7 +32,7 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 				step_type = StepTypes.Type.ALIGNED_POST_PLANNED
 			else:
 				step_type = StepTypes.Type.ALIGNED
-			merged.append(_step_with_type(p, step_type))
+			merged.append(p.with_type(step_type))
 		else:
 			diverged = true
 			if p != null:
@@ -46,8 +41,8 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 					div_type = StepTypes.Type.DIVERGED_POST_PLANNED
 				else:
 					div_type = StepTypes.Type.DIVERGED_PLANNED
-				merged.append(_step_with_type(p, div_type))
+				merged.append(p.with_type(div_type))
 			if r != null:
-				merged.append(_step_with_type(r, StepTypes.Type.DIVERGED_PHYSICAL))
+				merged.append(r.with_type(StepTypes.Type.DIVERGED_PHYSICAL))
 
 	return merged
