@@ -284,3 +284,72 @@ func test_stage_hitpoints_projective_order() -> void:
 	assert_gt(hits[0].t, 0.0, "Forward hit first")
 	assert_lt(hits[1].t, 0.0, "Behind hit second")
 	assert_almost_eq(hits[2].t, 0.0, 1e-6, "Origin last")
+
+# --- Circle carrier intersection tests ---
+
+func _make_arc_segment(center: Vector2, radius: float, start_angle: float, end_angle: float) -> Segment:
+	var s := center + Vector2(cos(start_angle), sin(start_angle)) * radius
+	var e := center + Vector2(cos(end_angle), sin(end_angle)) * radius
+	var mid_angle := (start_angle + end_angle) / 2.0
+	var v := center + Vector2(cos(mid_angle), sin(mid_angle)) * radius
+	return Segment.from_coords(s, e, v)
+
+func test_circle_carrier_two_hits() -> void:
+	var seg := _make_arc_segment(Vector2(300, 300), 100.0, 0.0, PI)
+	var ray := Ray.from_coords(Vector2(100, 300), Direction.from_coords(Vector2(100, 300), Vector2(600, 300)))
+	var carrier := seg.get_carrier()
+	assert_false(carrier.is_line(), "Arc segment should have circle carrier")
+	var hits := Intersection.find_all_hits(ray, [seg])
+	assert_eq(hits.size(), 2, "Horizontal ray through circle center should get 2 hits")
+	for hit in hits:
+		var h: Intersection.HitRecord = hit
+		var eval_val := carrier.evaluate(h.point.coords)
+		assert_almost_eq(eval_val, 0.0, 0.1, "Hit point should be on carrier")
+
+func test_circle_carrier_no_intersection() -> void:
+	var seg := _make_arc_segment(Vector2(300, 300), 50.0, 0.0, PI)
+	var ray := Ray.from_coords(Vector2(0, 0), Direction.from_coords(Vector2(0, 0), Vector2(0, 600)))
+	var hits := Intersection.find_all_hits(ray, [seg])
+	assert_eq(hits.size(), 0, "Vertical ray at x=0 should miss circle at (300,300) r=50")
+
+func test_circle_carrier_hitpoint_on_carrier() -> void:
+	var seg := _make_arc_segment(Vector2(400, 300), 150.0, -PI / 2.0, PI / 2.0)
+	var ray := Ray.from_coords(Vector2(100, 300), Direction.from_coords(Vector2(100, 300), Vector2(700, 300)))
+	var hits := Intersection.find_all_hits(ray, [seg])
+	var carrier := seg.get_carrier()
+	for hit in hits:
+		var h: Intersection.HitRecord = hit
+		var eval_val := carrier.evaluate(h.point.coords)
+		assert_almost_eq(eval_val, 0.0, 0.1,
+			"Hit at %s should satisfy carrier equation" % h.point.coords)
+
+func test_on_segment_arc() -> void:
+	var seg := _make_arc_segment(Vector2(300, 300), 100.0, 0.0, PI)
+	var on_arc := Vector2(300 + 100.0 * cos(PI / 4.0), 300 + 100.0 * sin(PI / 4.0))
+	var off_arc := Vector2(300 + 100.0 * cos(-PI / 4.0), 300 + 100.0 * sin(-PI / 4.0))
+	assert_true(Intersection.is_on_segment(on_arc, seg),
+		"Point at 45° should be on upper semicircle arc")
+	assert_false(Intersection.is_on_segment(off_arc, seg),
+		"Point at -45° should NOT be on upper semicircle arc")
+
+func test_circle_carrier_side_determination() -> void:
+	var seg := _make_arc_segment(Vector2(300, 300), 100.0, 0.0, PI)
+	var ray_from_inside := Ray.from_coords(Vector2(300, 300), Direction.from_coords(Vector2(300, 300), Vector2(300, 100)))
+	var hits := Intersection.find_all_hits(ray_from_inside, [seg])
+	assert_gt(hits.size(), 0, "Ray from center should hit the arc")
+	var first_on_seg: Intersection.HitRecord = null
+	for hit in hits:
+		var h: Intersection.HitRecord = hit
+		if h.on_segment:
+			first_on_seg = h
+			break
+	if first_on_seg != null:
+		assert_true(first_on_seg.side == Side.Value.LEFT or first_on_seg.side == Side.Value.RIGHT,
+			"Side should be LEFT or RIGHT")
+
+func test_circle_carrier_multiple_segments() -> void:
+	var seg_a := _make_arc_segment(Vector2(300, 300), 100.0, 0.0, PI)
+	var seg_b := _make_arc_segment(Vector2(600, 300), 80.0, PI / 2.0, 3.0 * PI / 2.0)
+	var ray := Ray.from_coords(Vector2(100, 300), Direction.from_coords(Vector2(100, 300), Vector2(800, 300)))
+	var hits := Intersection.find_all_hits(ray, [seg_a, seg_b])
+	assert_gte(hits.size(), 2, "Should hit at least 2 carriers")

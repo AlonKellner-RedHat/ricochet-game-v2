@@ -153,6 +153,20 @@ func _generate_plans(mirrors: Array) -> Array:
 		var s0: Surface = mirrors[0].surface
 		var side0: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
 		plans.append([PlanManager.PlanEntry.new(s0.id, side0), PlanManager.PlanEntry.new(s0.id, side0)])
+	if mirrors.size() >= 3:
+		var m0: Surface = mirrors[0].surface
+		var m1: Surface = mirrors[1].surface
+		var m2: Surface = mirrors[2].surface
+		var ms0: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
+		var ms1: Side.Value = Side.Value.LEFT if mirrors[1].left_reflects else Side.Value.RIGHT
+		var ms2: Side.Value = Side.Value.LEFT if mirrors[2].left_reflects else Side.Value.RIGHT
+		plans.append([PlanManager.PlanEntry.new(m0.id, ms0), PlanManager.PlanEntry.new(m1.id, ms1), PlanManager.PlanEntry.new(m2.id, ms2)])
+	if mirrors.size() >= 2:
+		var m0b: Surface = mirrors[0].surface
+		var m1b: Surface = mirrors[1].surface
+		var ms0b: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
+		var ms1b: Side.Value = Side.Value.LEFT if mirrors[1].left_reflects else Side.Value.RIGHT
+		plans.append([PlanManager.PlanEntry.new(m0b.id, ms0b), PlanManager.PlanEntry.new(m1b.id, ms1b), PlanManager.PlanEntry.new(m0b.id, ms0b)])
 	return plans
 
 func _plan_to_data(plan: Array) -> Array:

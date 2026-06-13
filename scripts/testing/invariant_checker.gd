@@ -40,6 +40,12 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 		violations.append_array(check_PLAN_EFFECTS_APPLIED(player_pos, cursor_pos, plan_entries))
 	violations.append_array(check_BACK_TRANSFORM_ALIGNMENT(player_pos, cursor_pos))
 	violations.append_array(check_PHYSICS_COMPLIANCE(player_pos, cursor_pos))
+	violations.append_array(check_HITPOINT_ON_CARRIER(player_pos, cursor_pos))
+	violations.append_array(check_S18_FRAME_DETERMINANT(player_pos, cursor_pos))
+	violations.append_array(check_ON_SEGMENT_CONSISTENCY(player_pos, cursor_pos))
+	violations.append_array(check_SHARED_RAY(player_pos, cursor_pos))
+	violations.append_array(check_RAY_ALIGNMENT(player_pos, cursor_pos))
+	violations.append_array(check_PARAMETER_MONOTONICITY(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -380,6 +386,178 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 			if pt.distance_to(sa) < 1.0 or pt.distance_to(sb) < 1.0:
 				continue
 			violations.append("PHYSICS-COMPLIANCE: step %d crosses surface %d at %s" % [i, s.id, pt])
+	return violations
+
+func check_HITPOINT_ON_CARRIER(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath
+		if trace_name == "physical":
+			path = _renderer.get_traced_path()
+		else:
+			path = _renderer.get_planned_path()
+		if path == null:
+			continue
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if step.hit == null or step.hit.segment == null:
+				continue
+			var carrier := step.hit.segment.get_carrier()
+			var pt := step.hit.point.coords
+			var eval_val := carrier.evaluate(pt)
+			var grad_mag := sqrt(carrier.b * carrier.b + carrier.c * carrier.c + 4.0 * carrier.a * carrier.a * (pt.x * pt.x + pt.y * pt.y))
+			var dist := absf(eval_val) / maxf(grad_mag, 1e-10)
+			if dist > 1.0:
+				violations.append("HITPOINT-ON-CARRIER: %s step %d dist=%.4f at %s" % [trace_name, i, dist, pt])
+	return violations
+
+func check_S18_FRAME_DETERMINANT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath
+		if trace_name == "physical":
+			path = _renderer.get_traced_path()
+		else:
+			path = _renderer.get_planned_path()
+		if path == null:
+			continue
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if step.frame == null:
+				continue
+			var det := MobiusTransform.cmul(step.frame.a, step.frame.d) - MobiusTransform.cmul(step.frame.b, step.frame.c)
+			var det_mod2 := MobiusTransform.cmod2(det)
+			if det_mod2 == 0.0:
+				violations.append("S18-FRAME-DET: %s step %d |det|^2 = 0" % [trace_name, i])
+	return violations
+
+func check_ON_SEGMENT_CONSISTENCY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath
+		if trace_name == "physical":
+			path = _renderer.get_traced_path()
+		else:
+			path = _renderer.get_planned_path()
+		if path == null:
+			continue
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if step.hit == null or step.hit.segment == null:
+				continue
+			var recomputed := Intersection.is_on_segment(step.hit.point.coords, step.hit.segment)
+			if step.hit.on_segment != recomputed:
+				violations.append("ON-SEGMENT-CONSISTENCY: %s step %d stored=%s recomputed=%s at %s" % [trace_name, i, step.hit.on_segment, recomputed, step.hit.point.coords])
+	return violations
+
+func check_SHARED_RAY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	# Within each transformative sub-chain, all steps share the same ray instance.
+	# Currently no projective effects exist, so the entire trace is one sub-chain.
+	# When projective effects are added, split at projective-effect hitpoints.
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath
+		if trace_name == "physical":
+			path = _renderer.get_traced_path()
+		else:
+			path = _renderer.get_planned_path()
+		if path == null or path.steps.size() == 0:
+			continue
+		var first_ray: Ray = path.steps[0].ray
+		if first_ray == null:
+			continue
+		for i in range(1, path.steps.size()):
+			var step: Tracer.Step = path.steps[i]
+			if step.ray == null:
+				violations.append("SHARED-RAY: %s step %d has null ray" % [trace_name, i])
+				continue
+			if step.ray != first_ray:
+				violations.append("SHARED-RAY: %s step %d ray is different instance from step 0" % [trace_name, i])
+	return violations
+
+func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var bounds := Tracer.DEFAULT_BOUNDS
+	# Within each transformative sub-chain, back-transforming visual endpoints
+	# through frame.invert() should place them on the original ray line.
+	# This holds through all transformative effects (reflections, inversions)
+	# because the composed inverse unwinds all transforms.
+	# When projective effects are added, scope to sub-chains.
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath
+		if trace_name == "physical":
+			path = _renderer.get_traced_path()
+		else:
+			path = _renderer.get_planned_path()
+		if path == null or path.steps.size() == 0:
+			continue
+		var first_step: Tracer.Step = path.steps[0]
+		if first_step.ray == null:
+			continue
+		var origin := first_step.ray.origin.coords
+		var aim_dir := first_step.ray.direction.to_vector().normalized()
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if step.frame == null or step.ray == null:
+				continue
+			if step.start == step.end:
+				continue
+			if step.hit == null:
+				continue
+			var frame_inv := step.frame.invert()
+			var threshold := 5.0 if step.is_arc_step else 1.0
+			var _at_bounds := func(p: Vector2) -> bool:
+				return (p.x <= bounds.position.x + 2.0 or p.x >= bounds.end.x - 2.0 or
+					p.y <= bounds.position.y + 2.0 or p.y >= bounds.end.y - 2.0)
+			if not _at_bounds.call(step.start):
+				var bt_start := frame_inv.apply(step.start)
+				var cross_s := (bt_start - origin).cross(aim_dir)
+				if absf(cross_s) > threshold:
+					violations.append("RAY-ALIGNMENT: %s step %d start cross=%.2f (bt=%s)" % [trace_name, i, cross_s, bt_start])
+			if not _at_bounds.call(step.end):
+				var bt_end := frame_inv.apply(step.end)
+				var cross_e := (bt_end - origin).cross(aim_dir)
+				if absf(cross_e) > threshold:
+					violations.append("RAY-ALIGNMENT: %s step %d end cross=%.2f (bt=%s)" % [trace_name, i, cross_e, bt_end])
+	return violations
+
+func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath
+		if trace_name == "physical":
+			path = _renderer.get_traced_path()
+		else:
+			path = _renderer.get_planned_path()
+		if path == null or path.steps.size() < 2:
+			continue
+		for i in range(1, path.steps.size()):
+			var prev: Tracer.Step = path.steps[i - 1]
+			var curr: Tracer.Step = path.steps[i]
+			if prev.frame_id != curr.frame_id:
+				continue
+			if prev.hit == null or curr.hit == null:
+				continue
+			if prev.hit.segment == null or curr.hit.segment == null:
+				continue
+			if prev.hit.t > 0.0 and curr.hit.t <= 0.0:
+				continue
+			if curr.hit.t <= 0.0:
+				continue
+			if curr.hit.t < prev.hit.t:
+				violations.append("PARAM-MONOTONICITY: %s step %d t=%.4f < prev t=%.4f (frame=%d)" % [trace_name, i, curr.hit.t, prev.hit.t, curr.frame_id])
 	return violations
 
 func _segment_intersection(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2) -> Dictionary:
