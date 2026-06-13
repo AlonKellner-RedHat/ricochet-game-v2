@@ -53,19 +53,16 @@ func set_normalized(frame_id: int, surfaces: Array, mapping: Dictionary) -> void
 	_norm_cache[frame_id] = {"surfaces": surfaces, "mapping": mapping}
 
 func apply_point(transform: MobiusTransform, point: Vector2, bidirectional: bool = true) -> Vector2:
-	var key := _point_key(transform.id, point)
+	var key := Vector3(transform.id, point.x, point.y)
 	if _point_cache.has(key):
 		return _point_cache[key]
 	var result := transform.apply(point)
 	_point_cache[key] = result
 	if bidirectional:
-		var rev_key := _point_key(transform.id, result)
+		var rev_key := Vector3(transform.id, result.x, result.y)
 		if not _point_cache.has(rev_key):
 			_point_cache[rev_key] = point
 	return result
-
-static func _point_key(tid: int, p: Vector2) -> String:
-	return "%d|%s|%s" % [tid, var_to_str(p.x), var_to_str(p.y)]
 
 func clear() -> void:
 	_carrier_cache.clear()

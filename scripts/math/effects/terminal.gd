@@ -1,8 +1,8 @@
 class_name TerminalEffect
 extends Effect
 
-func is_terminal() -> bool:
-	return true
+func kind() -> int:
+	return Kind.TERMINAL
 
 func get_display_name() -> String:
 	return "block"

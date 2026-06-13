@@ -6,13 +6,13 @@ class Step extends RefCounted:
 	var end: Vector2
 	var via: Vector2
 	var frame_id: int
-	var hit: RefCounted
+	var hit: Intersection.HitRecord
 	var ray: Ray
 	var frame: MobiusTransform
 	var is_arc_step: bool
 	var type: int = StepTypes.Type.ALIGNED
 
-	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: RefCounted = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
+	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: Intersection.HitRecord = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 		start = p_start
 		end = p_end
 		frame_id = p_frame_id
@@ -238,24 +238,25 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				if norm_surf and fully_blocked:
 					effect_config = norm_surf.active_side_config(lookup_side, state_copy)
 					if effect_config != null and effect_config.effect != null:
-						if effect_config.effect.is_terminal():
-							trace_done = true
-							break
-						if effect_config.effect.is_transformative():
-							apply_effect = true
-							if plan_index < plan_entries.size():
-								if orig_surf.id == plan_entries[plan_index].surface_id:
-									plan_index += 1
+						match effect_config.effect.kind():
+							Effect.Kind.TERMINAL:
+								trace_done = true
+								break
+							Effect.Kind.TRANSFORMATIVE:
+								apply_effect = true
+								if plan_index < plan_entries.size():
+									if orig_surf.id == plan_entries[plan_index].surface_id:
+										plan_index += 1
+									else:
+										plan_matched = false
 								else:
 									plan_matched = false
-							else:
-								plan_matched = false
 			elif current_mode == TraceMode.PLANNED:
 				if orig_surf and plan_index < plan_entries.size():
 					var entry: PlanManager.PlanEntry = plan_entries[plan_index]
 					if orig_surf.id == entry.surface_id:
 						effect_config = norm_surf.active_side_config(entry.side, state_copy) if norm_surf else null
-						if effect_config != null and effect_config.effect != null and effect_config.effect.is_transformative():
+						if effect_config != null and effect_config.effect != null and effect_config.effect.kind() == Effect.Kind.TRANSFORMATIVE:
 							apply_effect = true
 						plan_index += 1
 
@@ -332,7 +333,7 @@ static func _add_escape_steps(path: TracedPath, vis_origin: Vector2, vis_dir: Ve
 	if return_start != vis_origin:
 		path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame, (return_start + vis_origin) / 2.0, false))
 
-static func _add_wrap_steps(path: TracedPath, vis_start: Vector2, vis_end: Vector2, frame: MobiusTransform, shared_ray: Ray, bounds: Rect2, hit: RefCounted = null) -> void:
+static func _add_wrap_steps(path: TracedPath, vis_start: Vector2, vis_end: Vector2, frame: MobiusTransform, shared_ray: Ray, bounds: Rect2, hit: Intersection.HitRecord = null) -> void:
 	var vis_dir := (vis_end - vis_start).normalized()
 	var esc := _clip_to_bounds(vis_start, -vis_dir, bounds)
 	var ret := _clip_to_bounds(vis_end, vis_dir, bounds)

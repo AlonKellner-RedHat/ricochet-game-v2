@@ -1,11 +1,16 @@
 class_name Effect
 extends RefCounted
 
+enum Kind { PASS, TERMINAL, TRANSFORMATIVE, PROJECTIVE }
+
+func kind() -> int:
+	return Kind.PASS
+
 func is_terminal() -> bool:
-	return false
+	return kind() == Kind.TERMINAL
 
 func is_transformative() -> bool:
-	return false
+	return kind() == Kind.TRANSFORMATIVE
 
 func get_mobius() -> MobiusTransform:
 	return MobiusTransform.identity()

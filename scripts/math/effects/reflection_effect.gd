@@ -1,8 +1,5 @@
 class_name ReflectionEffect
-extends Effect
-
-var _mobius: MobiusTransform
-var _tracked: TrackedTransform
+extends TransformativeEffect
 
 func _init(carrier: GeneralizedCircle) -> void:
 	var norm: float = sqrt(carrier.b * carrier.b + carrier.c * carrier.c)
@@ -21,17 +18,8 @@ func _init(carrier: GeneralizedCircle) -> void:
 	_mobius = MobiusTransform.new(alpha, beta, gamma, delta, true)
 	_tracked = TrackedTransform.from_self_inverse(_mobius)
 
-func is_transformative() -> bool:
-	return true
-
-func get_mobius() -> MobiusTransform:
-	return _mobius
-
 func get_inverse_mobius() -> MobiusTransform:
 	return _mobius
-
-func get_tracked_transform() -> TrackedTransform:
-	return _tracked
 
 func normalized(carrier: GeneralizedCircle) -> Effect:
 	return ReflectionEffect.new(carrier)

@@ -123,7 +123,7 @@ static func _find_surface_id(seg: Segment, surfaces: Array) -> String:
 			return str(surf.id)
 	return "?"
 
-static func _effect_name(effect: RefCounted) -> String:
+static func _effect_name(effect: Effect) -> String:
 	if effect == null:
 		return "pass"
 	return effect.get_display_name()
