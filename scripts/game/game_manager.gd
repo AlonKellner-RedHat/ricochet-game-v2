@@ -116,8 +116,7 @@ func _input(event: InputEvent) -> void:
 
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_C:
 		plan.clear()
-		_update_hud()
-		_update_surface_overlays()
+		_refresh_ui()
 		return
 
 	if event is InputEventMouseButton and event.pressed:
@@ -151,8 +150,7 @@ func _handle_plan_click(is_right_click: bool) -> void:
 		else:
 			plan.add_entry(surf.id, result.side)
 
-	_update_hud()
-	_update_surface_overlays()
+	_refresh_ui()
 
 func _try_fire() -> void:
 	if not _player or not _cursor:
@@ -206,8 +204,7 @@ func _restore_checkpoint(data: CheckpointData) -> void:
 	game_state = data.game_state.copy()
 	plan.restore_from(data.plan_entries)
 	targets_hit = data.targets_hit.duplicate()
-	_update_hud()
-	_update_surface_overlays()
+	_refresh_ui()
 
 func _compute_aim_direction(player_pos: Vector2, cursor_pos: Vector2, surfaces: Array) -> Direction:
 	var entries: Array = plan.entries if not plan.is_empty() else []
@@ -217,6 +214,10 @@ func _get_surfaces() -> Array:
 	if _level_settings and "surfaces" in _level_settings:
 		return _level_settings.surfaces
 	return []
+
+func _refresh_ui() -> void:
+	_update_hud()
+	_update_surface_overlays()
 
 func _update_hud() -> void:
 	if not _plan_hud:

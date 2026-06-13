@@ -1,26 +1,9 @@
 extends GutTest
 
-func before_each() -> void:
-	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
+const H := preload("res://tests/test_helpers.gd")
 
-func _find_nearest(ray: Ray, segments: Array, skip_segment: Segment = null) -> Intersection.HitRecord:
-	var hits := Intersection.find_all_hits(ray, segments, skip_segment)
-	if hits.is_empty():
-		return null
-	var forward: Array = []
-	var beyond: Array = []
-	for h in hits:
-		if h.t > 0.0:
-			forward.append(h)
-		else:
-			beyond.append(h)
-	var pool := forward if not forward.is_empty() else beyond
-	var best: Intersection.HitRecord = pool[0]
-	for i in range(1, pool.size()):
-		if pool[i].t < best.t or (pool[i].t == best.t and pool[i].segment.get_instance_id() < best.segment.get_instance_id()):
-			best = pool[i]
-	return best
+func before_each() -> void:
+	H.reset_counters()
 
 # --- Helpers ---
 
@@ -32,10 +15,6 @@ func _vert_segment() -> Segment:
 
 func _arc_segment() -> Segment:
 	return Segment.from_coords(Vector2(300, 200), Vector2(200, 100), Vector2(270, 130))
-
-func _wall(start: Vector2, end_v: Vector2) -> Surface:
-	var via := (start + end_v) / 2.0
-	return RoomBuilder.create_block_surface(start, end_v, via)
 
 # =================================================================
 # Stage 1: Endpoint detection
@@ -154,7 +133,7 @@ func test_hitrecord_interior_fully_blocked() -> void:
 	var seg := _horiz_segment()
 	var ray := Ray.from_coords(Vector2(200, 100), Direction.from_coords(Vector2(200, 100), Vector2(200, 300)))
 	var segments: Array = [seg]
-	var hit := _find_nearest(ray, segments)
+	var hit := H.find_nearest(ray, segments)
 	assert_not_null(hit, "Should find a hit")
 	assert_true(hit.on_segment, "Interior hit should be on segment")
 	assert_true(hit.is_fully_blocked(), "Interior hit should be fully blocked")
@@ -164,7 +143,7 @@ func test_hitrecord_endpoint_partial_blocked() -> void:
 	# Ray going down at x=100, will hit the carrier at the start endpoint
 	var ray := Ray.from_coords(Vector2(100, 100), Direction.from_coords(Vector2(100, 100), Vector2(100, 300)))
 	var segments: Array = [seg]
-	var hit := _find_nearest(ray, segments)
+	var hit := H.find_nearest(ray, segments)
 	assert_not_null(hit, "Should find a hit")
 	assert_true(hit.on_segment, "Endpoint hit is geometrically on segment")
 	assert_false(hit.is_fully_blocked(), "Endpoint hit should NOT be fully blocked")
@@ -174,7 +153,7 @@ func test_hitrecord_off_segment_not_blocked() -> void:
 	# Ray going down at x=500, will hit the carrier off-segment
 	var ray := Ray.from_coords(Vector2(500, 100), Direction.from_coords(Vector2(500, 100), Vector2(500, 300)))
 	var segments: Array = [seg]
-	var hit := _find_nearest(ray, segments)
+	var hit := H.find_nearest(ray, segments)
 	assert_not_null(hit, "Should find a carrier hit")
 	assert_false(hit.on_segment, "Should be off-segment")
 	assert_false(hit.is_fully_blocked(), "Off-segment should not be fully blocked")
@@ -185,7 +164,7 @@ func test_hitrecord_off_segment_not_blocked() -> void:
 
 func test_trace_interior_hit_blocks() -> void:
 	# Ray going down hits a horizontal wall at its interior → should block (terminal)
-	var top_wall := _wall(Vector2(0, 200), Vector2(400, 200))
+	var top_wall := H.wall_between(Vector2(0, 200), Vector2(400, 200))
 	var surfaces: Array = [top_wall]
 	var player := Vector2(200, 100)
 	var cursor := Vector2(200, 400)
@@ -203,8 +182,8 @@ func test_trace_interior_hit_blocks() -> void:
 func test_trace_endpoint_open_continues() -> void:
 	# Wall from (100,200) to (300,200). Ray going down at x=300 (the endpoint).
 	# With side-hitpoints: endpoint only blocks one side → ray should continue past.
-	var wall := _wall(Vector2(100, 200), Vector2(300, 200))
-	var bottom_wall := _wall(Vector2(0, 400), Vector2(400, 400))
+	var wall := H.wall_between(Vector2(100, 200), Vector2(300, 200))
+	var bottom_wall := H.wall_between(Vector2(0, 400), Vector2(400, 400))
 	var surfaces: Array = [wall, bottom_wall]
 	var player := Vector2(300, 100)
 	var cursor := Vector2(300, 500)
@@ -222,8 +201,8 @@ func test_trace_endpoint_open_continues() -> void:
 func test_trace_corner_two_walls_blocks() -> void:
 	# Two walls meeting at (300, 200): horizontal (100,200)→(300,200) and vertical (300,200)→(300,400).
 	# Ray going down-right toward the corner should hit the corner.
-	var h_wall := _wall(Vector2(100, 200), Vector2(300, 200))
-	var v_wall := _wall(Vector2(300, 200), Vector2(300, 400))
+	var h_wall := H.wall_between(Vector2(100, 200), Vector2(300, 200))
+	var v_wall := H.wall_between(Vector2(300, 200), Vector2(300, 400))
 	var surfaces: Array = [h_wall, v_wall]
 	var player := Vector2(200, 100)
 	var cursor := Vector2(400, 300)
@@ -243,7 +222,7 @@ func test_trace_corner_two_walls_blocks() -> void:
 func test_trace_endpoint_does_not_end_midair() -> void:
 	# Open-ended wall: only covers part of the space. Ray through endpoint should
 	# continue to bounds, not end mid-air at the endpoint.
-	var wall := _wall(Vector2(100, 200), Vector2(300, 200))
+	var wall := H.wall_between(Vector2(100, 200), Vector2(300, 200))
 	var surfaces: Array = [wall]
 	var player := Vector2(300, 100)
 	var cursor := Vector2(300, 500)
@@ -269,7 +248,7 @@ func test_reflection_at_interior_still_works() -> void:
 	var left := SideConfig.new(reflection, true)
 	var right := SideConfig.new(null, false)
 	var mirror := Surface.new(seg, left, right, false, false)
-	var bottom := _wall(Vector2(0, 400), Vector2(400, 400))
+	var bottom := H.wall_between(Vector2(0, 400), Vector2(400, 400))
 	var surfaces: Array = [mirror, bottom]
 	var player := Vector2(200, 100)
 	var cursor := Vector2(200, 400)
@@ -328,10 +307,10 @@ func test_trace_ends_violation_1() -> void:
 # =================================================================
 
 func _mirror_and_wall_surfaces() -> Array:
-	var top := _wall(Vector2(560, 240), Vector2(1360, 240))
-	var bottom := _wall(Vector2(1360, 840), Vector2(560, 840))
-	var left := _wall(Vector2(560, 840), Vector2(560, 240))
-	var interior := _wall(Vector2(600, 300), Vector2(600, 780))
+	var top := H.wall_between(Vector2(560, 240), Vector2(1360, 240))
+	var bottom := H.wall_between(Vector2(1360, 840), Vector2(560, 840))
+	var left := H.wall_between(Vector2(560, 840), Vector2(560, 240))
+	var interior := H.wall_between(Vector2(600, 300), Vector2(600, 780))
 	var mirror_seg := Segment.from_coords(Vector2(800, 300), Vector2(800, 780), Vector2(800, 540))
 	var mirror_carrier := mirror_seg.get_carrier()
 	var mirror_refl := ReflectionEffect.new(mirror_carrier)
@@ -347,9 +326,9 @@ func _mirror_and_wall_surfaces() -> Array:
 	return [top, bottom, left, interior, mirror, sb_top, sb_right, sb_bottom, sb_left]
 
 func _three_mirrors_surfaces() -> Array:
-	var top := _wall(Vector2(560, 240), Vector2(1360, 240))
-	var bottom := _wall(Vector2(1360, 840), Vector2(560, 840))
-	var left := _wall(Vector2(560, 840), Vector2(560, 240))
+	var top := H.wall_between(Vector2(560, 240), Vector2(1360, 240))
+	var bottom := H.wall_between(Vector2(1360, 840), Vector2(560, 840))
+	var left := H.wall_between(Vector2(560, 840), Vector2(560, 240))
 	var m1_seg := Segment.from_coords(Vector2(800, 300), Vector2(800, 780), Vector2(800, 540))
 	var m1 := Surface.new(m1_seg, SideConfig.new(ReflectionEffect.new(m1_seg.get_carrier()), true), SideConfig.new(null, false), false, false)
 	var m2_seg := Segment.from_coords(Vector2(1200, 300), Vector2(1200, 780), Vector2(1200, 540))
@@ -403,7 +382,7 @@ func test_physical_trace_player_blocks_with_unsatisfied_plan() -> void:
 
 func test_normal_aim_cursor_still_injected() -> void:
 	# Normal planned trace: aim and cursor should still be injected when cursor is reachable.
-	var wall := _wall(Vector2(0, 400), Vector2(800, 400))
+	var wall := H.wall_between(Vector2(0, 400), Vector2(800, 400))
 	var surfaces: Array = [wall]
 	var player := Vector2(400, 100)
 	var cursor := Vector2(400, 300)
@@ -599,7 +578,7 @@ func test_repro_first_hit_from_origin() -> void:
 		segments.append(s.segment)
 		print("  Surface id=%d: (%s)->(%s) solid=%s" % [s.id, s.segment.start.coords, s.segment.end.coords, s.player_solid])
 
-	var hit := _find_nearest(ray, segments)
+	var hit := H.find_nearest(ray, segments)
 	if hit:
 		print("  First hit: t=%.4f point=%s on_seg=%s ep=%d bl=%s br=%s seg=(%s)->(%s)" % [
 			hit.t, hit.point.coords, hit.on_segment, hit.at_endpoint,

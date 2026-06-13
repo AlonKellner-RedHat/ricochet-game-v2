@@ -1,7 +1,9 @@
 extends GutTest
 
+const H := preload("res://tests/test_helpers.gd")
+
 func before_each() -> void:
-	MobiusTransform.reset_id_counter()
+	H.reset_counters()
 
 # === Phase 1: TrackedTransform ===
 
@@ -279,14 +281,8 @@ func test_normalized_effect_produces_different_tracked() -> void:
 
 # === Phase 7: Tracer with provenance ===
 
-func _make_mirror_surface(x: float, y_start: float = 0.0, y_end: float = 600.0) -> Surface:
-	var mid := (y_start + y_end) / 2.0
-	var seg := Segment.from_coords(Vector2(x, y_start), Vector2(x, y_end), Vector2(x, mid))
-	var refl := ReflectionEffect.new(seg.get_carrier())
-	return Surface.new(seg, SideConfig.new(refl, true), SideConfig.new(refl, true), false, false)
-
 func test_tracer_reflection_terminates_and_aim_correct() -> void:
-	var m := _make_mirror_surface(400)
+	var m := H.mirror(400)
 	var player := Vector2(600, 300)
 	var cursor := Vector2(500, 300)
 	var aim := Direction.from_coords(player, cursor)

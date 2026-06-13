@@ -10,5 +10,8 @@ var _tracked: TrackedTransform
 func get_mobius() -> MobiusTransform:
 	return _mobius
 
+func get_inverse_mobius() -> MobiusTransform:
+	return _mobius
+
 func get_tracked_transform() -> TrackedTransform:
 	return _tracked

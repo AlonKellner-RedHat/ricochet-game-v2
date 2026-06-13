@@ -1,24 +1,15 @@
 extends GutTest
 
+const H := preload("res://tests/test_helpers.gd")
+
 func before_each() -> void:
-	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
-
-func _mirror(x: float) -> Surface:
-	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
-	var carrier := seg.get_carrier()
-	var refl := ReflectionEffect.new(carrier)
-	var config := SideConfig.new(refl, true)
-	return Surface.new(seg, config, config, false, false)
-
-func _wall(x: float) -> Surface:
-	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	H.reset_counters()
 
 # --- Math tests (no scene needed) ---
 
 func test_stage31_arrow_follows_physical_trace_with_plan() -> void:
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -32,7 +23,7 @@ func test_stage31_arrow_follows_physical_trace_with_plan() -> void:
 
 func test_stage31_aligned_plan_matches_physical() -> void:
 	var room := RoomBuilder.create_room_surfaces(Rect2(0, 0, 800, 600))
-	var m := _mirror(400)
+	var m := H.mirror(400)
 	var surfaces: Array = room + [m]
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
@@ -59,8 +50,8 @@ func test_stage31_aligned_plan_matches_physical() -> void:
 			"Step %d end matches" % i)
 
 func test_stage31_determinism_with_plan() -> void:
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)

@@ -246,13 +246,10 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 	if parent and "surfaces" in parent:
 		surfaces = parent.surfaces
 
-	for trace_name in ["physical", "planned"]:
-		var path: Tracer.TracedPath
-		if trace_name == "physical":
-			path = _renderer.get_traced_path()
-		else:
-			path = _renderer.get_planned_path()
-		if path == null or path.steps.size() == 0:
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		if path.steps.size() == 0:
 			continue
 		var last: Tracer.Step = path.steps[path.steps.size() - 1]
 		var end_pos: Vector2 = last.end
@@ -329,14 +326,11 @@ func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) ->
 		var origin := step.ray.origin.coords
 		var bt_start := frame_inv.apply(step.start)
 		var bt_end := frame_inv.apply(step.end)
-		var _at_bounds := func(p: Vector2) -> bool:
-			return (p.x <= bounds.position.x + 2.0 or p.x >= bounds.end.x - 2.0 or
-				p.y <= bounds.position.y + 2.0 or p.y >= bounds.end.y - 2.0)
-		if not _at_bounds.call(step.start):
+		if not _is_at_bounds(step.start, bounds):
 			var cross_s := (bt_start - origin).cross(aim_dir)
 			if absf(cross_s) > 1.0:
 				violations.append("BACK-TRANSFORM-ALIGNMENT: step %d start cross=%.2f (bt=%s)" % [i, cross_s, bt_start])
-		if not _at_bounds.call(step.end):
+		if not _is_at_bounds(step.end, bounds):
 			var cross_e := (bt_end - origin).cross(aim_dir)
 			if absf(cross_e) > 1.0:
 				violations.append("BACK-TRANSFORM-ALIGNMENT: step %d end cross=%.2f (bt=%s)" % [i, cross_e, bt_end])
@@ -392,14 +386,9 @@ func check_HITPOINT_ON_CARRIER(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	for trace_name in ["physical", "planned"]:
-		var path: Tracer.TracedPath
-		if trace_name == "physical":
-			path = _renderer.get_traced_path()
-		else:
-			path = _renderer.get_planned_path()
-		if path == null:
-			continue
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
 		for i in path.steps.size():
 			var step: Tracer.Step = path.steps[i]
 			if step.hit == null or step.hit.segment == null:
@@ -417,14 +406,9 @@ func check_S18_FRAME_DETERMINANT(player_pos: Vector2, cursor_pos: Vector2) -> Ar
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	for trace_name in ["physical", "planned"]:
-		var path: Tracer.TracedPath
-		if trace_name == "physical":
-			path = _renderer.get_traced_path()
-		else:
-			path = _renderer.get_planned_path()
-		if path == null:
-			continue
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
 		for i in path.steps.size():
 			var step: Tracer.Step = path.steps[i]
 			if step.frame == null:
@@ -439,14 +423,9 @@ func check_ON_SEGMENT_CONSISTENCY(player_pos: Vector2, cursor_pos: Vector2) -> A
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	for trace_name in ["physical", "planned"]:
-		var path: Tracer.TracedPath
-		if trace_name == "physical":
-			path = _renderer.get_traced_path()
-		else:
-			path = _renderer.get_planned_path()
-		if path == null:
-			continue
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
 		for i in path.steps.size():
 			var step: Tracer.Step = path.steps[i]
 			if step.hit == null or step.hit.segment == null:
@@ -463,13 +442,10 @@ func check_SHARED_RAY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]
 	# Within each transformative sub-chain, all steps share the same ray instance.
 	# Currently no projective effects exist, so the entire trace is one sub-chain.
 	# When projective effects are added, split at projective-effect hitpoints.
-	for trace_name in ["physical", "planned"]:
-		var path: Tracer.TracedPath
-		if trace_name == "physical":
-			path = _renderer.get_traced_path()
-		else:
-			path = _renderer.get_planned_path()
-		if path == null or path.steps.size() == 0:
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		if path.steps.size() == 0:
 			continue
 		var first_ray: Ray = path.steps[0].ray
 		if first_ray == null:
@@ -493,13 +469,10 @@ func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[Stri
 	# This holds through all transformative effects (reflections, inversions)
 	# because the composed inverse unwinds all transforms.
 	# When projective effects are added, scope to sub-chains.
-	for trace_name in ["physical", "planned"]:
-		var path: Tracer.TracedPath
-		if trace_name == "physical":
-			path = _renderer.get_traced_path()
-		else:
-			path = _renderer.get_planned_path()
-		if path == null or path.steps.size() == 0:
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		if path.steps.size() == 0:
 			continue
 		var first_step: Tracer.Step = path.steps[0]
 		if first_step.ray == null:
@@ -516,15 +489,12 @@ func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[Stri
 				continue
 			var frame_inv := step.frame.invert()
 			var threshold := 5.0 if step.is_arc_step else 1.0
-			var _at_bounds := func(p: Vector2) -> bool:
-				return (p.x <= bounds.position.x + 2.0 or p.x >= bounds.end.x - 2.0 or
-					p.y <= bounds.position.y + 2.0 or p.y >= bounds.end.y - 2.0)
-			if not _at_bounds.call(step.start):
+			if not _is_at_bounds(step.start, bounds):
 				var bt_start := frame_inv.apply(step.start)
 				var cross_s := (bt_start - origin).cross(aim_dir)
 				if absf(cross_s) > threshold:
 					violations.append("RAY-ALIGNMENT: %s step %d start cross=%.2f (bt=%s)" % [trace_name, i, cross_s, bt_start])
-			if not _at_bounds.call(step.end):
+			if not _is_at_bounds(step.end, bounds):
 				var bt_end := frame_inv.apply(step.end)
 				var cross_e := (bt_end - origin).cross(aim_dir)
 				if absf(cross_e) > threshold:
@@ -535,13 +505,10 @@ func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> A
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	for trace_name in ["physical", "planned"]:
-		var path: Tracer.TracedPath
-		if trace_name == "physical":
-			path = _renderer.get_traced_path()
-		else:
-			path = _renderer.get_planned_path()
-		if path == null or path.steps.size() < 2:
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		if path.steps.size() < 2:
 			continue
 		for i in range(1, path.steps.size()):
 			var prev: Tracer.Step = path.steps[i - 1]
@@ -580,6 +547,21 @@ func _point_to_segment_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
 		return p.distance_to(a)
 	var t := clampf((p - a).dot(ab) / len_sq, 0.0, 1.0)
 	return p.distance_to(a + t * ab)
+
+func _get_named_traces() -> Dictionary:
+	var result := {}
+	if _renderer:
+		var physical = _renderer.get_traced_path()
+		if physical != null:
+			result["physical"] = physical
+		var planned = _renderer.get_planned_path()
+		if planned != null:
+			result["planned"] = planned
+	return result
+
+static func _is_at_bounds(p: Vector2, bounds: Rect2) -> bool:
+	return (p.x <= bounds.position.x + 2.0 or p.x >= bounds.end.x - 2.0 or
+		p.y <= bounds.position.y + 2.0 or p.y >= bounds.end.y - 2.0)
 
 func _position_nodes(player_pos: Vector2, cursor_pos: Vector2) -> void:
 	if _player:

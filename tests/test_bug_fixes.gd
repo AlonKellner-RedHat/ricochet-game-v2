@@ -1,20 +1,12 @@
 extends GutTest
 
-func before_each() -> void:
-	Surface.reset_id_counter()
+const H := preload("res://tests/test_helpers.gd")
 
-func _wall(x: float) -> Surface:
-	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+func before_each() -> void:
+	H.reset_counters()
 
 func _hwall(y: float) -> Surface:
 	return RoomBuilder.create_block_surface(Vector2(0, y), Vector2(1200, y), Vector2(600, y))
-
-func _mirror(x: float, y_start: float = 0.0, y_end: float = 600.0) -> Surface:
-	var mid := (y_start + y_end) / 2.0
-	var seg := Segment.from_coords(Vector2(x, y_start), Vector2(x, y_end), Vector2(x, mid))
-	var refl := ReflectionEffect.new(seg.get_carrier())
-	var config := SideConfig.new(refl, true)
-	return Surface.new(seg, config, config, false, false)
 
 func _step(path: Tracer.TracedPath, idx: int) -> Tracer.Step:
 	return path.steps[idx]
@@ -57,7 +49,7 @@ func test_terminal_stops_physical() -> void:
 # --- Cursor image = direction.end ---
 
 func test_cursor_image_is_direction_end() -> void:
-	var w := _wall(600)
+	var w := H.wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -83,8 +75,8 @@ func test_cursor_with_plan_reachable() -> void:
 
 func test_cursor_not_reached_after_nonplan_reflection() -> void:
 	# No plan, mirror between player and cursor → physical reflects → diverged → cursor NOT reached
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(600, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -136,7 +128,7 @@ func test_player_block_stops_loop() -> void:
 	assert_lt(path.steps.size(), 256, "Player block should stop before MAX_HITS")
 
 func test_player_block_wall_stops_first() -> void:
-	var w := _wall(600)
+	var w := H.wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)

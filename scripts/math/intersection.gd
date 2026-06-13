@@ -82,34 +82,29 @@ static func _find_segment_hits(ray: Ray, segment: Segment) -> Array:
 				ep = best_ep
 				available_eps.erase(best_ep)
 
-		var on_seg := is_on_segment(point, segment)
-		var side := _determine_side(ray, point, segment)
-		var bl := false
-		var br := false
-		if on_seg:
-			if ep == 0:
-				bl = true
-				br = true
-			else:
-				var sides := endpoint_blocked_sides(point, segment, ray, ep)
-				bl = sides[0]
-				br = sides[1]
-		results.append(HitRecord.new(t, point, segment, side, on_seg, ep, bl, br))
+		results.append(_build_hit_record(t, point, segment, ray, ep))
 
 	for ep_idx in available_eps:
 		var ep_coords: Vector2 = segment.start.coords if ep_idx == 1 else segment.end.coords
 		var t: float = float(available_eps[ep_idx])
-		var on_seg := is_on_segment(ep_coords, segment)
-		var side := _determine_side(ray, ep_coords, segment)
-		var bl := false
-		var br := false
-		if on_seg:
-			var sides := endpoint_blocked_sides(ep_coords, segment, ray, ep_idx)
-			bl = sides[0]
-			br = sides[1]
-		results.append(HitRecord.new(t, ep_coords, segment, side, on_seg, ep_idx, bl, br))
+		results.append(_build_hit_record(t, ep_coords, segment, ray, ep_idx))
 
 	return results
+
+static func _build_hit_record(t: float, point: Vector2, segment: Segment, ray: Ray, ep: int) -> HitRecord:
+	var on_seg := is_on_segment(point, segment)
+	var side := _determine_side(ray, point, segment)
+	var bl := false
+	var br := false
+	if on_seg:
+		if ep == 0:
+			bl = true
+			br = true
+		else:
+			var sides := endpoint_blocked_sides(point, segment, ray, ep)
+			bl = sides[0]
+			br = sides[1]
+	return HitRecord.new(t, point, segment, side, on_seg, ep, bl, br)
 
 static func projective_sort(hits: Array) -> Array:
 	var sorted := hits.duplicate()

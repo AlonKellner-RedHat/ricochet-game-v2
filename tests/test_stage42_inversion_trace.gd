@@ -1,8 +1,9 @@
 extends GutTest
 
+const H := preload("res://tests/test_helpers.gd")
+
 func before_each() -> void:
-	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
+	H.reset_counters()
 
 func _inversion_surface() -> Surface:
 	var seg := Segment.from_coords(Vector2(200, 100), Vector2(200, 300), Vector2(300, 200))
@@ -11,9 +12,6 @@ func _inversion_surface() -> Surface:
 	var left := SideConfig.new(inv, true)
 	var right := SideConfig.new(null, false)
 	return Surface.new(seg, left, right, false, false)
-
-func _wall(x: float) -> Surface:
-	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 
 # --- Step 1: Purple rendering ---
 
@@ -45,8 +43,8 @@ func _trace_outside_in(plan_entries: Array = []) -> Tracer.TracedPath:
 	# Ray at y=250 (not y=200) to avoid passing through the inversion center,
 	# which would keep the post-inversion path as a straight line instead of an arc.
 	var inv_surf := _inversion_surface()
-	var w_left := _wall(0)
-	var w_right := _wall(600)
+	var w_left := H.wall(0)
+	var w_right := H.wall(600)
 	var w_top := RoomBuilder.create_block_surface(Vector2(0, 0), Vector2(600, 0), Vector2(300, 0))
 	var w_bot := RoomBuilder.create_block_surface(Vector2(0, 400), Vector2(600, 400), Vector2(300, 400))
 	var surfaces: Array = [inv_surf, w_left, w_right, w_top, w_bot]
@@ -70,7 +68,7 @@ func test_stage42_trace_through_inversion() -> void:
 func test_stage42_frame_after_inversion() -> void:
 	# Player approaches from outside the circle (right side), hitting the arc's outer (LEFT) side
 	var inv_surf := _inversion_surface()
-	var w := _wall(0)
+	var w := H.wall(0)
 	var surfaces: Array = [inv_surf, w]
 	var player := Vector2(450, 200)
 	var cursor := Vector2(50, 200)
@@ -95,7 +93,7 @@ func test_stage42_origin_advance_self_inverse() -> void:
 
 func test_stage42_inversion_direction_unchanged() -> void:
 	var inv_surf := _inversion_surface()
-	var w := _wall(600)
+	var w := H.wall(600)
 	var surfaces: Array = [inv_surf, w]
 	var player := Vector2(50, 200)
 	var cursor := Vector2(400, 200)

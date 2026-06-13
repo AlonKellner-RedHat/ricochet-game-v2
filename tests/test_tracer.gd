@@ -1,18 +1,9 @@
 extends GutTest
 
+const H := preload("res://tests/test_helpers.gd")
+
 func before_each() -> void:
-	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
-
-func _wall(x: float) -> Surface:
-	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
-
-func _mirror(x: float) -> Surface:
-	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
-	var carrier := seg.get_carrier()
-	var refl := ReflectionEffect.new(carrier)
-	var config := SideConfig.new(refl, true)
-	return Surface.new(seg, config, config, false, false)
+	H.reset_counters()
 
 func _passthrough(x: float) -> Surface:
 	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
@@ -25,7 +16,7 @@ func _step(path: Tracer.TracedPath, idx: int) -> Tracer.Step:
 # --- Basic tracing ---
 
 func test_ray_hits_wall() -> void:
-	var w := _wall(500)
+	var w := H.wall(500)
 	var ray := Ray.from_coords(Vector2(200, 300), Direction.from_coords(Vector2(200, 300), Vector2(600, 300)))
 	var path := Tracer.trace(ray.origin.coords, ray.direction, [w], GameState.new())
 	assert_gte(path.steps.size(), 1, "Should have at least 1 step")
@@ -38,7 +29,7 @@ func test_ray_escapes_no_surfaces() -> void:
 	assert_gte(path.steps.size(), 1, "Should have escape steps")
 
 func test_no_nan_in_steps() -> void:
-	var w := _wall(500)
+	var w := H.wall(500)
 	var ray := Ray.from_coords(Vector2(200, 300), Direction.from_coords(Vector2(200, 300), Vector2(600, 300)))
 	var path := Tracer.trace(ray.origin.coords, ray.direction, [w], GameState.new())
 	for i in path.steps.size():
@@ -49,7 +40,7 @@ func test_no_nan_in_steps() -> void:
 # --- Cursor virtual hitpoint ---
 
 func test_cursor_injected() -> void:
-	var w := _wall(600)
+	var w := H.wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -60,7 +51,7 @@ func test_cursor_injected() -> void:
 	assert_almost_eq(cursor_step.end.x, cursor.x, 1.0, "Cursor step ends at cursor")
 
 func test_cursor_index_set() -> void:
-	var w := _wall(600)
+	var w := H.wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -69,7 +60,7 @@ func test_cursor_index_set() -> void:
 	assert_eq(path.cursor_index, 1, "cursor_index should be 1 (first post-cursor step)")
 
 func test_cursor_not_reached_wall_blocks() -> void:
-	var w := _wall(250)
+	var w := H.wall(250)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(500, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -80,8 +71,8 @@ func test_cursor_not_reached_wall_blocks() -> void:
 # --- Mirror reflection ---
 
 func test_mirror_changes_frame() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
+	var m := H.mirror(400)
+	var w := H.wall(100)
 	var ray := Ray.from_coords(Vector2(600, 300), Direction.from_coords(Vector2(600, 300), Vector2(200, 300)))
 	var path := Tracer.trace(ray.origin.coords, ray.direction, [m, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	var first_fid: int = _step(path, 0).frame_id
@@ -93,8 +84,8 @@ func test_mirror_changes_frame() -> void:
 	assert_true(found_change, "Mirror should change frame")
 
 func test_multi_bounce() -> void:
-	var m1 := _mirror(300)
-	var m2 := _mirror(600)
+	var m1 := H.mirror(300)
+	var m2 := H.mirror(600)
 	var ray := Ray.from_coords(Vector2(450, 300), Direction.from_coords(Vector2(450, 300), Vector2(200, 300)))
 	var path := Tracer.trace(ray.origin.coords, ray.direction, [m1, m2], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	assert_gte(path.steps.size(), 3, "Should bounce between mirrors multiple times")
@@ -103,7 +94,7 @@ func test_multi_bounce() -> void:
 
 func test_passthrough_excluded() -> void:
 	var pt := _passthrough(400)
-	var w := _wall(600)
+	var w := H.wall(600)
 	var ray := Ray.from_coords(Vector2(200, 300), Direction.from_coords(Vector2(200, 300), Vector2(800, 300)))
 	var path := Tracer.trace(ray.origin.coords, ray.direction, [pt, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	assert_gte(path.steps.size(), 2, "Should pass through and hit wall")
@@ -111,8 +102,8 @@ func test_passthrough_excluded() -> void:
 # --- Shared ray provenance ---
 
 func test_all_steps_share_ray() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
+	var m := H.mirror(400)
+	var w := H.wall(100)
 	var ray := Ray.from_coords(Vector2(600, 300), Direction.from_coords(Vector2(600, 300), Vector2(200, 300)))
 	var path := Tracer.trace(ray.origin.coords, ray.direction, [m, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	for i in path.steps.size():
@@ -121,8 +112,8 @@ func test_all_steps_share_ray() -> void:
 # --- Determinism ---
 
 func test_deterministic() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
+	var m := H.mirror(400)
+	var w := H.wall(100)
 	var ray := Ray.from_coords(Vector2(600, 300), Direction.from_coords(Vector2(600, 300), Vector2(200, 300)))
 	var path1 := Tracer.trace(ray.origin.coords, ray.direction, [m, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
 	var path2 := Tracer.trace(ray.origin.coords, ray.direction, [m, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
@@ -144,7 +135,7 @@ func test_target_surface_tracked() -> void:
 # --- trace_ray convenience ---
 
 func test_trace_ray_convenience() -> void:
-	var w := _wall(500)
+	var w := H.wall(500)
 	var ray := Ray.from_coords(Vector2(200, 300), Direction.from_coords(Vector2(200, 300), Vector2(600, 300)))
 	var path := Tracer.trace_ray(ray, [w], GameState.new())
 	assert_gte(path.steps.size(), 1, "trace_ray should work")

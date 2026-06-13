@@ -32,6 +32,29 @@ class TracedPath extends RefCounted:
 	var targets_hit: Dictionary = {}
 	var cursor_index: int = -1
 
+class TraceState:
+	var path: TracedPath
+	var state_copy: GameState
+	var transform_stack: Array = []
+	var frame: MobiusTransform
+	var shared_ray: Ray
+	var ray: Ray
+	var last_hit_segment: Segment
+	var last_hit_orig_surf: Surface
+	var current_mode: int
+	var plan_index: int = 0
+	var plan_matched: bool = true
+	var cursor_injected: bool = false
+	var frame_dirty: bool = true
+	var norm_surfaces: Array = []
+	var norm_to_surface: Dictionary = {}
+	var aim_point_pt: Point
+	var aim_in_frame: Vector2
+	var step_left_blocked: bool = false
+	var step_right_blocked: bool = false
+	var hit_count: int = 0
+	var cursor_hp: Intersection.HitRecord
+
 enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
 
 const MAX_HITS := 256
@@ -41,95 +64,37 @@ static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState, 
 	return trace(initial_ray.origin.coords, initial_ray.direction, surfaces, game_state, bounds, initial_ray)
 
 static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_state: GameState, bounds: Rect2 = DEFAULT_BOUNDS, shared_ray: Ray = null, _target_dist: float = -1.0, mode: int = TraceMode.PHYSICAL, post_cursor_mode: int = TraceMode.PHYSICAL, plan_entries: Array = [], cache: TransformCache = null, cursor_pos: Vector2 = Vector2(INF, INF)) -> TracedPath:
-	var path := TracedPath.new()
+	var s := TraceState.new()
+	s.path = TracedPath.new()
 	if direction.is_zero_length():
-		return path
+		return s.path
 	if cache == null:
 		cache = TransformCache.new()
 
-	var state_copy := game_state.copy()
-	var transform_stack: Array = []
-	var frame := MobiusTransform.identity()
+	s.state_copy = game_state.copy()
+	s.frame = MobiusTransform.identity()
 	if shared_ray == null:
 		shared_ray = Ray.from_coords(origin, direction)
-	var ray := Ray.from_coords(origin, direction)
-	var last_hit_segment: Segment = null
-	var last_hit_orig_surf: Surface = null
-	var current_mode: int = mode
-	var plan_index := 0
-	var plan_matched := true
-	var cursor_injected := false
-	var frame_dirty := true
-	var norm_surfaces: Array = []
-	var norm_to_surface: Dictionary = {}
-	var aim_point_pt: Point
+	s.shared_ray = shared_ray
+	s.ray = Ray.from_coords(origin, direction)
+	s.current_mode = mode
 	if cursor_pos.x != INF:
-		aim_point_pt = Point.at(cursor_pos)
+		s.aim_point_pt = Point.at(cursor_pos)
 	else:
-		aim_point_pt = Point.at(direction.end.coords)
-	var aim_in_frame: Vector2 = aim_point_pt.coords
-	var step_left_blocked := false
-	var step_right_blocked := false
-	var hit_count := 0
+		s.aim_point_pt = Point.at(direction.end.coords)
+	s.aim_in_frame = s.aim_point_pt.coords
 
-	while hit_count < MAX_HITS:
-		# --- Frame computation ---
-		if frame_dirty:
-			frame = MobiusTransform.identity()
-			for t in transform_stack:
-				frame = cache.compose_cached(frame, t.mobius)
-			var cached_norm = cache.get_normalized(frame.id)
-			if cached_norm != null:
-				norm_surfaces = cached_norm.surfaces
-				norm_to_surface = cached_norm.mapping
-			else:
-				norm_surfaces = _build_normalized(surfaces, frame, norm_to_surface, cache)
-				cache.set_normalized(frame.id, norm_surfaces, norm_to_surface.duplicate())
-			frame_dirty = false
-			if transform_stack.is_empty():
-				aim_in_frame = aim_point_pt.coords
-			else:
-				var frame_inv := cache.invert_cached(frame)
-				aim_in_frame = frame_inv.apply(aim_point_pt.coords)
-			if last_hit_orig_surf != null:
-				last_hit_segment = null
-				for ns in norm_surfaces:
-					var ns_surf: Surface = ns
-					if norm_to_surface.get(ns_surf.segment) == last_hit_orig_surf:
-						last_hit_segment = ns_surf.segment
-						break
-				last_hit_orig_surf = null
+	while s.hit_count < MAX_HITS:
+		if s.frame_dirty:
+			_recompute_frame(s, surfaces, cache)
 
-		# --- Build norm segments ---
-		var norm_segments: Array = []
-		for ns in norm_surfaces:
-			norm_segments.append(ns.segment)
-
-		# --- Build stage hitpoints ---
-		var carrier_hits := Intersection.find_all_hits(ray, norm_segments, last_hit_segment)
-		var origin_hp := Intersection.HitRecord.new(0.0, ray.origin.coords, null, Side.Value.LEFT, false)
-
-		# No carriers and no cursor → escape/return and done
-		var cursor_reachable := not cursor_injected and plan_index >= plan_entries.size() and plan_matched
-		if carrier_hits.size() == 0 and not cursor_reachable:
-			var vis_origin := frame.apply(ray.origin.coords)
-			var vis_dir := (frame.apply(ray.origin.coords + ray.direction.to_vector().normalized()) - vis_origin).normalized()
-			_add_escape_steps(path, vis_origin, vis_dir, frame, shared_ray, bounds)
+		var hitpoints = _assemble_hitpoints(s, plan_entries, bounds)
+		if hitpoints.is_empty():
 			break
 
-		# Assemble and sort hitpoint list
-		var hitpoints: Array = carrier_hits.duplicate()
-		hitpoints.append(origin_hp)
-		var cursor_hp: Intersection.HitRecord = null
-		if cursor_reachable:
-			var cursor_t := Intersection.project_point_on_ray(ray, aim_in_frame)
-			cursor_hp = Intersection.HitRecord.new(cursor_t, aim_in_frame, null, Side.Value.LEFT, false)
-			hitpoints.append(cursor_hp)
-		hitpoints = Intersection.projective_sort(hitpoints)
-
 		# --- Walk stage hitpoints ---
-		var _arc: bool = frame.maps_lines_to_arcs()
-		var step_origin_pos := ray.origin.coords
+		var _arc: bool = s.frame.maps_lines_to_arcs()
+		var step_origin_pos := s.ray.origin.coords
 		var walk_t := 0.0
 		var trace_done := false
 		var stage_ended := false
@@ -137,17 +102,17 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		for hp_idx in hitpoints.size():
 			var hp: Intersection.HitRecord = hitpoints[hp_idx]
-			hit_count += 1
-			if hit_count > MAX_HITS:
+			s.hit_count += 1
+			if s.hit_count > MAX_HITS:
 				trace_done = true
 				break
 
-			var vis_start := frame.apply(step_origin_pos)
-			var vis_end := frame.apply(hp.point.coords)
-			var vis_via := frame.apply((step_origin_pos + hp.point.coords) / 2.0)
+			var vis_start := s.frame.apply(step_origin_pos)
+			var vis_end := s.frame.apply(hp.point.coords)
+			var vis_via := s.frame.apply((step_origin_pos + hp.point.coords) / 2.0)
 			var is_wrap := hp.t < walk_t
 			var is_null_seg := hp.segment == null
-			var is_cursor := hp == cursor_hp
+			var is_cursor := hp == s.cursor_hp
 			var is_origin := is_null_seg and not is_cursor
 			var step_hit: Intersection.HitRecord = null if is_null_seg else hp
 
@@ -155,14 +120,14 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if vis_start == vis_end:
 				if is_origin:
 					if hp_idx == 0:
-						var vis_dir2 := (frame.apply(step_origin_pos + ray.direction.to_vector().normalized()) - vis_start).normalized()
-						_add_escape_steps(path, vis_start, vis_dir2, frame, shared_ray, bounds)
+						var vis_dir2 := (s.frame.apply(step_origin_pos + s.ray.direction.to_vector().normalized()) - vis_start).normalized()
+						_add_escape_steps(s.path, vis_start, vis_dir2, s.frame, s.shared_ray, bounds)
 					trace_done = true
 					break
 				if is_cursor:
-					path.cursor_index = path.steps.size()
-					cursor_injected = true
-					current_mode = post_cursor_mode
+					s.path.cursor_index = s.path.steps.size()
+					s.cursor_injected = true
+					s.current_mode = post_cursor_mode
 				walk_t = hp.t
 				step_origin_pos = hp.point.coords
 				continue
@@ -174,109 +139,60 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if is_origin:
 				if has_wrapped:
 					if is_wrap:
-						_add_wrap_steps(path, vis_start, vis_end, frame, shared_ray, bounds)
+						_add_wrap_steps(s.path, vis_start, vis_end, s.frame, s.shared_ray, bounds)
 					else:
-						path.steps.append(Step.new(vis_start, vis_end, frame.id, null, shared_ray, frame, vis_via, _arc))
+						s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, null, s.shared_ray, s.frame, vis_via, _arc))
 				else:
-					var vis_dir2 := (frame.apply(step_origin_pos + ray.direction.to_vector().normalized()) - vis_start).normalized()
-					_add_escape_steps(path, vis_start, vis_dir2, frame, shared_ray, bounds)
+					var vis_dir2 := (s.frame.apply(step_origin_pos + s.ray.direction.to_vector().normalized()) - vis_start).normalized()
+					_add_escape_steps(s.path, vis_start, vis_dir2, s.frame, s.shared_ray, bounds)
 				trace_done = true
 				break
 
 			# --- Generate visual step ---
 			if is_wrap:
-				_add_wrap_steps(path, vis_start, vis_end, frame, shared_ray, bounds, step_hit)
+				_add_wrap_steps(s.path, vis_start, vis_end, s.frame, s.shared_ray, bounds, step_hit)
 			else:
-				path.steps.append(Step.new(vis_start, vis_end, frame.id, step_hit, shared_ray, frame, vis_via, _arc))
+				s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, step_hit, s.shared_ray, s.frame, vis_via, _arc))
 
 			# --- Cursor check ---
 			if is_cursor:
-				path.cursor_index = path.steps.size()
-				cursor_injected = true
-				current_mode = post_cursor_mode
-				ray = Ray.from_coords(hp.point.coords, ray.direction)
-				last_hit_segment = null
+				s.path.cursor_index = s.path.steps.size()
+				s.cursor_injected = true
+				s.current_mode = post_cursor_mode
+				s.ray = Ray.from_coords(hp.point.coords, s.ray.direction)
+				s.last_hit_segment = null
 				stage_ended = true
 				break
 
 			# --- Target tracking ---
-			var orig_surf: Surface = norm_to_surface.get(hp.segment)
+			var orig_surf: Surface = s.norm_to_surface.get(hp.segment)
 			if orig_surf and orig_surf.is_target and hp.on_segment:
-				path.targets_hit[orig_surf.id] = true
+				s.path.targets_hit[orig_surf.id] = true
 
 			# --- Blockage ---
-			step_left_blocked = step_left_blocked or hp.blocked_left
-			step_right_blocked = step_right_blocked or hp.blocked_right
+			s.step_left_blocked = s.step_left_blocked or hp.blocked_left
+			s.step_right_blocked = s.step_right_blocked or hp.blocked_right
 
-			if hp.at_endpoint > 0 and not (step_left_blocked and step_right_blocked):
-				for ns in norm_surfaces:
+			if hp.at_endpoint > 0 and not (s.step_left_blocked and s.step_right_blocked):
+				for ns in s.norm_surfaces:
 					var ns_surf: Surface = ns
 					if ns_surf.segment == hp.segment:
 						continue
 					var ep := Intersection.at_which_endpoint(hp.point.coords, ns_surf.segment)
 					if ep > 0:
-						var sides := Intersection.endpoint_blocked_sides(hp.point.coords, ns_surf.segment, ray, ep)
-						step_left_blocked = step_left_blocked or sides[0]
-						step_right_blocked = step_right_blocked or sides[1]
+						var sides := Intersection.endpoint_blocked_sides(hp.point.coords, ns_surf.segment, s.ray, ep)
+						s.step_left_blocked = s.step_left_blocked or sides[0]
+						s.step_right_blocked = s.step_right_blocked or sides[1]
 
-			var fully_blocked := step_left_blocked and step_right_blocked
+			var fully_blocked := s.step_left_blocked and s.step_right_blocked
 
-			# --- Effect application ---
-			var norm_surf: Surface = null
-			for ns in norm_surfaces:
-				if ns.segment == hp.segment:
-					norm_surf = ns
-					break
-
-			var apply_effect := false
-			var effect_config: SideConfig = null
-			var lookup_side: Side.Value = hp.side
-			if frame.conjugating:
-				lookup_side = Side.Value.RIGHT if hp.side == Side.Value.LEFT else Side.Value.LEFT
-
-			if current_mode == TraceMode.PHYSICAL:
-				if norm_surf and fully_blocked:
-					effect_config = norm_surf.active_side_config(lookup_side, state_copy)
-					if effect_config != null and effect_config.effect != null:
-						match effect_config.effect.kind():
-							Effect.Kind.TERMINAL:
-								trace_done = true
-								break
-							Effect.Kind.TRANSFORMATIVE:
-								apply_effect = true
-								if plan_index < plan_entries.size():
-									if orig_surf.id == plan_entries[plan_index].surface_id:
-										plan_index += 1
-									else:
-										plan_matched = false
-								else:
-									plan_matched = false
-			elif current_mode == TraceMode.PLANNED:
-				if orig_surf and plan_index < plan_entries.size():
-					var entry: PlanManager.PlanEntry = plan_entries[plan_index]
-					if orig_surf.id == entry.surface_id:
-						effect_config = norm_surf.active_side_config(entry.side, state_copy) if norm_surf else null
-						if effect_config != null and effect_config.effect != null and effect_config.effect.kind() == Effect.Kind.TRANSFORMATIVE:
-							apply_effect = true
-						plan_index += 1
-
-			if fully_blocked:
-				step_left_blocked = false
-				step_right_blocked = false
-
-			if apply_effect:
-				var tracked: TrackedTransform = effect_config.effect.get_tracked_transform()
-				transform_stack.append(tracked)
-				var new_origin := tracked.inverse.mobius.apply(hp.point.coords)
-				ray = Ray.from_coords(new_origin, ray.direction)
-				last_hit_orig_surf = orig_surf
-				last_hit_segment = null
-				frame_dirty = true
+			var result = _apply_effect(s, hp, fully_blocked, orig_surf, plan_entries)
+			if result == 2:
+				trace_done = true
+				break
+			if result == 1:
 				stage_ended = true
 				break
-
-			last_hit_segment = hp.segment
-			last_hit_orig_surf = null
 			walk_t = hp.t
 			step_origin_pos = hp.point.coords
 
@@ -285,7 +201,113 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if not stage_ended:
 			break
 
-	return path
+	return s.path
+
+static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_blocked: bool, orig_surf: Surface, plan_entries: Array) -> int:
+	var norm_surf: Surface = null
+	for ns in s.norm_surfaces:
+		if ns.segment == hp.segment:
+			norm_surf = ns
+			break
+
+	var do_apply := false
+	var effect_config: SideConfig = null
+	var lookup_side: Side.Value = hp.side
+	if s.frame.conjugating:
+		lookup_side = Side.Value.RIGHT if hp.side == Side.Value.LEFT else Side.Value.LEFT
+
+	if s.current_mode == TraceMode.PHYSICAL:
+		if norm_surf and fully_blocked:
+			effect_config = norm_surf.active_side_config(lookup_side, s.state_copy)
+			if effect_config != null and effect_config.effect != null:
+				match effect_config.effect.kind():
+					Effect.Kind.TERMINAL:
+						return 2
+					Effect.Kind.TRANSFORMATIVE:
+						do_apply = true
+						if s.plan_index < plan_entries.size():
+							if orig_surf.id == plan_entries[s.plan_index].surface_id:
+								s.plan_index += 1
+							else:
+								s.plan_matched = false
+						else:
+							s.plan_matched = false
+	elif s.current_mode == TraceMode.PLANNED:
+		if orig_surf and s.plan_index < plan_entries.size():
+			var entry: PlanManager.PlanEntry = plan_entries[s.plan_index]
+			if orig_surf.id == entry.surface_id:
+				effect_config = norm_surf.active_side_config(entry.side, s.state_copy) if norm_surf else null
+				if effect_config != null and effect_config.effect != null and effect_config.effect.kind() == Effect.Kind.TRANSFORMATIVE:
+					do_apply = true
+				s.plan_index += 1
+
+	if fully_blocked:
+		s.step_left_blocked = false
+		s.step_right_blocked = false
+
+	if do_apply:
+		var tracked: TrackedTransform = effect_config.effect.get_tracked_transform()
+		s.transform_stack.append(tracked)
+		var new_origin := tracked.inverse.mobius.apply(hp.point.coords)
+		s.ray = Ray.from_coords(new_origin, s.ray.direction)
+		s.last_hit_orig_surf = orig_surf
+		s.last_hit_segment = null
+		s.frame_dirty = true
+		return 1
+
+	s.last_hit_segment = hp.segment
+	s.last_hit_orig_surf = null
+	return 0
+
+static func _assemble_hitpoints(s: TraceState, plan_entries: Array, bounds: Rect2) -> Array:
+	var norm_segments: Array = []
+	for ns in s.norm_surfaces:
+		norm_segments.append(ns.segment)
+
+	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, s.last_hit_segment)
+	var origin_hp := Intersection.HitRecord.new(0.0, s.ray.origin.coords, null, Side.Value.LEFT, false)
+
+	var cursor_reachable := not s.cursor_injected and s.plan_index >= plan_entries.size() and s.plan_matched
+	if carrier_hits.size() == 0 and not cursor_reachable:
+		var vis_origin := s.frame.apply(s.ray.origin.coords)
+		var vis_dir := (s.frame.apply(s.ray.origin.coords + s.ray.direction.to_vector().normalized()) - vis_origin).normalized()
+		_add_escape_steps(s.path, vis_origin, vis_dir, s.frame, s.shared_ray, bounds)
+		return []
+
+	var hitpoints: Array = carrier_hits.duplicate()
+	hitpoints.append(origin_hp)
+	s.cursor_hp = null
+	if cursor_reachable:
+		var cursor_t := Intersection.project_point_on_ray(s.ray, s.aim_in_frame)
+		s.cursor_hp = Intersection.HitRecord.new(cursor_t, s.aim_in_frame, null, Side.Value.LEFT, false)
+		hitpoints.append(s.cursor_hp)
+	return Intersection.projective_sort(hitpoints)
+
+static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCache) -> void:
+	s.frame = MobiusTransform.identity()
+	for t in s.transform_stack:
+		s.frame = cache.compose_cached(s.frame, t.mobius)
+	var cached_norm = cache.get_normalized(s.frame.id)
+	if cached_norm != null:
+		s.norm_surfaces = cached_norm.surfaces
+		s.norm_to_surface = cached_norm.mapping
+	else:
+		s.norm_surfaces = _build_normalized(surfaces, s.frame, s.norm_to_surface, cache)
+		cache.set_normalized(s.frame.id, s.norm_surfaces, s.norm_to_surface.duplicate())
+	s.frame_dirty = false
+	if s.transform_stack.is_empty():
+		s.aim_in_frame = s.aim_point_pt.coords
+	else:
+		var frame_inv := cache.invert_cached(s.frame)
+		s.aim_in_frame = frame_inv.apply(s.aim_point_pt.coords)
+	if s.last_hit_orig_surf != null:
+		s.last_hit_segment = null
+		for ns in s.norm_surfaces:
+			var ns_surf: Surface = ns
+			if s.norm_to_surface.get(ns_surf.segment) == s.last_hit_orig_surf:
+				s.last_hit_segment = ns_surf.segment
+				break
+		s.last_hit_orig_surf = null
 
 static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, cache: TransformCache = null) -> Array:
 	out_mapping.clear()

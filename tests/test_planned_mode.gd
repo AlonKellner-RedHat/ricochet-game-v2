@@ -1,18 +1,9 @@
 extends GutTest
 
+const H := preload("res://tests/test_helpers.gd")
+
 func before_each() -> void:
-	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
-
-func _wall(x: float) -> Surface:
-	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
-
-func _mirror(x: float) -> Surface:
-	var seg := Segment.from_coords(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
-	var carrier := seg.get_carrier()
-	var refl := ReflectionEffect.new(carrier)
-	var config := SideConfig.new(refl, true)
-	return Surface.new(seg, config, config, false, false)
+	H.reset_counters()
 
 func _step(path: Tracer.TracedPath, idx: int) -> Tracer.Step:
 	return path.steps[idx]
@@ -20,8 +11,8 @@ func _step(path: Tracer.TracedPath, idx: int) -> Tracer.Step:
 # --- PLANNED mode with empty plan ---
 
 func test_planned_empty_plan_no_effects() -> void:
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -35,8 +26,8 @@ func test_planned_empty_plan_no_effects() -> void:
 			"Pre-cursor step %d should have no effect (empty plan)" % i)
 
 func test_planned_empty_plan_physical_after_cursor() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
+	var m := H.mirror(400)
+	var w := H.wall(100)
 	var player := Vector2(600, 300)
 	var cursor := Vector2(500, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -55,8 +46,8 @@ func test_planned_empty_plan_physical_after_cursor() -> void:
 # --- PLANNED mode with plan entries ---
 
 func test_planned_mirror_in_plan() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
+	var m := H.mirror(400)
+	var w := H.wall(100)
 	var player := Vector2(600, 300)
 	var cursor := Vector2(200, 300)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
@@ -74,8 +65,8 @@ func test_planned_mirror_in_plan() -> void:
 	assert_true(found_frame_change, "Mirror in plan should cause frame change")
 
 func test_planned_mirror_not_in_plan_passthrough() -> void:
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(600, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -91,7 +82,7 @@ func test_planned_mirror_not_in_plan_passthrough() -> void:
 # --- Both modes same hitpoints pre-divergence ---
 
 func test_hitpoint_alignment_no_effects() -> void:
-	var w := _wall(600)
+	var w := H.wall(600)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
@@ -110,8 +101,8 @@ func test_hitpoint_alignment_no_effects() -> void:
 # --- Plan entries consumed in order ---
 
 func test_plan_entries_order() -> void:
-	var m1 := _mirror(300)
-	var m2 := _mirror(600)
+	var m1 := H.mirror(300)
+	var m2 := H.mirror(600)
 	var plan: Array = [
 		PlanManager.PlanEntry.new(m1.id, Side.Value.RIGHT),
 		PlanManager.PlanEntry.new(m2.id, Side.Value.LEFT),
@@ -132,7 +123,7 @@ func test_plan_entries_order() -> void:
 # --- Terminal stops physical not planned ---
 
 func test_terminal_stops_physical_not_planned() -> void:
-	var w := _wall(400)
+	var w := H.wall(400)
 	var player := Vector2(200, 300)
 	var cursor := Vector2(600, 300)
 	var aim := Direction.from_coords(player, cursor)

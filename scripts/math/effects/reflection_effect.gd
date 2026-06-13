@@ -18,9 +18,6 @@ func _init(carrier: GeneralizedCircle) -> void:
 	_mobius = MobiusTransform.new(alpha, beta, gamma, delta, true)
 	_tracked = TrackedTransform.from_self_inverse(_mobius)
 
-func get_inverse_mobius() -> MobiusTransform:
-	return _mobius
-
 func normalized(carrier: GeneralizedCircle) -> Effect:
 	return ReflectionEffect.new(carrier)
 

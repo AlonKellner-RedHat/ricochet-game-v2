@@ -1,19 +1,9 @@
 extends GutTest
 
+const H := preload("res://tests/test_helpers.gd")
+
 func before_each() -> void:
-	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
-
-func _mirror(x: float, y_start: float = 0.0, y_end: float = 600.0) -> Surface:
-	var mid_y := (y_start + y_end) / 2.0
-	var seg := Segment.from_coords(Vector2(x, y_start), Vector2(x, y_end), Vector2(x, mid_y))
-	var carrier := seg.get_carrier()
-	var refl := ReflectionEffect.new(carrier)
-	var config := SideConfig.new(refl, true)
-	return Surface.new(seg, config, config, false, false)
-
-func _wall(x: float) -> Surface:
-	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
+	H.reset_counters()
 
 func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> Array:
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
@@ -33,8 +23,8 @@ func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entri
 # --- Empty plan, mirror AFTER cursor → all green ---
 
 func test_empty_plan_mirror_after_cursor() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
+	var m := H.mirror(400)
+	var w := H.wall(100)
 	var merged := _build_merged(Vector2(600, 300), Vector2(500, 300), [m, w])
 	for i in merged.size():
 		var ms: Tracer.Step = merged[i]
@@ -45,8 +35,8 @@ func test_empty_plan_mirror_after_cursor() -> void:
 # --- Empty plan, mirror BEFORE cursor → divergence ---
 
 func test_empty_plan_mirror_before_cursor() -> void:
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	var merged := _build_merged(Vector2(200, 300), Vector2(600, 300), [m, w])
 	var has_diverged := false
 	for i in merged.size():
@@ -58,8 +48,8 @@ func test_empty_plan_mirror_before_cursor() -> void:
 # --- Plan matches physics → all green ---
 
 func test_plan_matches_physics_first_step_aligned() -> void:
-	var m := _mirror(400)
-	var w := _wall(100)
+	var m := H.mirror(400)
+	var w := H.wall(100)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var merged := _build_merged(Vector2(600, 300), Vector2(200, 300), [m, w], plan)
 	var first: Tracer.Step = merged[0]
@@ -70,8 +60,8 @@ func test_plan_matches_physics_first_step_aligned() -> void:
 # --- Plan misses physics → divergence ---
 
 func test_plan_misses_physics() -> void:
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	# Mirror between player and cursor, no plan → physical reflects, planned doesn't
 	var merged := _build_merged(Vector2(200, 300), Vector2(600, 300), [m, w])
 	var has_div_physical := false
@@ -88,7 +78,7 @@ func test_plan_misses_physics() -> void:
 # --- Wall blocks physical, planned continues → divergence at wall ---
 
 func test_wall_blocks_physical_planned_continues() -> void:
-	var w := _wall(400)
+	var w := H.wall(400)
 	var merged := _build_merged(Vector2(300, 300), Vector2(500, 300), [w])
 	var has_aligned := false
 	var has_div_planned := false
@@ -106,9 +96,9 @@ func test_wall_blocks_physical_planned_continues() -> void:
 func test_physical_diverges_before_cursor() -> void:
 	# Mirror between player and cursor. Physical reflects away. Planned passes through.
 	# Physical may never reach cursor.
-	var m := _mirror(400)
-	var w_right := _wall(700)
-	var w_left := _wall(100)
+	var m := H.mirror(400)
+	var w_right := H.wall(700)
+	var w_left := H.wall(100)
 	var merged := _build_merged(Vector2(300, 300), Vector2(600, 300), [m, w_right, w_left])
 	# Should have ALIGNED up to mirror, then DIVERGED
 	var first: Tracer.Step = merged[0]
@@ -153,8 +143,8 @@ func test_user_bug_two_mirrors_empty_plan() -> void:
 # --- Green from player ---
 
 func test_first_step_green() -> void:
-	var m := _mirror(400)
-	var w := _wall(700)
+	var m := H.mirror(400)
+	var w := H.wall(700)
 	var merged := _build_merged(Vector2(200, 300), Vector2(600, 300), [m, w])
 	assert_gt(merged.size(), 0, "Should have steps")
 	var first: Tracer.Step = merged[0]
