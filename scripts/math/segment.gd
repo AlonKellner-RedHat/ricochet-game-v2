@@ -6,6 +6,7 @@ var end: Point
 var via: Point
 
 var _carrier: GeneralizedCircle = null
+var _provenance_carrier: GeneralizedCircle = null
 
 func _init(p_start: Point, p_end: Point, p_via: Point) -> void:
 	start = p_start
@@ -16,12 +17,18 @@ static func from_coords(s: Vector2, e: Vector2, v: Vector2) -> Segment:
 	return Segment.new(Point.at(s), Point.at(e), Point.at(v))
 
 func transformed(t: TrackedTransform) -> Segment:
-	var new_via: Point
-	if is_inf(via.coords.x) or is_inf(via.coords.y):
-		new_via = via
-	else:
-		new_via = via.transformed(t)
-	return Segment.new(start.transformed(t), end.transformed(t), new_via)
+	if t.carrier != null and t.inverse == t and _carrier != null and t.carrier == _carrier:
+		return self
+	var new_s := start.transformed(t)
+	var new_e := end.transformed(t)
+	var new_v := via.transformed(t)
+	var seg := Segment.new(new_s, new_e, new_v)
+	var source_carrier := _carrier if _carrier != null else _provenance_carrier
+	if source_carrier != null and new_s.transforms.is_empty() and new_e.transforms.is_empty() and new_v.transforms.is_empty():
+		seg._carrier = source_carrier
+	elif source_carrier != null:
+		seg._provenance_carrier = source_carrier
+	return seg
 
 func get_carrier() -> GeneralizedCircle:
 	if _carrier == null:
