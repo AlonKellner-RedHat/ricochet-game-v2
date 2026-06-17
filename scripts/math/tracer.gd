@@ -39,8 +39,6 @@ class TraceState:
 	var frame: MobiusTransform
 	var shared_ray: Ray
 	var ray: Ray
-	var last_hit_segment: Segment
-	var last_hit_orig_surf: Surface
 	var current_mode: int
 	var plan_index: int = 0
 	var plan_matched: bool = true
@@ -54,6 +52,7 @@ class TraceState:
 	var step_right_blocked: bool = false
 	var hit_count: int = 0
 	var cursor_hp: Intersection.HitRecord
+	var origin_on_surface: Surface = null
 
 enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
 
@@ -160,7 +159,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				s.cursor_injected = true
 				s.current_mode = post_cursor_mode
 				s.ray = Ray.from_coords(hp.point.coords, s.ray.direction)
-				s.last_hit_segment = null
+				s.origin_on_surface = null
 				stage_ended = true
 				break
 
@@ -250,13 +249,10 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 		s.transform_stack.append(tracked)
 		var new_origin := tracked.inverse.mobius.apply(hp.point.coords)
 		s.ray = Ray.from_coords(new_origin, s.ray.direction)
-		s.last_hit_orig_surf = orig_surf
-		s.last_hit_segment = null
+		s.origin_on_surface = orig_surf
 		s.frame_dirty = true
 		return 1
 
-	s.last_hit_segment = hp.segment
-	s.last_hit_orig_surf = null
 	return 0
 
 static func _assemble_hitpoints(s: TraceState, plan_entries: Array, bounds: Rect2) -> Array:
@@ -264,7 +260,20 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array, bounds: Rect
 	for ns in s.norm_surfaces:
 		norm_segments.append(ns.segment)
 
-	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, s.last_hit_segment)
+	var origin_on_seg: Segment = null
+	var origin_carrier: GeneralizedCircle = null
+	if s.origin_on_surface != null:
+		for ns in s.norm_surfaces:
+			if s.norm_to_surface.get(ns.segment) == s.origin_on_surface:
+				origin_on_seg = ns.segment
+				break
+		origin_carrier = s.origin_on_surface.segment.get_carrier()
+		s.origin_on_surface = null
+
+	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, origin_on_seg, origin_carrier)
+	if origin_on_seg != null:
+		carrier_hits = carrier_hits.filter(func(h: Intersection.HitRecord) -> bool:
+			return h.segment != origin_on_seg)
 	var origin_hp := Intersection.HitRecord.new(0.0, s.ray.origin.coords, null, Side.Value.LEFT, false)
 
 	var cursor_reachable := not s.cursor_injected and s.plan_index >= plan_entries.size() and s.plan_matched
@@ -300,14 +309,6 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 	else:
 		var frame_inv := cache.invert_cached(s.frame)
 		s.aim_in_frame = frame_inv.apply(s.aim_point_pt.coords)
-	if s.last_hit_orig_surf != null:
-		s.last_hit_segment = null
-		for ns in s.norm_surfaces:
-			var ns_surf: Surface = ns
-			if s.norm_to_surface.get(ns_surf.segment) == s.last_hit_orig_surf:
-				s.last_hit_segment = ns_surf.segment
-				break
-		s.last_hit_orig_surf = null
 
 static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, cache: TransformCache = null) -> Array:
 	out_mapping.clear()

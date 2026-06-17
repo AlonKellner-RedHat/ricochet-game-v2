@@ -24,12 +24,13 @@ class HitRecord extends RefCounted:
 	func is_fully_blocked() -> bool:
 		return blocked_left and blocked_right
 
-static func find_all_hits(ray: Ray, segments: Array, skip_segment: Segment = null) -> Array:
+static func find_all_hits(ray: Ray, segments: Array, origin_on_seg: Segment = null, origin_carrier: GeneralizedCircle = null) -> Array:
 	var results: Array = []
 	for seg in segments:
-		if skip_segment != null and seg == skip_segment:
-			continue
-		results.append_array(_find_segment_hits(ray, seg))
+		var carrier_override: GeneralizedCircle = null
+		if seg == origin_on_seg and origin_carrier != null:
+			carrier_override = origin_carrier
+		results.append_array(_find_segment_hits(ray, seg, seg == origin_on_seg, carrier_override))
 	return results
 
 static func _detect_endpoints_on_ray(ray: Ray, segment: Segment) -> Dictionary:
@@ -52,13 +53,26 @@ static func _detect_endpoints_on_ray(ray: Ray, segment: Segment) -> Dictionary:
 			result[ep_idx] = project_point_on_ray(ray, ep_coords)
 	return result
 
-static func _find_segment_hits(ray: Ray, segment: Segment) -> Array:
+static func _find_segment_hits(ray: Ray, segment: Segment, origin_on_carrier: bool = false, carrier_override: GeneralizedCircle = null) -> Array:
 	var ep_on_ray := _detect_endpoints_on_ray(ray, segment)
-	var carrier: GeneralizedCircle = segment.get_carrier()
+	var carrier: GeneralizedCircle = carrier_override if carrier_override != null else segment.get_carrier()
 	var quad_hits := _intersect_ray_carrier(ray, carrier)
 
-	if quad_hits.is_empty() and ep_on_ray.is_empty():
+	if quad_hits.is_empty() and ep_on_ray.is_empty() and not origin_on_carrier:
 		return []
+
+	if origin_on_carrier:
+		if not quad_hits.is_empty():
+			var best_idx := 0
+			var best_abs_t := absf(quad_hits[0]["t"])
+			for i in range(1, quad_hits.size()):
+				var abs_t: float = absf(quad_hits[i]["t"])
+				if abs_t < best_abs_t:
+					best_abs_t = abs_t
+					best_idx = i
+			quad_hits[best_idx] = {"t": 0.0, "point": ray.origin.coords}
+		else:
+			quad_hits.append({"t": 0.0, "point": ray.origin.coords})
 
 	var available_eps := ep_on_ray.duplicate()
 	var results: Array = []

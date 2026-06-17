@@ -27,6 +27,8 @@ static func compute_aim_direction(origin: Vector2, cursor: Vector2, plan_entries
 	var image = _compute_image(cursor, plan_entries, surfaces, game_state, cache)
 	if image == null:
 		return Direction.from_coords(origin, cursor)
+	if is_nan(image.x) or is_nan(image.y) or is_inf(image.x) or is_inf(image.y):
+		return Direction.from_coords(origin, cursor)
 
 	var dir := Direction.from_coords(origin, image)
 	if dir.is_zero_length():
@@ -66,6 +68,13 @@ static func plan_transformative_subchain(
 			break
 		var carrier := surf.segment.get_carrier()
 		var hits := Intersection.intersect_line_with_carrier(aim_ray, carrier)
+
+		if not carrier.is_line():
+			var on_seg_hits: Array = []
+			for hit in hits:
+				if Intersection.is_on_segment(hit.point, surf.segment):
+					on_seg_hits.append(hit)
+			hits = on_seg_hits
 
 		if hits.size() == 0:
 			break
