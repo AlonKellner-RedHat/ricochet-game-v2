@@ -14,8 +14,8 @@ static func mirror(x: float, y_start: float = 0.0, y_end: float = 600.0) -> Surf
 	var config := SideConfig.new(refl, true)
 	return Surface.new(seg, config, config, false, false)
 
-static func find_nearest(ray: Ray, segments: Array, skip_segment: Segment = null) -> Intersection.HitRecord:
-	var hits := Intersection.find_all_hits(ray, segments, skip_segment)
+static func find_nearest(ray: Ray, segments: Array) -> Intersection.HitRecord:
+	var hits := Intersection.find_all_hits(ray, segments)
 	if hits.is_empty():
 		return null
 	var forward: Array = []

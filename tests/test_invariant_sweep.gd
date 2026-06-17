@@ -57,6 +57,7 @@ func test_sweep_with_plans() -> void:
 		TEST_LEVELS_DIR + "divergence_room.tscn",
 		TEST_LEVELS_DIR + "room_with_mirror.tscn",
 		TEST_LEVELS_DIR + "two_mirrors.tscn",
+		TEST_LEVELS_DIR + "room_with_inversion.tscn",
 	]
 
 	var total_failures: Array[Dictionary] = []
@@ -74,10 +75,12 @@ func test_sweep_with_plans() -> void:
 		await get_tree().process_frame
 
 		var mirrors := _find_reflective_surfaces(scene)
-		if mirrors.size() == 0:
+		var inversions := _find_inversion_surfaces(scene)
+		if mirrors.size() == 0 and inversions.size() == 0:
 			continue
 
 		var plans := _generate_plans(mirrors)
+		plans.append_array(_generate_inversion_plans(inversions))
 		var checker := InvariantChecker.new()
 		checker.setup(scene)
 
@@ -167,6 +170,34 @@ func _generate_plans(mirrors: Array) -> Array:
 		var ms0b: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
 		var ms1b: Side.Value = Side.Value.LEFT if mirrors[1].left_reflects else Side.Value.RIGHT
 		plans.append([PlanManager.PlanEntry.new(m0b.id, ms0b), PlanManager.PlanEntry.new(m1b.id, ms1b), PlanManager.PlanEntry.new(m0b.id, ms0b)])
+	return plans
+
+func _find_inversion_surfaces(scene: Node) -> Array:
+	var result: Array = []
+	if not "surfaces" in scene:
+		return result
+	for surf in scene.surfaces:
+		var s: Surface = surf
+		var left: SideConfig = s.active_side_config(Side.Value.LEFT, GameState.new())
+		var right: SideConfig = s.active_side_config(Side.Value.RIGHT, GameState.new())
+		var left_inverts := left != null and left.effect is CircleInversionEffect
+		var right_inverts := right != null and right.effect is CircleInversionEffect
+		if left_inverts or right_inverts:
+			result.append({"surface": s, "left_inverts": left_inverts, "right_inverts": right_inverts})
+	return result
+
+func _generate_inversion_plans(inversions: Array) -> Array:
+	var plans: Array = []
+	for inv in inversions:
+		var s: Surface = inv.surface
+		if inv.left_inverts:
+			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
+		if inv.right_inverts:
+			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.RIGHT)])
+	if inversions.size() >= 1:
+		var s0: Surface = inversions[0].surface
+		var side0: Side.Value = Side.Value.LEFT if inversions[0].left_inverts else Side.Value.RIGHT
+		plans.append([PlanManager.PlanEntry.new(s0.id, side0), PlanManager.PlanEntry.new(s0.id, side0)])
 	return plans
 
 func _plan_to_data(plan: Array) -> Array:

@@ -38,14 +38,6 @@ func test_off_segment_nearer_than_on_segment() -> void:
 	assert_almost_eq(hit.point.coords.x, 300.0, 0.01, "Off-segment carrier at x=300 is nearer")
 	assert_false(hit.on_segment, "Nearer hit is off-segment")
 
-func test_skip_segment() -> void:
-	var seg_a := Segment.from_coords(Vector2(300, 0), Vector2(300, 600), Vector2(300, 300))
-	var seg_b := Segment.from_coords(Vector2(500, 0), Vector2(500, 600), Vector2(500, 300))
-	var ray := Ray.from_coords(Vector2(100, 300), Direction.from_coords(Vector2(100, 300), Vector2(600, 300)))
-	var hit := H.find_nearest(ray, [seg_a, seg_b], seg_a)
-	assert_not_null(hit, "Should find non-skipped hit")
-	assert_almost_eq(hit.point.coords.x, 500.0, 0.01, "Skipped A, hit B at x=500")
-
 func test_origin_hit_returned_as_beyond() -> void:
 	var seg := Segment.from_coords(Vector2(200, 0), Vector2(200, 600), Vector2(200, 300))
 	var ray := Ray.from_coords(Vector2(200, 300), Direction.from_coords(Vector2(200, 300), Vector2(600, 300)))
@@ -174,14 +166,6 @@ func test_find_all_hits_two_segments() -> void:
 	var hits := Intersection.find_all_hits(ray, [seg_a, seg_b])
 	assert_eq(hits.size(), 2, "Two segments give 2 hits")
 
-func test_find_all_hits_skip_segment() -> void:
-	var seg_a := Segment.from_coords(Vector2(300, 0), Vector2(300, 600), Vector2(300, 300))
-	var seg_b := Segment.from_coords(Vector2(500, 0), Vector2(500, 600), Vector2(500, 300))
-	var ray := Ray.from_coords(Vector2(100, 300), Direction.from_coords(Vector2(100, 300), Vector2(600, 300)))
-	var hits := Intersection.find_all_hits(ray, [seg_a, seg_b], seg_a)
-	assert_eq(hits.size(), 1, "Skipped segment excluded")
-	assert_almost_eq(hits[0].point.coords.x, 500.0, 0.01, "Only seg_b hit")
-
 func test_find_all_hits_parallel() -> void:
 	var seg := Segment.from_coords(Vector2(100, 100), Vector2(500, 100), Vector2(300, 100))
 	var ray := Ray.from_coords(Vector2(100, 300), Direction.from_coords(Vector2(100, 300), Vector2(500, 300)))
@@ -227,8 +211,8 @@ func test_projective_sort_empty() -> void:
 
 # --- stage hitpoints assembly (using find_all_hits + projective_sort) ---
 
-func _build_stage_hitpoints(ray: Ray, segments: Array, skip_segment: Segment = null) -> Array:
-	var hits := Intersection.find_all_hits(ray, segments, skip_segment)
+func _build_stage_hitpoints(ray: Ray, segments: Array) -> Array:
+	var hits := Intersection.find_all_hits(ray, segments)
 	hits.append(Intersection.HitRecord.new(0.0, ray.origin.coords, null, Side.Value.LEFT, false))
 	return Intersection.projective_sort(hits)
 
@@ -249,15 +233,6 @@ func test_stage_hitpoints_origin_always_last() -> void:
 	var last: Intersection.HitRecord = hits[hits.size() - 1]
 	assert_null(last.segment, "Origin is last")
 	assert_almost_eq(last.t, 0.0, 1e-6)
-
-func test_stage_hitpoints_skip_segment() -> void:
-	var seg_a := Segment.from_coords(Vector2(300, 0), Vector2(300, 600), Vector2(300, 300))
-	var seg_b := Segment.from_coords(Vector2(500, 0), Vector2(500, 600), Vector2(500, 300))
-	var ray := Ray.from_coords(Vector2(100, 300), Direction.from_coords(Vector2(100, 300), Vector2(600, 300)))
-	var hits := _build_stage_hitpoints(ray, [seg_a, seg_b], seg_a)
-	assert_eq(hits.size(), 2, "1 carrier hit + 1 origin")
-	assert_almost_eq(hits[0].point.coords.x, 500.0, 0.01, "Only seg_b")
-	assert_null(hits[1].segment, "Origin last")
 
 func test_stage_hitpoints_projective_order() -> void:
 	var seg_behind := Segment.from_coords(Vector2(50, 0), Vector2(50, 600), Vector2(50, 300))

@@ -98,10 +98,10 @@ func test_shared_cache_same_frame_ids() -> void:
 
 	# Both traces use the SAME cache — no ID counter reset needed
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
 
 	assert_gt(physical.steps.size(), 1, "Physical trace should have >1 step after reflection")

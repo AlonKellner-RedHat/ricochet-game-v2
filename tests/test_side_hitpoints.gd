@@ -169,7 +169,7 @@ func test_trace_interior_hit_blocks() -> void:
 	var player := Vector2(200, 100)
 	var cursor := Vector2(200, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 400, 400))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	assert_gt(path.steps.size(), 0, "Should have steps")
 	var last: Tracer.Step = path.steps[path.steps.size() - 1]
 	assert_almost_eq(last.end, Vector2(200, 200), Vector2(1, 1),
@@ -188,7 +188,7 @@ func test_trace_endpoint_open_continues() -> void:
 	var player := Vector2(300, 100)
 	var cursor := Vector2(300, 500)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 400, 500))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	var last: Tracer.Step = path.steps[path.steps.size() - 1]
 	# The trace should NOT stop at y=200 (the endpoint). It should continue to y=400 (bottom wall).
 	assert_almost_eq(last.end.y, 400.0, 1.0,
@@ -207,7 +207,7 @@ func test_trace_corner_two_walls_blocks() -> void:
 	var player := Vector2(200, 100)
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 500, 500))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	# The first carrier step should end at or near the corner (300, 200)
 	var first: Tracer.Step = path.steps[0]
 	assert_almost_eq(first.end.x, 300.0, 1.0,
@@ -228,7 +228,7 @@ func test_trace_endpoint_does_not_end_midair() -> void:
 	var cursor := Vector2(300, 500)
 	var aim := Direction.from_coords(player, cursor)
 	var bounds := Rect2(0, 0, 400, 500)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), bounds)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	var last: Tracer.Step = path.steps[path.steps.size() - 1]
 	# The trace should reach the bounds, not stop at the wall endpoint
 	var at_bounds := (last.end.y >= bounds.end.y - 2.0 or last.end.y <= bounds.position.y + 2.0
@@ -253,7 +253,7 @@ func test_reflection_at_interior_still_works() -> void:
 	var player := Vector2(200, 100)
 	var cursor := Vector2(200, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 400, 500))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	var found_frame_change := false
 	for i in range(1, path.steps.size()):
 		var prev: Tracer.Step = path.steps[i - 1]
@@ -275,7 +275,7 @@ func test_endpoint_reflection_skipped() -> void:
 	var player := Vector2(100, 100)
 	var cursor := Vector2(100, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 400, 500))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	var found_frame_change := false
 	for i in range(1, path.steps.size()):
 		var prev: Tracer.Step = path.steps[i - 1]
@@ -293,7 +293,7 @@ func test_trace_ends_violation_1() -> void:
 	var cursor := Vector2(560, 840)
 	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
 	assert_gt(planned.steps.size(), 0, "Planned trace should have steps")
 	assert_lt(planned.steps.size(), 50,
@@ -353,7 +353,7 @@ func test_player_blocks_ray_looping_through_infinity() -> void:
 	var cursor := Vector2(560, 840)
 	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
 	var last: Tracer.Step = planned.steps[planned.steps.size() - 1]
 	assert_lt(planned.steps.size(), 50,
@@ -372,7 +372,7 @@ func test_physical_trace_player_blocks_with_unsatisfied_plan() -> void:
 	var plan_entries: Array = [PlanManager.PlanEntry.new(m1_id, Side.Value.LEFT)]
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 	var last: Tracer.Step = physical.steps[physical.steps.size() - 1]
 	assert_lt(physical.steps.size(), 50,
@@ -388,7 +388,7 @@ func test_normal_aim_cursor_still_injected() -> void:
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Rect2(0, 0, 800, 500), null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected in normal planned trace (got cursor_index=%d)" % planned.cursor_index)
@@ -401,7 +401,7 @@ func test_aim_wins_tie_with_carrier() -> void:
 	var cursor := Vector2(800, 540)
 	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected when aim ties with carrier (cursor_index=%d, steps=%d)" % [
@@ -418,7 +418,7 @@ func test_player_block_wins_tie_with_carrier() -> void:
 	var cursor := Vector2(800, 540)
 	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
 	assert_lt(planned.steps.size(), 50,
 		"Trace should terminate cleanly, got %d steps" % planned.steps.size())
@@ -434,7 +434,7 @@ func test_three_mirrors_planned_trace_injects_cursor() -> void:
 	var plan_entries: Array = [PlanManager.PlanEntry.new(m1_id, Side.Value.LEFT)]
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Planned trace should inject cursor (got cursor_index=%d)" % planned.cursor_index)
@@ -450,7 +450,7 @@ func test_planned_trace_terminates_post_cursor() -> void:
 	var plan_entries: Array = [PlanManager.PlanEntry.new(m1_id, Side.Value.LEFT)]
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected (got cursor_index=%d)" % planned.cursor_index)
@@ -465,7 +465,7 @@ func test_trace_ends_violation_2() -> void:
 	var cursor := Vector2(800, 540)
 	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected (cursor_index=%d)" % planned.cursor_index)
@@ -492,14 +492,14 @@ func test_repro_player_block_at_screen_corner_case1() -> void:
 
 	# Physical trace
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PHYSICAL: %d steps, cursor_index=%d" % [physical.steps.size(), physical.cursor_index])
 	_print_steps(physical, "P", 10)
 
 	# Planned trace
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PLANNED: %d steps, cursor_index=%d" % [planned.steps.size(), planned.cursor_index])
 	_print_steps(planned, "L", 10)
@@ -540,13 +540,13 @@ func test_repro_player_block_at_screen_corner_case2() -> void:
 	print("  aim vector: %s" % aim.to_vector().normalized())
 
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PHYSICAL: %d steps, cursor_index=%d" % [physical.steps.size(), physical.cursor_index])
 	_print_steps(physical, "P", 10)
 
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PLANNED: %d steps, cursor_index=%d" % [planned.steps.size(), planned.cursor_index])
 	_print_steps(planned, "L", 10)
@@ -626,7 +626,7 @@ func test_two_mirrors_at_corner_reflects() -> void:
 	var player := Vector2(150, 100)
 	var cursor := Vector2(150, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 400, 400))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	# The first carrier hit at ~(150, 200) is an interior hit on h_mirror → should reflect
 	var first_hit: Tracer.Step = path.steps[0]
 	assert_almost_eq(first_hit.end.y, 200.0, 1.0, "Should hit h_mirror interior at y=200")

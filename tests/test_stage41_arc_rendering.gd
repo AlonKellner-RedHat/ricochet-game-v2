@@ -58,9 +58,9 @@ func test_stage41_draw_arc_clockwise_swap() -> void:
 	var p: Dictionary = VisualConverter.arc_params(s, v, e)
 	assert_true(p["clockwise"], "This geometry should be CW")
 	var sa: float = (s - p["center"]).angle()
-	var ea: float = (e - p["center"]).angle()
-	assert_almost_eq(p["start_angle"], ea, 0.01, "CW: draw_start = end_angle (swapped)")
-	assert_almost_eq(p["end_angle"], sa, 0.01, "CW: draw_end = start_angle (swapped)")
+	assert_almost_eq(p["start_angle"], sa, 0.01, "CW: draw_start = start_angle")
+	var expected_end: float = sa - p["span"]
+	assert_almost_eq(p["end_angle"], expected_end, 0.01, "CW: draw_end = sa - span")
 
 func test_stage41_point_count_full_circle() -> void:
 	var span := TAU

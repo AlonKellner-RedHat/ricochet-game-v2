@@ -42,7 +42,7 @@ func test_step1_reproduce_infinite_loop() -> void:
 	var player := Vector2(1309.974, 816.636)
 	var cursor := Vector2(1244.296, 594.100)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	var path := Tracer.trace(player, aim, surfs, GameState.new())
 	gut.p("Step count: %d" % path.steps.size())
 	assert_lt(path.steps.size(), 50, "Trace should not produce hundreds of steps (got %d)" % path.steps.size())
 
@@ -53,7 +53,7 @@ func test_step2_trace_diagnostics() -> void:
 	var player := Vector2(1309.974, 816.636)
 	var cursor := Vector2(1244.296, 594.100)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	var path := Tracer.trace(player, aim, surfs, GameState.new())
 	gut.p("Total steps: %d" % path.steps.size())
 	var limit: int = mini(path.steps.size(), 20)
 	for i in limit:
@@ -152,7 +152,7 @@ func test_step4_segment_exclusion_after_renorm() -> void:
 	var player := Vector2(1400, 550)
 	var cursor := Vector2(900, 550)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	var path := Tracer.trace(player, aim, surfs, GameState.new())
 
 	gut.p("Step count: %d" % path.steps.size())
 	var limit2: int = mini(path.steps.size(), 15)
@@ -179,7 +179,7 @@ func test_bug2_reproduce_aim_ignores_surfaces() -> void:
 	var player := Vector2(1301.632, 932.631)
 	var cursor := Vector2(1112.158, 507.941)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	var path := Tracer.trace(player, aim, surfs, GameState.new())
 	gut.p("Steps: %d" % path.steps.size())
 	for i in path.steps.size():
 		var s: Tracer.Step = path.steps[i]
@@ -209,7 +209,7 @@ func test_bug2_aim_point_frame_analysis() -> void:
 	gut.p("Player = %s, Cursor = %s" % [player, cursor])
 
 	# Trace and capture per-step details about aim injection
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	var path := Tracer.trace(player, aim, surfs, GameState.new())
 
 	# Check: does step 1 hit the inversion surface?
 	var found_inversion_hit := false
@@ -249,7 +249,7 @@ func test_bug2_aim_point_frame_analysis() -> void:
 func _trace_and_diagnose(player: Vector2, cursor: Vector2, label: String) -> Tracer.TracedPath:
 	var surfs := _build_scene_surfaces()
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	var path := Tracer.trace(player, aim, surfs, GameState.new())
 	gut.p("--- %s ---" % label)
 	gut.p("Player=%s Cursor=%s Steps=%d" % [player, cursor, path.steps.size()])
 	for i in path.steps.size():
@@ -343,7 +343,7 @@ func test_step4_plan_matched_after_reflection() -> void:
 	var cursor := Vector2(700, 500)
 	var aim := Direction.from_coords(player, cursor)
 	# Empty plan — what happens to plan_matched after reflection?
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), Rect2(0, 0, 1920, 1080))
+	var path := Tracer.trace(player, aim, surfs, GameState.new())
 	gut.p("Reflection test — Steps: %d" % path.steps.size())
 	gut.p("cursor_index: %d" % path.cursor_index)
 	for i in path.steps.size():

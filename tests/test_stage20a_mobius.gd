@@ -98,3 +98,75 @@ func test_stage20a_S16_no_nan() -> void:
 	var result := m.apply(Vector2(100, 200))
 	assert_false(is_nan(result.x), "S16: apply x not NaN")
 	assert_false(is_nan(result.y), "S16: apply y not NaN")
+
+# ==========================================================================
+# Riemann sphere: infinity handling
+# ==========================================================================
+
+func test_apply_infinity_with_nonzero_c() -> void:
+	# Unit circle inversion: center=(0,0), r²=1
+	# T(∞) = a/c = (0,0)/(1,0) = (0,0) — infinity maps to center
+	var m := MobiusTransform.new(Vector2(0, 0), Vector2(1, 0), Vector2(1, 0), Vector2(0, 0), true)
+	var result := m.apply(Vector2(INF, INF))
+	assert_almost_eq(result.x, 0.0, 0.001, "T(∞) x = center x = 0")
+	assert_almost_eq(result.y, 0.0, 0.001, "T(∞) y = center y = 0")
+
+func test_apply_infinity_with_nonzero_c_offset_center() -> void:
+	# Inversion centered at (200,200)
+	# T(∞) = a/c = (200,200)/(1,0) = (200,200)
+	var m := MobiusTransform.new(Vector2(200, 200), Vector2(-80000, 0), Vector2(1, 0), Vector2(-200, 200), true)
+	var result := m.apply(Vector2(INF, INF))
+	assert_almost_eq(result.x, 200.0, 0.001, "T(∞) x = center x = 200")
+	assert_almost_eq(result.y, 200.0, 0.001, "T(∞) y = center y = 200")
+
+func test_apply_infinity_with_zero_c() -> void:
+	# Reflection: c=(0,0) — T(∞) = ∞
+	var m := MobiusTransform.new(Vector2(1, 0), Vector2(0, 0), Vector2(0, 0), Vector2(1, 0), true)
+	var result := m.apply(Vector2(INF, INF))
+	assert_true(is_inf(result.x), "Reflection T(∞) x = INF")
+	assert_true(is_inf(result.y), "Reflection T(∞) y = INF")
+
+func test_apply_to_infinity() -> void:
+	# Unit circle inversion: center maps to ∞
+	# T(0,0): conj(0)=(0,0), num=(1,0), den=(0,0) → ∞
+	var m := MobiusTransform.new(Vector2(0, 0), Vector2(1, 0), Vector2(1, 0), Vector2(0, 0), true)
+	var result := m.apply(Vector2(0, 0))
+	assert_true(is_inf(result.x), "Center maps to infinity x")
+	assert_true(is_inf(result.y), "Center maps to infinity y")
+
+func test_cdiv_zero_denominator() -> void:
+	var result := MobiusTransform.cdiv(Vector2(3, 4), Vector2(0, 0))
+	assert_true(is_inf(result.x), "cdiv by zero x = INF")
+	assert_true(is_inf(result.y), "cdiv by zero y = INF")
+
+func test_invert_anticonformal_self_inverse() -> void:
+	# Circle inversion is self-inverse: T(T(z)) = z, so T⁻¹ = T
+	var m := MobiusTransform.new(Vector2(3, 4), Vector2(5, 0), Vector2(1, 0), Vector2(-3, 4), true)
+	var inv := m.invert()
+	# T⁻¹(T(z)) should equal z for any z
+	var z := Vector2(1, 0)
+	var tz := m.apply(z)
+	var roundtrip := inv.apply(tz)
+	assert_almost_eq(roundtrip.x, z.x, 0.01, "T⁻¹(T(z)) x roundtrip")
+	assert_almost_eq(roundtrip.y, z.y, 0.01, "T⁻¹(T(z)) y roundtrip")
+
+func test_invert_anticonformal_compose_identity() -> void:
+	var m := MobiusTransform.new(Vector2(3, 4), Vector2(5, 0), Vector2(1, 0), Vector2(-3, 4), true)
+	var inv := m.invert()
+	var composed := m.compose(inv)
+	var z := Vector2(7, -2)
+	var result := composed.apply(z)
+	assert_almost_eq(result.x, z.x, 0.01, "M∘M⁻¹ should be identity x (anticonformal)")
+	assert_almost_eq(result.y, z.y, 0.01, "M∘M⁻¹ should be identity y (anticonformal)")
+
+func test_apply_infinity_no_nan() -> void:
+	var transforms: Array[MobiusTransform] = [
+		MobiusTransform.identity(),
+		MobiusTransform.new(Vector2(0, 1), Vector2(3, 2), Vector2(0, 0), Vector2(1, 0), false),
+		MobiusTransform.new(Vector2(0, 0), Vector2(1, 0), Vector2(1, 0), Vector2(0, 0), true),
+		MobiusTransform.new(Vector2(200, 200), Vector2(-80000, 0), Vector2(1, 0), Vector2(-200, 200), true),
+	]
+	for m in transforms:
+		var result := m.apply(Vector2(INF, INF))
+		assert_false(is_nan(result.x), "apply(INF) must not produce NaN x (id=%d)" % m.id)
+		assert_false(is_nan(result.y), "apply(INF) must not produce NaN y (id=%d)" % m.id)

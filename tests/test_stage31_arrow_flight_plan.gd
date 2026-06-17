@@ -15,7 +15,7 @@ func test_stage31_arrow_follows_physical_trace_with_plan() -> void:
 	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan)
 	assert_gt(path.steps.size(), 0, "Path should have steps")
 	var first_step: Tracer.Step = path.steps[0]
@@ -29,13 +29,12 @@ func test_stage31_aligned_plan_matches_physical() -> void:
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
-	var bounds := Rect2(0, 0, 800, 600)
 	var cache := TransformCache.new()
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		bounds, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		bounds, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache)
 	var overlap := mini(physical.steps.size(), planned.steps.size())
 	assert_gt(overlap, 0, "Both traces should have steps")
@@ -57,10 +56,10 @@ func test_stage31_determinism_with_plan() -> void:
 	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var path1 := Tracer.trace(player, aim, [m, w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan)
 	var path2 := Tracer.trace(player, aim, [m, w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, null, -1.0,
+		null, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan)
 	assert_eq(path1.steps.size(), path2.steps.size(), "Same step count")
 	for i in path1.steps.size():
@@ -128,7 +127,14 @@ func test_stage31_preview_hidden_during_flight() -> void:
 	assert_almost_eq(path_renderer.modulate.a, 1.0, 0.01, "Full opacity after flight")
 
 func test_stage31_camera_bounds_arc_flight() -> void:
-	assert_true(true, "Forward placeholder — arc flights introduced in Stage 42")
+	var Arrow := preload("res://scripts/game/arrow_animator.gd")
+	var step := Tracer.Step.new(
+		Vector2(2, 0), Vector2(-2, 0), 0, null, null, null, Vector2(0, 2), true)
+	var arc_len := 2.0 * PI
+	var r := Arrow.advance([step], 0, 0.0, step.start, arc_len * 0.5,
+		VisualConverter.DEFAULT_BOUNDS)
+	assert_almost_eq(r.position, Vector2(0, 2), Vector2(0.01, 0.01),
+		"Arc flight should follow curve, not chord")
 
 func test_stage31_camera_returns_after_escape_flight() -> void:
 	var scene := _create_scene()

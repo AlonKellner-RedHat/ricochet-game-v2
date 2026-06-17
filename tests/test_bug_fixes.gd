@@ -33,7 +33,7 @@ func test_wall_doesnt_stop_planned() -> void:
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, [w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
 	assert_gt(path.cursor_index, 0, "Planned trace should reach cursor through wall")
 
@@ -44,7 +44,7 @@ func test_terminal_stops_physical() -> void:
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, [w], GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray)
+		ray)
 	assert_eq(path.cursor_index, -1, "Physical trace should stop at wall before cursor")
 
 # --- Cursor image = direction.end ---
@@ -55,7 +55,7 @@ func test_cursor_image_is_direction_end() -> void:
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, [w], GameState.new(), ray)
 	assert_gt(path.cursor_index, 0, "Cursor should be injected")
 	var cs := _step(path, path.cursor_index - 1)
 	assert_almost_eq(cs.end.x, cursor.x, 1.0, "Cursor step ends at cursor x")
@@ -70,7 +70,7 @@ func test_cursor_with_plan_reachable() -> void:
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
 	var ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan)
 	assert_gt(path.cursor_index, 1, "Planned trace should reach cursor after plan + loop")
 
@@ -82,7 +82,7 @@ func test_cursor_not_reached_after_nonplan_reflection() -> void:
 	var cursor := Vector2(600, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, [m, w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, [m, w], GameState.new(), ray)
 	# Mirror reflects before aim point → non-plan effect → plan_matched=false → cursor NOT reached
 	assert_eq(path.cursor_index, -1, "Cursor not reached after non-plan reflection")
 
@@ -96,9 +96,9 @@ func test_physical_preview_matches() -> void:
 	var aim_ray := Ray.from_coords(player, aim)
 
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray)
+		aim_ray)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		aim_ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
 	var ci: int = planned.cursor_index
 	if ci < 0:
@@ -122,7 +122,7 @@ func test_player_block_stops_loop() -> void:
 	var cursor := Vector2(700, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, [], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, [], GameState.new(), ray)
 	# Should terminate (player block prevents infinite loop)
 	assert_gt(path.steps.size(), 0, "Should have steps")
 	# Trace should not hit MAX_HITS (256 steps) — player block should stop it
@@ -134,7 +134,7 @@ func test_player_block_wall_stops_first() -> void:
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, [w], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, [w], GameState.new(), ray)
 	# Wall should stop the trace, not the player block
 	var last := _step(path, path.steps.size() - 1)
 	assert_not_null(last.hit, "Last step should hit the wall")
@@ -148,7 +148,7 @@ func test_repro_bug1_wall_between() -> void:
 	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
 	var ray := Ray.from_coords(player, aim)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [])
 	assert_gt(planned.cursor_index, 0, "Planned trace must reach cursor past wall")
 
@@ -160,7 +160,7 @@ func test_repro_bug2_mirror_plan() -> void:
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
 	var ray := Ray.from_coords(player, aim)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, null, cursor)
 	# Cursor reached after plan completes and ray loops back
 	assert_gt(planned.cursor_index, 1, "Planned must reach cursor after plan + loop")
@@ -173,7 +173,7 @@ func test_repro_bug3_off_segment() -> void:
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new())
 	var ray := Ray.from_coords(player, aim)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, null, cursor)
 	assert_gt(planned.cursor_index, 1, "Planned must reach cursor after plan + loop")
 
@@ -197,7 +197,7 @@ func test_side_correct_after_odd_reflections() -> void:
 	var cursor := Vector2(857.8936, 783.4509)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray)
 	# Step 2 hits mirror at x=1000 (R=reflect). After 1 reflection, frame conjugating.
 	# Side must be flipped → R=reflect applied → frame changes.
 	var step1: Tracer.Step = path.steps[1] if path.steps.size() > 1 else null
@@ -218,7 +218,7 @@ func test_repro_wrong_carrier_reflection() -> void:
 	var cursor := Vector2(820.855, 736.3637)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray)
 	# Should bounce between mirrors ≥5 steps (not backtrack to x=560 at step 3)
 	assert_gte(path.steps.size(), 5,
 		"Should bounce between mirrors, not backtrack (got %d steps)" % path.steps.size())
@@ -230,7 +230,7 @@ func test_repro_correct_carrier_reflection() -> void:
 	var cursor := Vector2(820.855, 737.3656)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray)
 	assert_gte(path.steps.size(), 5,
 		"Regression: correct case should still bounce ≥5 steps (got %d steps)" % path.steps.size())
 
@@ -242,7 +242,7 @@ func test_reflection_direction_after_frame_change() -> void:
 	var cursor := Vector2(820.855, 736.3637)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray)
 	if path.steps.size() >= 4:
 		# Step 2: (800, ~723) → (1000, ~591) — going RIGHT
 		# Step 3: should go LEFT (reflected at x=1000)
@@ -267,7 +267,7 @@ func test_multi_surface_plan_both_effects_applied() -> void:
 	var ray := Ray.from_coords(player, aim)
 	var cache := TransformCache.new()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
 	# Step 0: hits m1 → frame changes (effect applied)
 	# Step 1: hits m3 → frame should change AGAIN (second effect applied)
@@ -295,7 +295,7 @@ func test_planned_trace_no_midair_player_block() -> void:
 	var ray := Ray.from_coords(player, aim)
 	var cache := TransformCache.new()
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, ray, -1.0,
+		ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
 	var last := _step(planned, planned.steps.size() - 1)
 	# Should end at a surface hit, not mid-air at the player image
@@ -313,11 +313,11 @@ func test_no_midair_end_after_reflections() -> void:
 	var cursor := Vector2(877.9145, 441.8182)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray)
 	# Last step should end at a surface hit or bounds edge, not mid-air
 	var last := _step(path, path.steps.size() - 1)
 	# Check: last step end should be near a surface or bounds edge
-	var bounds := Tracer.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS
 	var near_surface := false
 	for surf in surfaces:
 		var s: Surface = surf
@@ -346,7 +346,7 @@ func test_player_block_in_identity_frame() -> void:
 	var cursor := Vector2(700, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, [], GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, [], GameState.new(), ray)
 	assert_lt(path.steps.size(), 256, "Should terminate before MAX_HITS")
 
 func test_player_waypoint_after_reflection() -> void:
@@ -356,7 +356,7 @@ func test_player_waypoint_after_reflection() -> void:
 	var cursor := Vector2(877.9145, 441.8182)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Tracer.DEFAULT_BOUNDS, ray)
+	var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray)
 	# The trace should continue past the player image (after reflections)
 	# and reach an actual surface hit
 	var has_hit_after_escape := false

@@ -21,13 +21,13 @@ var _flying := false
 var _arrow_position := Vector2.ZERO
 var _arrow_direction := Vector2.RIGHT
 var _speed_multiplier := 1.0
-var _bounds: Rect2 = Tracer.DEFAULT_BOUNDS
+var _bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
 
-func start_flight(path: Tracer.TracedPath, bounds: Rect2 = Tracer.DEFAULT_BOUNDS) -> void:
+func start_flight(path: Tracer.TracedPath, bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS) -> void:
 	_path = path
 	_current_step_index = 0
 	_progress_along_step = 0.0
@@ -38,7 +38,10 @@ func start_flight(path: Tracer.TracedPath, bounds: Rect2 = Tracer.DEFAULT_BOUNDS
 	if _path.steps.size() > 0:
 		var step: Tracer.Step = _path.steps[0]
 		_arrow_position = step.start
-		_arrow_direction = (step.end - step.start).normalized()
+		if _is_arc(step):
+			_arrow_direction = _arc_interpolate(step, 0.0).direction
+		else:
+			_arrow_direction = (step.end - step.start).normalized()
 	queue_redraw()
 
 func speed_up() -> void:
@@ -65,6 +68,29 @@ func _process(delta: float) -> void:
 	if r.finished:
 		_finish_flight()
 
+static func _is_arc(step: Tracer.Step) -> bool:
+	return step.is_arc_step and VisualConverter.is_arc(step.start, step.via, step.end)
+
+static func _arc_length(step: Tracer.Step) -> float:
+	var p := VisualConverter.arc_params(step.start, step.via, step.end)
+	return p.radius * p.span
+
+static func _arc_interpolate(step: Tracer.Step, t: float) -> Dictionary:
+	var p := VisualConverter.arc_params(step.start, step.via, step.end)
+	var ctr: Vector2 = p.center
+	var radius: float = p.radius
+	var sa := (step.start - ctr).angle()
+	var cw: bool = p.clockwise
+	var angle: float = sa + t * p.span * (-1.0 if cw else 1.0)
+	var pos := ctr + radius * Vector2(cos(angle), sin(angle))
+	var rv := pos - ctr
+	var tangent: Vector2
+	if cw:
+		tangent = Vector2(rv.y, -rv.x).normalized()
+	else:
+		tangent = Vector2(-rv.y, rv.x).normalized()
+	return {"position": pos, "direction": tangent}
+
 static func advance(steps: Array, step_index: int, progress: float,
 		pos: Vector2, distance: float, bounds: Rect2) -> AdvanceResult:
 	var tolerant := bounds.grow(2.0)
@@ -76,14 +102,20 @@ static func advance(steps: Array, step_index: int, progress: float,
 
 	while distance > 0.0 and r.step_index < steps.size():
 		var step: Tracer.Step = steps[r.step_index]
-		var step_length := step.start.distance_to(step.end)
+		var arc := _is_arc(step)
+		var step_length := _arc_length(step) if arc else step.start.distance_to(step.end)
 		var remaining := step_length - r.progress
 
 		if distance < remaining:
 			r.progress += distance
 			var t := r.progress / step_length if step_length > 0.0 else 1.0
-			r.position = step.start.lerp(step.end, t)
-			r.direction = (step.end - step.start).normalized()
+			if arc:
+				var interp := _arc_interpolate(step, t)
+				r.position = interp.position
+				r.direction = interp.direction
+			else:
+				r.position = step.start.lerp(step.end, t)
+				r.direction = (step.end - step.start).normalized()
 			distance = 0.0
 		else:
 			distance -= remaining
@@ -115,7 +147,12 @@ static func advance(steps: Array, step_index: int, progress: float,
 static func _update_direction(r: AdvanceResult, steps: Array) -> void:
 	if r.step_index < steps.size():
 		var s: Tracer.Step = steps[r.step_index]
-		r.direction = (s.end - s.start).normalized()
+		if _is_arc(s):
+			var arc_len := _arc_length(s)
+			var t := r.progress / arc_len if arc_len > 0.0 else 0.0
+			r.direction = _arc_interpolate(s, t).direction
+		else:
+			r.direction = (s.end - s.start).normalized()
 
 func _finish_flight() -> void:
 	_flying = false

@@ -31,6 +31,19 @@ func test_different_self_inverse_are_distinct() -> void:
 	var t2 := TrackedTransform.from_self_inverse(m2)
 	assert_ne(t1, t2, "Different self-inverse transforms should be distinct objects")
 
+func test_self_inverse_stores_carrier() -> void:
+	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
+	var m := MobiusTransform.new(Vector2(1, 0), Vector2(0, 0), Vector2(0, 0), Vector2(1, 0), true)
+	var t := TrackedTransform.from_self_inverse(m, carrier)
+	assert_eq(t.carrier, carrier, "Should store carrier reference")
+
+func test_identity_has_null_carrier() -> void:
+	assert_null(TrackedTransform.identity().carrier)
+
+func test_pair_has_null_carrier() -> void:
+	var fwd := MobiusTransform.new(Vector2(1, 0), Vector2(2, 0), Vector2(0, 0), Vector2(1, 0), false)
+	assert_null(TrackedTransform.from_pair(fwd, fwd.invert()).carrier)
+
 # === Phase 2: Point ===
 
 func _make_reflection_tracked() -> TrackedTransform:
@@ -211,6 +224,28 @@ func test_segment_double_self_inverse_exact_roundtrip() -> void:
 	assert_eq(seg2.end.coords, seg.end.coords, "Double self-inverse end exact")
 	assert_eq(seg2.via.coords, seg.via.coords, "Double self-inverse via exact")
 
+func test_segment_carrier_fixed_returns_self() -> void:
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var carrier := seg.get_carrier()
+	var result := seg.transformed(ReflectionEffect.new(carrier).get_tracked_transform())
+	assert_eq(result, seg, "Self-inverse on own carrier -> return self")
+
+func test_segment_roundtrip_preserves_carrier_object() -> void:
+	var seg := Segment.from_coords(Vector2(100, 200), Vector2(300, 400), Vector2(200, 300))
+	var original_carrier := seg.get_carrier()
+	var other := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
+	var t := ReflectionEffect.new(other).get_tracked_transform()
+	assert_eq(seg.transformed(t).transformed(t).get_carrier(), original_carrier,
+		"Roundtrip -> carrier same object")
+
+func test_segment_pair_roundtrip_preserves_carrier() -> void:
+	var seg := Segment.from_coords(Vector2(100, 200), Vector2(300, 400), Vector2(200, 300))
+	var original_carrier := seg.get_carrier()
+	var m := MobiusTransform.new(Vector2(1, 0), Vector2(3, 0), Vector2(0, 0), Vector2(1, 0), false)
+	var t := TrackedTransform.from_pair(m, m.invert())
+	assert_eq(seg.transformed(t).transformed(t.inverse).get_carrier(), original_carrier,
+		"Pair roundtrip -> carrier same object")
+
 # === Phase 4: Direction and Ray ===
 
 func test_direction_from_coords_fields_are_points() -> void:
@@ -263,12 +298,50 @@ func test_circle_inversion_tracked_is_self_inverse() -> void:
 	assert_eq(t.inverse, t, "Inversion tracked should be self-inverse")
 	assert_eq(t.mobius, inv.get_mobius(), "Tracked mobius should match effect mobius")
 
+func test_reflection_tracked_has_carrier() -> void:
+	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
+	var t := ReflectionEffect.new(carrier).get_tracked_transform()
+	assert_eq(t.carrier, carrier, "Reflection tracked should store its carrier")
+
+func test_inversion_tracked_has_carrier() -> void:
+	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
+	var t := CircleInversionEffect.new(carrier).get_tracked_transform()
+	assert_eq(t.carrier, carrier, "Inversion tracked should store its carrier")
+
 func test_different_effects_produce_different_tracked() -> void:
 	var c1 := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
 	var c2 := GeneralizedCircle.new(0.0, 0.0, 1.0, -300.0)
 	var t1 := ReflectionEffect.new(c1).get_tracked_transform()
 	var t2 := ReflectionEffect.new(c2).get_tracked_transform()
 	assert_ne(t1, t2, "Different effects should produce different tracked transforms")
+
+func test_reflection_normalized_same_carrier_returns_self() -> void:
+	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
+	var refl := ReflectionEffect.new(carrier)
+	assert_eq(refl.normalized(carrier), refl, "Same carrier -> return self")
+
+func test_reflection_normalized_different_carrier_returns_new() -> void:
+	var c1 := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
+	var c2 := GeneralizedCircle.new(0.0, 0.0, 1.0, -300.0)
+	var refl := ReflectionEffect.new(c1)
+	assert_ne(refl.normalized(c2), refl, "Different carrier -> return new")
+
+func test_normalized_self_preserves_tracked_identity() -> void:
+	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
+	var refl := ReflectionEffect.new(carrier)
+	assert_eq(refl.normalized(carrier).get_tracked_transform(),
+		refl.get_tracked_transform(), "Same effect -> same TrackedTransform")
+
+func test_inversion_normalized_same_carrier_returns_self() -> void:
+	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
+	var inv := CircleInversionEffect.new(carrier)
+	assert_eq(inv.normalized(carrier), inv, "Same carrier -> return self")
+
+func test_inversion_normalized_different_carrier_returns_new() -> void:
+	var c1 := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
+	var c2 := GeneralizedCircle.from_circle(Vector2(300, 300), 50.0)
+	assert_ne(CircleInversionEffect.new(c1).normalized(c2),
+		CircleInversionEffect.new(c1), "Different carrier -> return new")
 
 func test_normalized_effect_produces_different_tracked() -> void:
 	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
@@ -280,6 +353,23 @@ func test_normalized_effect_produces_different_tracked() -> void:
 	assert_ne(t1, t2, "Normalized effect should produce different tracked transform")
 
 # === Phase 7: Tracer with provenance ===
+
+func test_build_normalized_preserves_effect_for_self_inverse() -> void:
+	var seg := Segment.from_coords(
+		Vector2(1160, 540.01), Vector2(1160, 539.99), Vector2(760, 540))
+	var carrier := seg.get_carrier()
+	var refl := ReflectionEffect.new(carrier)
+	var config := SideConfig.new(refl, true)
+	var surf := Surface.new(seg, config, config, false, false)
+	var T := refl.get_tracked_transform()
+	var out_mapping := {}
+	var norm := Tracer._build_normalized([surf], T.mobius, out_mapping, null, [T])
+	var norm_config: SideConfig = norm[0].active_side_config(
+		Side.Value.LEFT, GameState.new())
+	assert_eq(norm_config.effect, refl,
+		"Normalized effect should be same object (carrier preserved)")
+	assert_eq(norm_config.effect.get_tracked_transform(), T,
+		"Normalized TrackedTransform should be same object")
 
 func test_tracer_reflection_terminates_and_aim_correct() -> void:
 	var m := H.mirror(400)
@@ -326,7 +416,7 @@ func test_aim_does_not_jump_back_after_unplanned_reflections() -> void:
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
 	var aim_ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		aim_ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache)
 	assert_true(path.steps.size() >= 2, "Should have multiple steps")
 	var aim_dir := aim.to_vector().normalized()
@@ -357,7 +447,7 @@ func test_no_zero_length_carrier_at_bounds_corner() -> void:
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
 	var aim_ray := Ray.from_coords(player, aim)
 	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		aim_ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache)
 	for i in path.steps.size():
 		var step: Tracer.Step = path.steps[i]
@@ -374,10 +464,10 @@ func test_planned_trace_aligns_with_physical_when_plan_matches() -> void:
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
 	var aim_ray := Ray.from_coords(player, aim)
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		aim_ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
 	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		aim_ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
 
 	assert_gt(planned.cursor_index, 0, "Planned trace should reach cursor")

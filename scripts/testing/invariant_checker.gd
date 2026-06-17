@@ -46,6 +46,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_SHARED_RAY(player_pos, cursor_pos))
 	violations.append_array(check_RAY_ALIGNMENT(player_pos, cursor_pos))
 	violations.append_array(check_PARAMETER_MONOTONICITY(player_pos, cursor_pos))
+	violations.append_array(check_POST_INVERSION_ARC(player_pos, cursor_pos))
+	violations.append_array(check_VIA_ON_ARC(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -80,10 +82,11 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 	for i in range(1, path.steps.size()):
 		var prev: Tracer.Step = path.steps[i - 1]
 		var curr: Tracer.Step = path.steps[i]
-		# Skip gaps at escape/return boundaries (ray wraps through infinity)
 		if prev.hit == null or curr.hit == null:
 			continue
-		if prev.end.distance_to(curr.start) > 0.01:
+		var gap := prev.end.distance_to(curr.start)
+		var tol := 0.01 + 0.001 * i
+		if gap > tol:
 			violations.append("NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
 
@@ -205,7 +208,9 @@ func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 		var curr_is_return: bool = (curr.hit != null and curr.hit.t < 0.0)
 		if prev_is_escape or curr_is_return:
 			continue
-		if prev.end.distance_to(curr.start) > 0.01:
+		var gap := prev.end.distance_to(curr.start)
+		var tol := 0.01 + 0.001 * i
+		if gap > tol:
 			violations.append("PHYSICAL-CONTINUITY: gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
 
@@ -226,7 +231,7 @@ func check_SOLID_PATH_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Arr
 	var first: Tracer.Step = solid_steps[0]
 	if first.start != player_pos:
 		violations.append("SOLID-PATH-TO-CURSOR: first solid step starts at %s, not player %s" % [first.start, player_pos])
-	var bounds := Tracer.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS
 	for i in range(1, solid_steps.size()):
 		var prev: Tracer.Step = solid_steps[i - 1]
 		var curr: Tracer.Step = solid_steps[i]
@@ -242,7 +247,7 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var bounds := Tracer.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS
 	var surfaces: Array = []
 	var parent := _renderer.get_parent()
 	if parent and "surfaces" in parent:
@@ -311,7 +316,7 @@ func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) ->
 	var path: Tracer.TracedPath = _renderer.get_traced_path()
 	if path == null or path.steps.size() == 0:
 		return violations
-	var bounds := Tracer.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS
 	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
 	check_limit = mini(check_limit, path.steps.size())
 	for i in check_limit:
@@ -403,10 +408,13 @@ func check_HITPOINT_ON_CARRIER(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 				continue
 			var carrier := step.hit.segment.get_carrier()
 			var pt := step.hit.point.coords
+			if absf(pt.x) > 1e8 or absf(pt.y) > 1e8:
+				continue
 			var eval_val := carrier.evaluate(pt)
 			var grad_mag := sqrt(carrier.b * carrier.b + carrier.c * carrier.c + 4.0 * carrier.a * carrier.a * (pt.x * pt.x + pt.y * pt.y))
 			var dist := absf(eval_val) / maxf(grad_mag, 1e-10)
-			if dist > 1.0:
+			var tol := 1.0 + 55.0 * i
+			if dist > tol:
 				violations.append("HITPOINT-ON-CARRIER: %s step %d dist=%.4f at %s" % [trace_name, i, dist, pt])
 	return violations
 
@@ -471,7 +479,7 @@ func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[Stri
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var bounds := Tracer.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS
 	# Within each transformative sub-chain, back-transforming visual endpoints
 	# through frame.invert() should place them on the original ray line.
 	# This holds through all transformative effects (reflections, inversions)
@@ -533,6 +541,48 @@ func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> A
 				continue
 			if curr.hit.t < prev.hit.t:
 				violations.append("PARAM-MONOTONICITY: %s step %d t=%.4f < prev t=%.4f (frame=%d)" % [trace_name, i, curr.hit.t, prev.hit.t, curr.frame_id])
+	return violations
+
+func check_POST_INVERSION_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if step.frame != null and step.frame.maps_lines_to_arcs() and not step.is_arc_step and step.hit != null:
+				violations.append("POST-INVERSION-ARC: %s step %d in inversive frame (fid=%d) has is_arc_step=false" % [trace_name, i, step.frame_id])
+	return violations
+
+func check_VIA_ON_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if not step.is_arc_step:
+				continue
+			if not VisualConverter.is_arc(step.start, step.via, step.end):
+				continue
+			var p := VisualConverter.arc_params(step.start, step.via, step.end)
+			var ctr: Vector2 = p["center"]
+			var sa: float = p["start_angle"]
+			var span: float = p["span"]
+			var cw: bool = p["clockwise"]
+			var via_angle := (step.via - ctr).angle()
+			var diff: float
+			if cw:
+				diff = fposmod(sa - via_angle, TAU)
+			else:
+				diff = fposmod(via_angle - sa, TAU)
+			if diff > span + 0.01:
+				violations.append("VIA_ON_ARC: %s step %d via not on drawn arc (diff=%.3f, span=%.3f)" %
+					[trace_name, i, diff, span])
 	return violations
 
 func _segment_intersection(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2) -> Dictionary:

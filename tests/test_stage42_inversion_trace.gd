@@ -51,7 +51,7 @@ func _trace_outside_in(plan_entries: Array = []) -> Tracer.TracedPath:
 	var player := Vector2(450, 250)
 	var cursor := Vector2(50, 250)
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	return Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 600, 400),
+	return Tracer.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
 
 func test_stage42_trace_through_inversion() -> void:
@@ -73,7 +73,7 @@ func test_stage42_frame_after_inversion() -> void:
 	var player := Vector2(450, 200)
 	var cursor := Vector2(50, 200)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 600, 400))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	var found_non_identity := false
 	for step in path.steps:
 		var s: Tracer.Step = step
@@ -98,7 +98,7 @@ func test_stage42_inversion_direction_unchanged() -> void:
 	var player := Vector2(50, 200)
 	var cursor := Vector2(400, 200)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(), Rect2(0, 0, 600, 400))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 	for step in path.steps:
 		var s: Tracer.Step = step
 		assert_eq(s.ray.direction, aim, "Direction reference stays the same (transformative)")

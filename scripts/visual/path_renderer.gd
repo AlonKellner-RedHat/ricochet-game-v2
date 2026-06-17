@@ -50,12 +50,15 @@ func _compute_trace() -> void:
 	var aim_dir: Direction = Planner.compute_aim_direction(
 		player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
 	var aim_ray := Ray.from_coords(player_pos, aim_dir)
+	var bounds := VisualConverter.DEFAULT_BOUNDS
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		aim_ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
+	_traced_path = VisualConverter.prepare_for_display(_traced_path, bounds)
 	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		Tracer.DEFAULT_BOUNDS, aim_ray, -1.0,
+		aim_ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
+	_planned_path = VisualConverter.prepare_for_display(_planned_path, bounds)
 
 	var ci: int = _planned_path.cursor_index
 	if ci < 0:
@@ -131,7 +134,7 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 		draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
 
 func _draw_step(step: Tracer.Step, col: Color, dashed: bool) -> void:
-	if step.is_arc_step and not is_inf(step.end.x) and not is_inf(step.end.y):
+	if step.is_arc_step and VisualConverter.is_arc(step.start, step.via, step.end):
 		var p := VisualConverter.arc_params(step.start, step.via, step.end)
 		var arc_center: Vector2 = p["center"] - global_position
 		if dashed:
@@ -148,9 +151,7 @@ func _draw_step(step: Tracer.Step, col: Color, dashed: bool) -> void:
 
 func _draw_dashed_arc(center: Vector2, radius: float, start_angle: float, end_angle: float, point_count: int, col: Color) -> void:
 	var span := end_angle - start_angle
-	if span < 0.0:
-		span += TAU
-	var total_len := radius * span
+	var total_len := minf(radius * absf(span), 4000.0)
 	if total_len == 0.0:
 		return
 	var drawn := 0.0
