@@ -6,6 +6,7 @@ func kind() -> int:
 
 var _mobius: MobiusTransform
 var _tracked: TrackedTransform
+var _carrier: GeneralizedCircle
 
 func get_mobius() -> MobiusTransform:
 	return _mobius
