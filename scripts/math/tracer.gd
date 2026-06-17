@@ -303,8 +303,29 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 	if cached_norm != null:
 		s.norm_surfaces = cached_norm.surfaces
 		s.norm_to_surface = cached_norm.mapping
+	elif s.norm_surfaces.size() > 0 and s.transform_stack.size() > 0:
+		var last_inv_mobius: MobiusTransform = s.transform_stack.back().inverse.mobius
+		var new_norms: Array = []
+		var new_mapping: Dictionary = {}
+		for ns in s.norm_surfaces:
+			var orig_surf: Surface = s.norm_to_surface.get(ns.segment)
+			if orig_surf == null:
+				continue
+			var new_seg := Segment.from_coords(
+				last_inv_mobius.apply(ns.segment.start.coords),
+				last_inv_mobius.apply(ns.segment.end.coords),
+				last_inv_mobius.apply(ns.segment.via.coords))
+			var state := GameState.new()
+			var left := _normalize_config(orig_surf.active_side_config(Side.Value.LEFT, state), new_seg)
+			var right := _normalize_config(orig_surf.active_side_config(Side.Value.RIGHT, state), new_seg)
+			var new_surf := Surface.new(new_seg, left, right, orig_surf.is_target, orig_surf.player_solid)
+			new_mapping[new_surf.segment] = orig_surf
+			new_norms.append(new_surf)
+		s.norm_surfaces = new_norms
+		s.norm_to_surface = new_mapping
+		cache.set_normalized(s.frame.id, s.norm_surfaces, s.norm_to_surface.duplicate())
 	else:
-		s.norm_surfaces = _build_normalized(surfaces, s.frame, s.norm_to_surface, cache)
+		s.norm_surfaces = _build_normalized(surfaces, s.frame, s.norm_to_surface, cache, s.transform_stack)
 		cache.set_normalized(s.frame.id, s.norm_surfaces, s.norm_to_surface.duplicate())
 	s.frame_dirty = false
 	if s.transform_stack.is_empty():
@@ -313,28 +334,18 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 		var frame_inv := cache.invert_cached(s.frame)
 		s.aim_in_frame = frame_inv.apply(s.aim_point_pt.coords)
 
-static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, cache: TransformCache = null) -> Array:
+static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, _cache: TransformCache = null, transform_stack: Array = []) -> Array:
 	out_mapping.clear()
 	if frame.id == MobiusTransform.IDENTITY_ID:
 		for surf in surfaces:
 			out_mapping[surf.segment] = surf
 		return surfaces
 
-	var inv: MobiusTransform
-	if cache:
-		inv = cache.invert_cached(frame)
-	else:
-		inv = frame.invert()
 	var result: Array = []
 	for surf in surfaces:
-		var s := cache.apply_point(inv, surf.segment.start.coords, false) if cache else inv.apply(surf.segment.start.coords)
-		var e := cache.apply_point(inv, surf.segment.end.coords, false) if cache else inv.apply(surf.segment.end.coords)
-		var v: Vector2
-		if is_inf(surf.segment.via.coords.x) or is_inf(surf.segment.via.coords.y):
-			v = Vector2(INF, INF)
-		else:
-			v = cache.apply_point(inv, surf.segment.via.coords, false) if cache else inv.apply(surf.segment.via.coords)
-		var new_seg := Segment.from_coords(s, e, v)
+		var new_seg: Segment = surf.segment
+		for i in range(transform_stack.size() - 1, -1, -1):
+			new_seg = new_seg.transformed(transform_stack[i].inverse)
 		var state := GameState.new()
 		var left := _normalize_config(surf.active_side_config(Side.Value.LEFT, state), new_seg)
 		var right := _normalize_config(surf.active_side_config(Side.Value.RIGHT, state), new_seg)
