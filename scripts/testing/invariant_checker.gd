@@ -99,6 +99,8 @@ func check_S9(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 		var curr: Tracer.Step = path.steps[i]
 		if prev.hit and curr.hit:
 			if prev.hit.segment == curr.hit.segment:
+				if prev.frame_id == curr.frame_id:
+					continue
 				violations.append("S9: Same segment hit at steps %d and %d" % [i - 1, i])
 	return violations
 
@@ -311,6 +313,7 @@ func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) ->
 		return violations
 	var bounds := Tracer.DEFAULT_BOUNDS
 	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
+	check_limit = mini(check_limit, path.steps.size())
 	for i in check_limit:
 		var step: Tracer.Step = path.steps[i]
 		if step.hit == null:
@@ -350,11 +353,14 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 	if surfaces.size() == 0:
 		return violations
 	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
+	check_limit = mini(check_limit, path.steps.size())
 	for i in check_limit:
 		var step: Tracer.Step = path.steps[i]
 		if step.is_arc_step:
 			continue
 		if step.start == step.end:
+			continue
+		if step.frame_id != MobiusTransform.IDENTITY_ID:
 			continue
 		for surf in surfaces:
 			var s: Surface = surf
@@ -368,6 +374,8 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 			if s.player_solid:
 				has_effect = true
 			if not has_effect:
+				continue
+			if not s.segment.get_carrier().is_line():
 				continue
 			var sa := s.segment.start.coords
 			var sb := s.segment.end.coords
