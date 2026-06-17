@@ -64,7 +64,7 @@ func compose(other: MobiusTransform) -> MobiusTransform:
 	var new_d := cmul(c, m2_b) + cmul(d, m2_d)
 
 	var max_mag := maxf(maxf(new_a.length(), new_b.length()), maxf(new_c.length(), new_d.length()))
-	if max_mag > 1e6:
+	if max_mag > 0.0:
 		var inv := 1.0 / max_mag
 		new_a *= inv
 		new_b *= inv
@@ -109,6 +109,12 @@ static func cmod2(v: Vector2) -> float:
 
 func maps_lines_to_arcs() -> bool:
 	return c != Vector2.ZERO
+
+func pole() -> Vector2:
+	var z := cdiv(-d, c)
+	if conjugating:
+		return cconj(z)
+	return z
 
 static func reset_id_counter() -> void:
 	_next_id = 1

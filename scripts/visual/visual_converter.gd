@@ -8,7 +8,7 @@ const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2) -> Tracer.TracedPath:
 	var has_inf := false
 	for step: Tracer.Step in path.steps:
-		if is_inf(step.via.x) and is_inf(step.via.y):
+		if (is_inf(step.via.x) and is_inf(step.via.y)) or is_inf(step.end.x) or is_inf(step.end.y) or is_inf(step.start.x) or is_inf(step.start.y):
 			has_inf = true
 			break
 	if not has_inf:
@@ -21,8 +21,21 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2) -> Trace
 	var cursor_shift := 0
 	for i in path.steps.size():
 		var step: Tracer.Step = path.steps[i]
-		if not (is_inf(step.via.x) and is_inf(step.via.y)):
+		var via_inf := is_inf(step.via.x) and is_inf(step.via.y)
+		var end_inf := is_inf(step.end.x) or is_inf(step.end.y)
+		var start_inf := is_inf(step.start.x) or is_inf(step.start.y)
+		if not via_inf and not end_inf and not start_inf:
 			result.steps.append(step)
+			continue
+		if end_inf and not start_inf and not via_inf:
+			var clip := _clip_to_bounds(step.start, step.via.normalized(), bounds)
+			var via_mid := (step.start + clip) / 2.0
+			result.steps.append(Tracer.Step.new(step.start, clip, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+			continue
+		if start_inf and not end_inf and not via_inf:
+			var clip := _clip_to_bounds(step.end, step.via.normalized(), bounds)
+			var via_mid := (clip + step.end) / 2.0
+			result.steps.append(Tracer.Step.new(clip, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
 			continue
 		var start_in := grown.has_point(step.start)
 		var end_in := grown.has_point(step.end)

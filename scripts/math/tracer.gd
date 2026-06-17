@@ -57,7 +57,6 @@ class TraceState:
 enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
 
 const MAX_HITS := 32
-const FAR_DISTANCE := 1e6
 
 static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState) -> TracedPath:
 	return trace(initial_ray.origin.coords, initial_ray.direction, surfaces, game_state, initial_ray)
@@ -124,6 +123,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				vis_via = s.frame.apply(Vector2(INF, INF))
 			else:
 				vis_via = s.frame.apply((step_origin_pos + hp.point.coords) / 2.0)
+				if is_inf(vis_via.x) or is_inf(vis_via.y):
+					vis_via = s.frame.apply(Vector2(INF, INF))
 
 			# --- Zero-length skip ---
 			if vis_start == vis_end:
@@ -386,16 +387,19 @@ static func _add_escape_steps(path: TracedPath, vis_origin: Vector2, vis_dir: Ve
 		escape_end = t_inf
 		return_start = t_inf
 		if phys_dir != Vector2.ZERO:
-			via_fwd = frame.apply(phys_origin + phys_dir * 250.0)
-			via_ret = frame.apply(phys_origin - phys_dir * 250.0)
+			var pole_pos := frame.pole()
+			var t_to_pole := (pole_pos - phys_origin).dot(phys_dir)
+			var half_dist := absf(t_to_pole) / 2.0
+			via_fwd = frame.apply(phys_origin + phys_dir * half_dist)
+			via_ret = frame.apply(phys_origin - phys_dir * half_dist)
 		else:
 			via_fwd = t_inf
 			via_ret = t_inf
 	else:
-		escape_end = vis_origin + vis_dir * FAR_DISTANCE
-		return_start = vis_origin - vis_dir * FAR_DISTANCE
-		via_fwd = Vector2(INF, INF)
-		via_ret = Vector2(INF, INF)
+		escape_end = Vector2(INF, INF)
+		return_start = Vector2(INF, INF)
+		via_fwd = vis_dir
+		via_ret = -vis_dir
 	if vis_origin != escape_end:
 		path.steps.append(Step.new(vis_origin, escape_end, frame.id, null, shared_ray, frame, via_fwd, _arc))
 	if return_start != vis_origin:
