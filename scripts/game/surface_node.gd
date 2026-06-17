@@ -18,8 +18,11 @@ var _cached_left_outer: bool = true
 func setup(p_surface: Surface) -> void:
 	surface = p_surface
 	_cached_left_outer = _is_left_outer()
-	if surface.player_solid and surface.segment.is_line():
-		_add_collision_shape()
+	if surface.player_solid:
+		if surface.segment.is_line():
+			_add_collision_shape()
+		else:
+			_add_arc_collision_shape()
 	queue_redraw()
 
 func set_hover_side(side: int) -> void:
@@ -116,6 +119,31 @@ func _effect_color(config: SideConfig) -> Color:
 	if config == null or config.effect == null:
 		return PASSTHROUGH_COLOR
 	return config.effect.get_display_color()
+
+func _add_arc_collision_shape() -> void:
+	var p := _arc_params()
+	var ctr: Vector2 = p["center"]
+	var r: float = p["radius"]
+	var span: float = p["span"]
+	var seg_count := maxi(3, int(16.0 * span / TAU))
+
+	var sa := (surface.segment.start.coords - ctr).angle()
+	var ccw: bool = not p["clockwise"]
+	var body := StaticBody2D.new()
+	for i in seg_count:
+		var t0 := float(i) / seg_count
+		var t1 := float(i + 1) / seg_count
+		var a0 := sa + (t0 * span * (1.0 if ccw else -1.0))
+		var a1 := sa + (t1 * span * (1.0 if ccw else -1.0))
+		var p0 := ctr + Vector2(cos(a0), sin(a0)) * r
+		var p1 := ctr + Vector2(cos(a1), sin(a1)) * r
+		var collision := CollisionShape2D.new()
+		var shape := SegmentShape2D.new()
+		shape.a = p0
+		shape.b = p1
+		collision.shape = shape
+		body.add_child(collision)
+	add_child(body)
 
 func _add_collision_shape() -> void:
 	var body := StaticBody2D.new()

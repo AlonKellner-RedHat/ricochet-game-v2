@@ -3,6 +3,8 @@ extends Node2D
 const LINE_WIDTH := 2.0
 const DASH_ON := 10.0
 const DASH_OFF := 5.0
+const MAX_DASH_LEN := 4000.0
+var _draw_bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS.grow(50.0)
 
 enum DisplayMode { MERGED, PHYSICAL, PLANNED }
 const DISPLAY_MODE_NAMES := ["MERGED", "PHYSICAL", "PLANNED"]
@@ -103,8 +105,12 @@ func _draw_merged() -> void:
 		var ms: Tracer.Step = _merged_steps[i]
 		var col := StepTypes.color(ms.type)
 		col.a = 0.4
-		draw_circle(ms.start - global_position, 4.0, col)
-		draw_circle(ms.end - global_position, 4.0, col)
+		var s_local := ms.start - global_position
+		var e_local := ms.end - global_position
+		if _draw_bounds.has_point(s_local):
+			draw_circle(s_local, 4.0, col)
+		if _draw_bounds.has_point(e_local):
+			draw_circle(e_local, 4.0, col)
 
 func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: String) -> void:
 	if path == null or path.steps.size() == 0:
@@ -123,15 +129,19 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 		var step: Tracer.Step = path.steps[i]
 		var col := base_color
 		col.a = 0.4
-		draw_circle(step.start - global_position, 4.0, col)
-		draw_circle(step.end - global_position, 4.0, col)
-		# Step index label
+		var s_local := step.start - global_position
+		var e_local := step.end - global_position
+		if _draw_bounds.has_point(s_local):
+			draw_circle(s_local, 4.0, col)
+		if _draw_bounds.has_point(e_local):
+			draw_circle(e_local, 4.0, col)
 		var mid := ((step.start + step.end) / 2.0) - global_position + Vector2(0, -10)
-		var font := ThemeDB.fallback_font
-		var lbl := "%s%d" % [label_prefix, i]
-		if step.hit == null:
-			lbl += "*"
-		draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
+		if _draw_bounds.has_point(mid):
+			var font := ThemeDB.fallback_font
+			var lbl := "%s%d" % [label_prefix, i]
+			if step.hit == null:
+				lbl += "*"
+			draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
 
 func _draw_step(step: Tracer.Step, col: Color, dashed: bool) -> void:
 	if step.is_arc_step and VisualConverter.is_arc(step.start, step.via, step.end):
@@ -144,6 +154,11 @@ func _draw_step(step: Tracer.Step, col: Color, dashed: bool) -> void:
 	else:
 		var from := step.start - global_position
 		var to := step.end - global_position
+		var clipped := _clip_line_to_rect(from, to, _draw_bounds)
+		if clipped.is_empty():
+			return
+		from = clipped[0]
+		to = clipped[1]
 		if dashed:
 			_draw_dashed(from, to, col)
 		else:
@@ -169,7 +184,7 @@ func _draw_dashed_arc(center: Vector2, radius: float, start_angle: float, end_an
 
 func _draw_dashed(from: Vector2, to: Vector2, col: Color) -> void:
 	var dir := to - from
-	var total_len := dir.length()
+	var total_len := minf(dir.length(), MAX_DASH_LEN)
 	if total_len == 0.0:
 		return
 	var unit := dir / total_len
@@ -206,3 +221,25 @@ func get_planned_path():
 
 func get_typed_steps() -> Array:
 	return _merged_steps
+
+static func _clip_line_to_rect(from: Vector2, to: Vector2, rect: Rect2) -> Array:
+	var dx := to.x - from.x
+	var dy := to.y - from.y
+	var p := [-dx, dx, -dy, dy]
+	var q := [from.x - rect.position.x, rect.end.x - from.x,
+			  from.y - rect.position.y, rect.end.y - from.y]
+	var t0 := 0.0
+	var t1 := 1.0
+	for i in 4:
+		if p[i] == 0.0:
+			if q[i] < 0.0:
+				return []
+		elif p[i] < 0.0:
+			t0 = maxf(t0, q[i] / p[i])
+		else:
+			t1 = minf(t1, q[i] / p[i])
+	if t0 > t1:
+		return []
+	var c0 := from + Vector2(dx, dy) * t0
+	var c1 := from + Vector2(dx, dy) * t1
+	return [c0, c1]

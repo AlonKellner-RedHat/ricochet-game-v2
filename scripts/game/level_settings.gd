@@ -9,7 +9,9 @@ extends Node2D
 @export var block_lines: Array[Vector4] = []
 @export var mirror_lines: Array[Vector4] = []
 @export var mirror_right_lines: Array[Vector4] = []
+@export var mirror_both_lines: Array[Vector4] = []
 @export var inversion_left_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 
 var surfaces: Array[Surface] = []
 
@@ -32,14 +34,27 @@ func _ready() -> void:
 		var reflection := ReflectionEffect.new(seg.get_carrier())
 		var surf := Surface.new(seg, SideConfig.new(null, false), SideConfig.new(reflection, true), false, false)
 		_add_surface(surf, "MirrorR")
+	for line_def in mirror_both_lines:
+		var seg := _seg_from_v4(line_def)
+		var reflection := ReflectionEffect.new(seg.get_carrier())
+		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
+		_add_surface(surf, "MirrorB")
 	for i in range(0, inversion_left_arcs.size(), 6):
 		var seg := Segment.from_coords(
 			Vector2(inversion_left_arcs[i], inversion_left_arcs[i + 1]),
 			Vector2(inversion_left_arcs[i + 2], inversion_left_arcs[i + 3]),
 			Vector2(inversion_left_arcs[i + 4], inversion_left_arcs[i + 5]))
 		var inversion := CircleInversionEffect.new(seg.get_carrier())
-		var surf := Surface.new(seg, SideConfig.new(inversion, true), SideConfig.new(null, false), false, false)
+		var surf := Surface.new(seg, SideConfig.new(inversion, true), SideConfig.new(null, false), false, true)
 		_add_surface(surf, "Inversion")
+	for i in range(0, reflective_arcs.size(), 6):
+		var seg := Segment.from_coords(
+			Vector2(reflective_arcs[i], reflective_arcs[i + 1]),
+			Vector2(reflective_arcs[i + 2], reflective_arcs[i + 3]),
+			Vector2(reflective_arcs[i + 4], reflective_arcs[i + 5]))
+		var reflection := ReflectionEffect.new(seg.get_carrier())
+		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
+		_add_surface(surf, "ReflArc")
 	var screen_bounds: Array[Vector4] = [
 		Vector4(0, 0, 1920, 0),
 		Vector4(1920, 0, 1920, 1080),

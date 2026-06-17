@@ -56,7 +56,7 @@ class TraceState:
 
 enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
 
-const MAX_HITS := 256
+const MAX_HITS := 32
 const FAR_DISTANCE := 1e6
 
 static func trace_ray(initial_ray: Ray, surfaces: Array, game_state: GameState) -> TracedPath:
@@ -120,8 +120,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var vis_via: Vector2
 			if _start_inf or _end_inf:
 				vis_via = Vector2(INF, INF)
-			elif _arc:
-				vis_via = _arc_via(s.frame, step_origin_pos, hp.point.coords)
+			elif is_wrap:
+				vis_via = s.frame.apply(Vector2(INF, INF))
 			else:
 				vis_via = s.frame.apply((step_origin_pos + hp.point.coords) / 2.0)
 
@@ -150,10 +150,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			# --- Origin: escape to bounds or block ---
 			if is_origin:
 				if has_wrapped:
-					if is_wrap and not step_is_arc:
-						s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, null, s.shared_ray, s.frame, Vector2(INF, INF), false))
-					else:
-						s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, null, s.shared_ray, s.frame, vis_via, step_is_arc))
+					s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, null, s.shared_ray, s.frame, vis_via, step_is_arc))
 				elif not _start_inf:
 					var p_dir2 := s.ray.direction.to_vector().normalized()
 					var vis_shifted := s.frame.apply(step_origin_pos + p_dir2)
@@ -164,10 +161,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				break
 
 			# --- Generate visual step ---
-			if is_wrap and not step_is_arc:
-				s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, step_hit, s.shared_ray, s.frame, Vector2(INF, INF), false))
-			else:
-				s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, step_hit, s.shared_ray, s.frame, vis_via, step_is_arc))
+			s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, step_hit, s.shared_ray, s.frame, vis_via, step_is_arc))
 
 			# --- Cursor check ---
 			if is_cursor:
@@ -292,7 +286,7 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, origin_on_seg, origin_carrier)
 	if origin_on_seg != null:
 		carrier_hits = carrier_hits.filter(func(h: Intersection.HitRecord) -> bool:
-			return h.segment != origin_on_seg)
+			return h.segment != origin_on_seg or h.t != 0.0)
 	var origin_hp := Intersection.HitRecord.new(0.0, s.ray.origin.coords, null, Side.Value.LEFT, false)
 
 	var cursor_reachable := not s.cursor_injected and s.plan_index >= plan_entries.size() and s.plan_matched
@@ -326,17 +320,14 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 		s.norm_surfaces = cached_norm.surfaces
 		s.norm_to_surface = cached_norm.mapping
 	elif s.norm_surfaces.size() > 0 and s.transform_stack.size() > 0:
-		var last_inv_mobius: MobiusTransform = s.transform_stack.back().inverse.mobius
+		var last_tracked_inverse: TrackedTransform = s.transform_stack.back().inverse
 		var new_norms: Array = []
 		var new_mapping: Dictionary = {}
 		for ns in s.norm_surfaces:
 			var orig_surf: Surface = s.norm_to_surface.get(ns.segment)
 			if orig_surf == null:
 				continue
-			var new_seg := Segment.from_coords(
-				last_inv_mobius.apply(ns.segment.start.coords),
-				last_inv_mobius.apply(ns.segment.end.coords),
-				last_inv_mobius.apply(ns.segment.via.coords))
+			var new_seg: Segment = ns.segment.transformed(last_tracked_inverse)
 			var state := GameState.new()
 			var left := _normalize_config(orig_surf.active_side_config(Side.Value.LEFT, state), new_seg)
 			var right := _normalize_config(orig_surf.active_side_config(Side.Value.RIGHT, state), new_seg)
@@ -395,8 +386,8 @@ static func _add_escape_steps(path: TracedPath, vis_origin: Vector2, vis_dir: Ve
 		escape_end = t_inf
 		return_start = t_inf
 		if phys_dir != Vector2.ZERO:
-			via_fwd = _arc_via(frame, phys_origin, phys_origin + phys_dir * 500.0)
-			via_ret = _arc_via(frame, phys_origin - phys_dir * 500.0, phys_origin)
+			via_fwd = frame.apply(phys_origin + phys_dir * 250.0)
+			via_ret = frame.apply(phys_origin - phys_dir * 250.0)
 		else:
 			via_fwd = t_inf
 			via_ret = t_inf
@@ -410,19 +401,3 @@ static func _add_escape_steps(path: TracedPath, vis_origin: Vector2, vis_dir: Ve
 	if return_start != vis_origin:
 		path.steps.append(Step.new(return_start, vis_origin, frame.id, null, shared_ray, frame, via_ret, _arc))
 
-
-static func _arc_via(frame: MobiusTransform, origin: Vector2, target: Vector2) -> Vector2:
-	var seg := target - origin
-	var best_t := 0.5
-	var best_den := 0.0
-	for t_cand: float in [0.25, 0.5, 0.75]:
-		var p: Vector2 = origin + seg * t_cand
-		var z: Vector2 = p
-		if frame.conjugating:
-			z = MobiusTransform.cconj(z)
-		var den := MobiusTransform.cmul(frame.c, z) + frame.d
-		var den_mag := den.length_squared()
-		if den_mag > best_den:
-			best_den = den_mag
-			best_t = t_cand
-	return frame.apply(origin + seg * best_t)
