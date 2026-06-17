@@ -246,7 +246,10 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 
 	if do_apply:
 		var tracked: TrackedTransform = effect_config.effect.get_tracked_transform()
-		s.transform_stack.append(tracked)
+		if not s.transform_stack.is_empty() and s.transform_stack.back().is_inverse_of(tracked):
+			s.transform_stack.pop_back()
+		else:
+			s.transform_stack.append(tracked)
 		var new_origin := tracked.inverse.mobius.apply(hp.point.coords)
 		s.ray = Ray.from_coords(new_origin, s.ray.direction)
 		s.origin_on_surface = orig_surf
