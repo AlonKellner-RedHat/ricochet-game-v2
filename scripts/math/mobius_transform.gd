@@ -30,13 +30,21 @@ static func identity() -> MobiusTransform:
 		false, IDENTITY_ID)
 
 func apply(point: Vector2) -> Vector2:
-	var z := Vector2(point.x, point.y)
+	if is_inf(point.x) or is_inf(point.y):
+		if c == Vector2.ZERO:
+			return Vector2(INF, INF)
+		return cdiv(a, c)
+	var z := point
 	if conjugating:
 		z = cconj(z)
 	var num := cmul(a, z) + b
 	var den := cmul(c, z) + d
-	var w := cdiv(num, den)
-	return Vector2(w.x, w.y)
+	if den == Vector2.ZERO:
+		return Vector2(INF, INF)
+	var result := cdiv(num, den)
+	if is_nan(result.x) or is_nan(result.y):
+		return Vector2(INF, INF)
+	return result
 
 func compose(other: MobiusTransform) -> MobiusTransform:
 	var m2_a := other.a
@@ -55,6 +63,14 @@ func compose(other: MobiusTransform) -> MobiusTransform:
 	var new_c := cmul(c, m2_a) + cmul(d, m2_c)
 	var new_d := cmul(c, m2_b) + cmul(d, m2_d)
 
+	var max_mag := maxf(maxf(new_a.length(), new_b.length()), maxf(new_c.length(), new_d.length()))
+	if max_mag > 1e6:
+		var inv := 1.0 / max_mag
+		new_a *= inv
+		new_b *= inv
+		new_c *= inv
+		new_d *= inv
+
 	var new_conj: bool
 	if conjugating:
 		new_conj = not other.conjugating
@@ -64,12 +80,17 @@ func compose(other: MobiusTransform) -> MobiusTransform:
 	return MobiusTransform.new(new_a, new_b, new_c, new_d, new_conj)
 
 func invert() -> MobiusTransform:
+	if conjugating:
+		return MobiusTransform.new(
+			Vector2(-d.x, d.y), Vector2(b.x, -b.y),
+			Vector2(c.x, -c.y), Vector2(-a.x, a.y),
+			true)
 	var det := cmul(a, d) - cmul(b, c)
 	var inv_a := cdiv(d, det)
 	var inv_b := cdiv(-b, det)
 	var inv_c := cdiv(-c, det)
 	var inv_d := cdiv(a, det)
-	return MobiusTransform.new(inv_a, inv_b, inv_c, inv_d, conjugating)
+	return MobiusTransform.new(inv_a, inv_b, inv_c, inv_d, false)
 
 static func cmul(v1: Vector2, v2: Vector2) -> Vector2:
 	return Vector2(v1.x * v2.x - v1.y * v2.y, v1.x * v2.y + v1.y * v2.x)
@@ -79,6 +100,8 @@ static func cconj(v: Vector2) -> Vector2:
 
 static func cdiv(v1: Vector2, v2: Vector2) -> Vector2:
 	var denom: float = v2.x * v2.x + v2.y * v2.y
+	if denom == 0.0:
+		return Vector2(INF, INF)
 	return Vector2((v1.x * v2.x + v1.y * v2.y) / denom, (v1.y * v2.x - v1.x * v2.y) / denom)
 
 static func cmod2(v: Vector2) -> float:
