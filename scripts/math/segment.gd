@@ -4,6 +4,7 @@ extends RefCounted
 var start: Point
 var end: Point
 var via: Point
+var full: bool = false
 
 var _carrier: GeneralizedCircle = null
 var _provenance_carrier: GeneralizedCircle = null
@@ -16,6 +17,29 @@ func _init(p_start: Point, p_end: Point, p_via: Point) -> void:
 static func from_coords(s: Vector2, e: Vector2, v: Vector2) -> Segment:
 	return Segment.new(Point.at(s), Point.at(e), Point.at(v))
 
+static func full_from_carrier(carrier: GeneralizedCircle) -> Segment:
+	var seg: Segment
+	if carrier.is_line():
+		var p1: Vector2
+		var p2: Vector2
+		if absf(carrier.c) > absf(carrier.b):
+			p1 = Vector2(0.0, -carrier.d / carrier.c)
+			p2 = Vector2(1.0, -(carrier.d + carrier.b) / carrier.c)
+		else:
+			p1 = Vector2(-carrier.d / carrier.b, 0.0)
+			p2 = Vector2(-(carrier.d + carrier.c) / carrier.b, 1.0)
+		seg = Segment.new(Point.at(p1), Point.at(p2), Point.at(Vector2(INF, INF)))
+	else:
+		var ctr := carrier.center()
+		var r := carrier.radius()
+		var p1 := ctr + Vector2(r, 0)
+		var p2 := ctr + Vector2(-0.5 * r, 0.866 * r)
+		var p3 := ctr + Vector2(-0.5 * r, -0.866 * r)
+		seg = Segment.new(Point.at(p1), Point.at(p3), Point.at(p2))
+	seg.full = true
+	seg._carrier = carrier
+	return seg
+
 func transformed(t: TrackedTransform) -> Segment:
 	if t.carrier != null and t.inverse == t and _carrier != null and t.carrier == _carrier:
 		return self
@@ -23,6 +47,7 @@ func transformed(t: TrackedTransform) -> Segment:
 	var new_e := end.transformed(t)
 	var new_v := via.transformed(t)
 	var seg := Segment.new(new_s, new_e, new_v)
+	seg.full = full
 	var source_carrier := _carrier if _carrier != null else _provenance_carrier
 	if source_carrier != null and new_s.transforms.is_empty() and new_e.transforms.is_empty() and new_v.transforms.is_empty():
 		seg._carrier = source_carrier
@@ -49,13 +74,11 @@ func determine_side(point: Vector2) -> Side.Value:
 		return Side.Value.RIGHT if f_val > 0.0 else Side.Value.LEFT
 
 func _compute_winding() -> float:
-	var w := (via.coords - start.coords).cross(end.coords - start.coords)
-	if get_carrier().is_line():
-		var carrier := get_carrier()
-		var traversal := end.coords - start.coords
-		var normal := Vector2(carrier.b, carrier.c)
-		w = -traversal.cross(normal)
-	return w
+	var carrier := get_carrier()
+	var traversal := end.coords - start.coords
+	var grad := Vector2(2.0 * carrier.a * via.coords.x + carrier.b,
+						2.0 * carrier.a * via.coords.y + carrier.c)
+	return -traversal.cross(grad)
 
 static func _to_homogeneous_row(p: Vector2) -> Array[float]:
 	if is_inf(p.x) or is_inf(p.y):

@@ -34,6 +34,8 @@ static func find_all_hits(ray: Ray, segments: Array, origin_on_seg: Segment = nu
 	return results
 
 static func _detect_endpoints_on_ray(ray: Ray, segment: Segment) -> Dictionary:
+	if segment.full:
+		return {}
 	var result: Dictionary = {}
 	var dir := ray.direction.to_vector()
 	var ray_defining: Array[Vector2] = [ray.origin.coords, ray.direction.start.coords, ray.direction.end.coords]
@@ -150,6 +152,8 @@ static func intersect_line_with_carrier(ray: Ray, carrier: GeneralizedCircle) ->
 
 # Cross-ratio containment: P is on arc S→V→E iff Re(cross_ratio(S,P;E,V)) >= 0
 static func is_on_segment(point: Vector2, segment: Segment) -> bool:
+	if segment.full:
+		return true
 	var zP := Vector2(point.x, point.y)
 	var wP := 1.0
 	var zS := Vector2(segment.start.coords.x, segment.start.coords.y)
@@ -235,6 +239,8 @@ static func _hdet(zA: Vector2, wA: float, zB: Vector2, wB: float) -> Vector2:
 	return Vector2(zA.x * wB - zB.x * wA, zA.y * wB - zB.y * wA)
 
 static func at_which_endpoint(point: Vector2, segment: Segment) -> int:
+	if segment.full:
+		return 0
 	if point == segment.start.coords:
 		return 1
 	if point == segment.end.coords:

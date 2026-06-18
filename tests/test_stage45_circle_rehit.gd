@@ -6,12 +6,9 @@ func before_each() -> void:
 	H.reset_counters()
 
 func _full_circle_mirror(center: Vector2, r: float) -> Surface:
-	# Gap at top of circle, away from horizontal ray intersections at left/right
-	var seg := Segment.from_coords(
-		Vector2(center.x + 0.01, center.y - r),
-		Vector2(center.x - 0.01, center.y - r),
-		Vector2(center.x, center.y + r))
-	var refl := ReflectionEffect.new(seg.get_carrier())
+	var carrier := GeneralizedCircle.from_circle(center, r)
+	var seg := Segment.full_from_carrier(carrier)
+	var refl := ReflectionEffect.new(carrier)
 	var config := SideConfig.new(refl, true)
 	return Surface.new(seg, config, config, false, false)
 

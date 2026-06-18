@@ -60,13 +60,29 @@ func _draw() -> void:
 		var left_alpha := 1.0 if left_config.interactive else 0.5
 		var right_alpha := 1.0 if right_config.interactive else 0.5
 		if is_arc:
-			var p := _arc_params()
-			var outer_r: float = p["radius"] + SIDE_OFFSET
-			var inner_r: float = p["radius"] - SIDE_OFFSET
+			var ctr: Vector2
+			var r: float
+			var sa: float
+			var ea: float
+			var pc: int
+			if surface.segment.full:
+				var carrier := surface.segment.get_carrier()
+				ctr = carrier.center()
+				r = carrier.radius()
+				sa = 0.0
+				ea = TAU
+				pc = VisualConverter.POINTS_PER_FULL_CIRCLE
+			else:
+				var p := _arc_params()
+				ctr = p["center"]
+				r = p["radius"]
+				sa = p["start_angle"]
+				ea = p["end_angle"]
+				pc = p["point_count"]
 			var outer_color := Color(left_color, left_alpha) if _cached_left_outer else Color(right_color, right_alpha)
 			var inner_color := Color(right_color, right_alpha) if _cached_left_outer else Color(left_color, left_alpha)
-			draw_arc(p["center"], outer_r, p["start_angle"], p["end_angle"], p["point_count"], outer_color, LINE_WIDTH * 0.5)
-			draw_arc(p["center"], inner_r, p["start_angle"], p["end_angle"], p["point_count"], inner_color, LINE_WIDTH * 0.5)
+			draw_arc(ctr, r + SIDE_OFFSET, sa, ea, pc, outer_color, LINE_WIDTH * 0.5)
+			draw_arc(ctr, r - SIDE_OFFSET, sa, ea, pc, inner_color, LINE_WIDTH * 0.5)
 		else:
 			var left_offset := _line_side_offset(Side.Value.LEFT, SIDE_OFFSET)
 			var right_offset := _line_side_offset(Side.Value.RIGHT, SIDE_OFFSET)
@@ -75,10 +91,28 @@ func _draw() -> void:
 
 	if _hover_side >= 0:
 		if is_arc:
-			var p := _arc_params()
+			var h_ctr: Vector2
+			var h_r: float
+			var h_sa: float
+			var h_ea: float
+			var h_pc: int
+			if surface.segment.full:
+				var carrier := surface.segment.get_carrier()
+				h_ctr = carrier.center()
+				h_r = carrier.radius()
+				h_sa = 0.0
+				h_ea = TAU
+				h_pc = VisualConverter.POINTS_PER_FULL_CIRCLE
+			else:
+				var p := _arc_params()
+				h_ctr = p["center"]
+				h_r = p["radius"]
+				h_sa = p["start_angle"]
+				h_ea = p["end_angle"]
+				h_pc = p["point_count"]
 			var is_outer := (_hover_side == Side.Value.LEFT) == _cached_left_outer
-			var hover_r: float = p["radius"] + (SIDE_OFFSET + 2.0) * (1.0 if is_outer else -1.0)
-			draw_arc(p["center"], hover_r, p["start_angle"], p["end_angle"], p["point_count"], HOVER_COLOR, HOVER_WIDTH)
+			var hover_r: float = h_r + (SIDE_OFFSET + 2.0) * (1.0 if is_outer else -1.0)
+			draw_arc(h_ctr, hover_r, h_sa, h_ea, h_pc, HOVER_COLOR, HOVER_WIDTH)
 		else:
 			var hover_offset := _line_side_offset(_hover_side, SIDE_OFFSET + 2.0)
 			draw_line(surface.segment.start.coords + hover_offset, surface.segment.end.coords + hover_offset, HOVER_COLOR, HOVER_WIDTH)
@@ -93,6 +127,10 @@ func _draw() -> void:
 		draw_string(ThemeDB.fallback_font, mid + Vector2(-5, -10), label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
 
 func _draw_surface_arc(color: Color, width: float) -> void:
+	if surface.segment.full:
+		var carrier := surface.segment.get_carrier()
+		draw_arc(carrier.center(), carrier.radius(), 0, TAU, VisualConverter.POINTS_PER_FULL_CIRCLE, color, width)
+		return
 	var p := _arc_params()
 	draw_arc(p["center"], p["radius"], p["start_angle"], p["end_angle"], p["point_count"], color, width)
 
@@ -121,14 +159,28 @@ func _effect_color(config: SideConfig) -> Color:
 	return config.effect.get_display_color()
 
 func _add_arc_collision_shape() -> void:
-	var p := _arc_params()
-	var ctr: Vector2 = p["center"]
-	var r: float = p["radius"]
-	var span: float = p["span"]
-	var seg_count := maxi(3, int(16.0 * span / TAU))
-
-	var sa := (surface.segment.start.coords - ctr).angle()
-	var ccw: bool = not p["clockwise"]
+	var ctr: Vector2
+	var r: float
+	var span: float
+	var seg_count: int
+	var sa: float
+	var ccw: bool
+	if surface.segment.full:
+		var carrier := surface.segment.get_carrier()
+		ctr = carrier.center()
+		r = carrier.radius()
+		span = TAU
+		seg_count = 16
+		sa = 0.0
+		ccw = true
+	else:
+		var p := _arc_params()
+		ctr = p["center"]
+		r = p["radius"]
+		span = p["span"]
+		seg_count = maxi(3, int(16.0 * span / TAU))
+		sa = (surface.segment.start.coords - ctr).angle()
+		ccw = not p["clockwise"]
 	var body := StaticBody2D.new()
 	for i in seg_count:
 		var t0 := float(i) / seg_count

@@ -48,6 +48,7 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_PARAMETER_MONOTONICITY(player_pos, cursor_pos))
 	violations.append_array(check_POST_INVERSION_ARC(player_pos, cursor_pos))
 	violations.append_array(check_VIA_ON_ARC(player_pos, cursor_pos))
+	violations.append_array(check_VISUAL_ON_PHYSICAL_CARRIER(player_pos, cursor_pos))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -584,6 +585,50 @@ func check_VIA_ON_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]
 				violations.append("VIA_ON_ARC: %s step %d via not on drawn arc (diff=%.3f, span=%.3f)" %
 					[trace_name, i, diff, span])
 	return violations
+
+func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var surfaces: Array = []
+	var parent := _renderer.get_parent()
+	if parent and "surfaces" in parent:
+		surfaces = parent.surfaces
+	if surfaces.size() == 0:
+		return violations
+	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if step.hit == null or step.hit.segment == null:
+				continue
+			var end_pos := step.end
+			if is_inf(end_pos.x) or is_inf(end_pos.y):
+				continue
+			if _is_at_bounds(end_pos, bounds):
+				continue
+			var on_carrier := false
+			for surf in surfaces:
+				var s: Surface = surf
+				if _geometric_carrier_dist(end_pos, s.segment.get_carrier()) < 5.0:
+					on_carrier = true
+					break
+			if not on_carrier:
+				violations.append("VISUAL-ON-CARRIER: %s step %d visual endpoint %s not on any physical carrier" % [trace_name, i, end_pos])
+	return violations
+
+static func _geometric_carrier_dist(point: Vector2, carrier: GeneralizedCircle) -> float:
+	if carrier.is_line():
+		var denom := sqrt(carrier.b * carrier.b + carrier.c * carrier.c)
+		if denom < 1e-10:
+			return INF
+		return absf(carrier.b * point.x + carrier.c * point.y + carrier.d) / denom
+	else:
+		var ctr := carrier.center()
+		var r := carrier.radius()
+		return absf(point.distance_to(ctr) - r)
 
 func _segment_intersection(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2) -> Dictionary:
 	var d1 := a2 - a1

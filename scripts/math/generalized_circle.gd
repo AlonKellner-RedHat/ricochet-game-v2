@@ -23,6 +23,9 @@ func radius() -> float:
 	assert(a != 0.0, "radius() called on a line (a == 0)")
 	return sqrt((b * b + c * c - 4.0 * a * d) / (4.0 * a * a))
 
+func same_circle(other: GeneralizedCircle) -> bool:
+	return self == other or (a == other.a and b == other.b and c == other.c and d == other.d)
+
 func evaluate(point: Vector2) -> float:
 	return a * (point.x * point.x + point.y * point.y) + b * point.x + c * point.y + d
 

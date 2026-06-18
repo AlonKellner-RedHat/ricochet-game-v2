@@ -10,7 +10,7 @@ script = ExtResource("2")
 gravity = Vector2(0, 0)
 room_rect = Rect2(160, 90, 1600, 900)
 build_room = true
-reflective_arcs = PackedFloat64Array(1160, 540.01, 1160, 539.99, 760, 540)
+full_reflective_arcs = PackedFloat64Array(960, 540, 200)
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0

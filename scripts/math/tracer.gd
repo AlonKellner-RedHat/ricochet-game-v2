@@ -53,6 +53,7 @@ class TraceState:
 	var hit_count: int = 0
 	var cursor_hp: Intersection.HitRecord
 	var origin_on_surface: Surface = null
+	var transform_sources: Array = []
 
 enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
 
@@ -257,10 +258,18 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 
 	if do_apply:
 		var tracked: TrackedTransform = effect_config.effect.get_tracked_transform()
-		if not s.transform_stack.is_empty() and s.transform_stack.back().is_inverse_of(tracked):
+		var should_pop := false
+		if not s.transform_stack.is_empty():
+			if s.transform_stack.back().is_inverse_of(tracked):
+				should_pop = true
+			elif tracked.inverse == tracked and s.transform_stack.back().inverse == s.transform_stack.back() and not s.transform_sources.is_empty() and s.transform_sources.back() == orig_surf:
+				should_pop = true
+		if should_pop:
 			s.transform_stack.pop_back()
+			s.transform_sources.pop_back()
 		else:
 			s.transform_stack.append(tracked)
+			s.transform_sources.append(orig_surf)
 		var new_origin := tracked.inverse.mobius.apply(hp.point.coords)
 		s.ray = Ray.from_coords(new_origin, s.ray.direction)
 		s.origin_on_surface = orig_surf
@@ -280,8 +289,8 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 		for ns in s.norm_surfaces:
 			if s.norm_to_surface.get(ns.segment) == s.origin_on_surface:
 				origin_on_seg = ns.segment
+				origin_carrier = ns.segment.get_carrier()
 				break
-		origin_carrier = s.origin_on_surface.segment.get_carrier()
 		s.origin_on_surface = null
 
 	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, origin_on_seg, origin_carrier)
@@ -321,14 +330,18 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 		s.norm_surfaces = cached_norm.surfaces
 		s.norm_to_surface = cached_norm.mapping
 	elif s.norm_surfaces.size() > 0 and s.transform_stack.size() > 0:
-		var last_tracked_inverse: TrackedTransform = s.transform_stack.back().inverse
+		var last_mobius: MobiusTransform = s.transform_stack.back().inverse.mobius
 		var new_norms: Array = []
 		var new_mapping: Dictionary = {}
 		for ns in s.norm_surfaces:
 			var orig_surf: Surface = s.norm_to_surface.get(ns.segment)
 			if orig_surf == null:
 				continue
-			var new_seg: Segment = ns.segment.transformed(last_tracked_inverse)
+			var new_seg := Segment.from_coords(
+				last_mobius.apply(ns.segment.start.coords),
+				last_mobius.apply(ns.segment.end.coords),
+				last_mobius.apply(ns.segment.via.coords))
+			new_seg.full = ns.segment.full
 			var state := GameState.new()
 			var left := _normalize_config(orig_surf.active_side_config(Side.Value.LEFT, state), new_seg)
 			var right := _normalize_config(orig_surf.active_side_config(Side.Value.RIGHT, state), new_seg)

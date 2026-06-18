@@ -12,6 +12,7 @@ extends Node2D
 @export var mirror_both_lines: Array[Vector4] = []
 @export var inversion_left_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var reflective_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var full_reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 
 var surfaces: Array[Surface] = []
 
@@ -55,6 +56,14 @@ func _ready() -> void:
 		var reflection := ReflectionEffect.new(seg.get_carrier())
 		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
 		_add_surface(surf, "ReflArc")
+	for i in range(0, full_reflective_arcs.size(), 3):
+		var center := Vector2(full_reflective_arcs[i], full_reflective_arcs[i + 1])
+		var r := full_reflective_arcs[i + 2]
+		var carrier := GeneralizedCircle.from_circle(center, r)
+		var seg := Segment.full_from_carrier(carrier)
+		var reflection := ReflectionEffect.new(carrier)
+		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
+		_add_surface(surf, "FullReflArc")
 	var screen_bounds: Array[Vector4] = [
 		Vector4(0, 0, 1920, 0),
 		Vector4(1920, 0, 1920, 1080),
