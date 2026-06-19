@@ -49,6 +49,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_POST_INVERSION_ARC(player_pos, cursor_pos))
 	violations.append_array(check_VIA_ON_ARC(player_pos, cursor_pos))
 	violations.append_array(check_VISUAL_ON_PHYSICAL_CARRIER(player_pos, cursor_pos))
+	if plan_applied:
+		violations.append_array(check_DIRECTION_ONLY(player_pos, cursor_pos, plan_entries))
 	return violations
 
 func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -618,6 +620,82 @@ func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) 
 			if not on_carrier:
 				violations.append("VISUAL-ON-CARRIER: %s step %d visual endpoint %s not on any physical carrier" % [trace_name, i, end_pos])
 	return violations
+
+func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array) -> Array[String]:
+	var violations: Array[String] = []
+	if plan_entries.size() == 0:
+		return violations
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+
+	var surfaces: Array = []
+	var parent := _renderer.get_parent()
+	if parent and "surfaces" in parent:
+		surfaces = parent.surfaces
+
+	var cache := TransformCache.new()
+	var aim_dir := Planner.compute_aim_direction(
+		player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
+	if aim_dir.is_zero_length():
+		return violations
+
+	var aim_point = Planner._compute_image(cursor_pos, plan_entries, surfaces, GameState.new())
+	if aim_point == null:
+		return violations
+	if is_nan(aim_point.x) or is_nan(aim_point.y) or is_inf(aim_point.x) or is_inf(aim_point.y):
+		return violations
+	if aim_point.distance_to(player_pos) < 0.001:
+		return violations
+
+	var trace_with_plan := Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
+		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
+		plan_entries, null, cursor_pos)
+
+	var trace_no_plan := Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
+		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
+		[], null, aim_point)
+
+	var orig_geo := _extract_trace_geometry(trace_with_plan)
+	var ref_geo := _extract_trace_geometry(trace_no_plan)
+
+	if orig_geo.size() == 0 and ref_geo.size() == 0:
+		return violations
+
+	if orig_geo.size() != ref_geo.size():
+		violations.append("DIRECTION-ONLY: segment count mismatch: with_plan=%d no_plan=%d" % [orig_geo.size(), ref_geo.size()])
+		return violations
+
+	var tol := 1.0
+	for i in orig_geo.size():
+		var o: Dictionary = orig_geo[i]
+		var r: Dictionary = ref_geo[i]
+		var start_dist: float = o.start.distance_to(r.start)
+		var end_dist: float = o.end.distance_to(r.end)
+		if start_dist > tol:
+			violations.append("DIRECTION-ONLY: segment %d start mismatch: orig=%s ref=%s dist=%.2f" % [i, o.start, r.start, start_dist])
+		if end_dist > tol:
+			violations.append("DIRECTION-ONLY: segment %d end mismatch: orig=%s ref=%s dist=%.2f" % [i, o.end, r.end, end_dist])
+
+	return violations
+
+static func _extract_trace_geometry(path: Tracer.TracedPath) -> Array:
+	var segments: Array = []
+	if path == null or path.steps.size() == 0:
+		return segments
+	var current_start: Vector2 = path.steps[0].start
+	var current_end: Vector2 = path.steps[0].end
+	var current_fid: int = path.steps[0].frame_id
+	for i in range(1, path.steps.size()):
+		var step: Tracer.Step = path.steps[i]
+		if step.frame_id == current_fid:
+			current_end = step.end
+		else:
+			segments.append({"start": current_start, "end": current_end})
+			current_start = step.start
+			current_end = step.end
+			current_fid = step.frame_id
+	segments.append({"start": current_start, "end": current_end})
+	return segments
 
 static func _geometric_carrier_dist(point: Vector2, carrier: GeneralizedCircle) -> float:
 	if carrier.is_line():
