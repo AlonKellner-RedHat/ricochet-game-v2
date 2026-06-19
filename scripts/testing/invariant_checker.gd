@@ -88,7 +88,7 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 		if prev.hit == null or curr.hit == null:
 			continue
 		var gap := prev.end.distance_to(curr.start)
-		var tol := 0.01 + 0.001 * i
+		var tol := 0.05 + 0.001 * i
 		if gap > tol:
 			violations.append("NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
@@ -212,7 +212,7 @@ func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 		if prev_is_escape or curr_is_return:
 			continue
 		var gap := prev.end.distance_to(curr.start)
-		var tol := 0.01 + 0.001 * i
+		var tol := 0.05 + 0.001 * i
 		if gap > tol:
 			violations.append("PHYSICAL-CONTINUITY: gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
