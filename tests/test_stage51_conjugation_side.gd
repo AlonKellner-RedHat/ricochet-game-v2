@@ -416,7 +416,7 @@ func test_trace_continues_past_arc_mode() -> void:
 	assert_true(arc_frame_exits,
 		"Ray should EXIT arc mode — trace should not stop prematurely in arc mode")
 
-func test_incremental_norm_round_trip() -> void:
+func test_norm_round_trip_accuracy() -> void:
 	var scene := _build_scene()
 	var surfaces: Array = scene.surfaces
 	var inv_surf: Surface = scene.inversion
@@ -425,13 +425,10 @@ func test_incremental_norm_round_trip() -> void:
 	var mirror_tracked := (mirror_bottom.active_side_config(
 		Side.Value.LEFT, GameState.new()).effect as TransformativeEffect).get_tracked_transform()
 
-	# Step 1: Build CONJ norms via _build_normalized (single transform — correct)
 	var conj_n2s := {}
 	var conj_norms := Tracer._build_normalized(
 		surfaces, mirror_tracked.mobius, conj_n2s, null, [mirror_tracked])
 
-	# Step 2: Get the normalized inversion effect's tracked transform
-	# (this is what gets pushed onto the transform stack when the ray hits the arc)
 	var conj_inv_surf: Surface = null
 	for ns in conj_norms:
 		if conj_n2s.get(ns.segment) == inv_surf:
@@ -441,51 +438,17 @@ func test_incremental_norm_round_trip() -> void:
 	var norm_inv_tracked := (conj_inv_surf.active_side_config(
 		Side.Value.LEFT, GameState.new()).effect as TransformativeEffect).get_tracked_transform()
 
-	# Step 3: Build ARC frame
 	var arc_stack := [mirror_tracked, norm_inv_tracked]
 	var arc_frame := MobiusTransform.identity()
 	arc_frame = arc_frame.compose(mirror_tracked.mobius)
 	arc_frame = arc_frame.compose(norm_inv_tracked.mobius)
-	# Step 4a: Build ARC norms via _build_normalized (correct reference)
+
 	var ref_n2s := {}
 	var ref_norms := Tracer._build_normalized(
 		surfaces, arc_frame, ref_n2s, null, arc_stack)
 
-	# Step 4b: Build ARC norms via incremental path (segment.transformed — buggy)
-	var inc_norms: Array = []
-	var inc_n2s: Dictionary = {}
-	for ns in conj_norms:
-		var ns_surf: Surface = ns
-		var orig: Surface = conj_n2s.get(ns_surf.segment)
-		if orig == null:
-			continue
-		var new_seg: Segment = ns_surf.segment.transformed(norm_inv_tracked)
-		inc_n2s[new_seg] = orig
-		inc_norms.append(new_seg)
-
-	# Step 4c: Build ARC norms via direct Möbius (proposed fix)
-	var fix_norms: Array = []
-	var fix_n2s: Dictionary = {}
-	var m: MobiusTransform = norm_inv_tracked.mobius
-	for ns in conj_norms:
-		var ns_surf: Surface = ns
-		var orig: Surface = conj_n2s.get(ns_surf.segment)
-		if orig == null:
-			continue
-		var new_seg := Segment.from_coords(
-			m.apply(ns_surf.segment.start.coords),
-			m.apply(ns_surf.segment.end.coords),
-			m.apply(ns_surf.segment.via.coords))
-		new_seg.full = ns_surf.segment.full
-		fix_n2s[new_seg] = orig
-		fix_norms.append(new_seg)
-
-	# Step 5: Check round-trip invariant for each path
-	# For each normalized start point: frame.apply(norm_start) should ≈ orig_start
 	gut.p("=== Round-trip invariant check (Euclidean distance) ===")
 	var ref_max_err := 0.0
-	var inc_max_err := 0.0
-	var fix_max_err := 0.0
 
 	for i in ref_norms.size():
 		var ref_surf: Surface = ref_norms[i]
@@ -502,41 +465,7 @@ func test_incremental_norm_round_trip() -> void:
 				orig_ref.id, orig_ref.segment.start.coords,
 				ref_surf.segment.start.coords, vis_pt, err])
 
-	for i in inc_norms.size():
-		var inc_seg: Segment = inc_norms[i]
-		var orig_inc: Surface = inc_n2s.get(inc_seg)
-		if orig_inc == null:
-			continue
-		var vis_pt := arc_frame.apply(inc_seg.start.coords)
-		if is_inf(vis_pt.x) or is_inf(vis_pt.y):
-			continue
-		var err := vis_pt.distance_to(orig_inc.segment.start.coords)
-		if err > inc_max_err:
-			inc_max_err = err
-			gut.p("  inc: orig_id=%d start=%s → norm_start=%s → vis=%s err=%.4f" % [
-				orig_inc.id, orig_inc.segment.start.coords,
-				inc_seg.start.coords, vis_pt, err])
-
-	for i in fix_norms.size():
-		var fix_seg: Segment = fix_norms[i]
-		var orig_fix: Surface = fix_n2s.get(fix_seg)
-		if orig_fix == null:
-			continue
-		var vis_pt := arc_frame.apply(fix_seg.start.coords)
-		if is_inf(vis_pt.x) or is_inf(vis_pt.y):
-			continue
-		var err := vis_pt.distance_to(orig_fix.segment.start.coords)
-		if err > fix_max_err:
-			fix_max_err = err
-			gut.p("  fix: orig_id=%d start=%s → norm_start=%s → vis=%s err=%.4f" % [
-				orig_fix.id, orig_fix.segment.start.coords,
-				fix_seg.start.coords, vis_pt, err])
-
-	gut.p("  SUMMARY: ref=%.4f  inc=%.4f  fix=%.4f" % [ref_max_err, inc_max_err, fix_max_err])
+	gut.p("  SUMMARY: ref_max_err=%.4f" % ref_max_err)
 
 	assert_lt(ref_max_err, 1.0,
 		"_build_normalized round-trip error should be < 1 pixel (got %.2f)" % ref_max_err)
-	assert_gt(inc_max_err, 10.0,
-		"Incremental (buggy) round-trip should have LARGE error (got %.2f)" % inc_max_err)
-	assert_lt(fix_max_err, 1.0,
-		"Direct Möbius (fix) round-trip error should be < 1 pixel (got %.2f)" % fix_max_err)

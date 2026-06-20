@@ -140,9 +140,13 @@ static func projective_sort(hits: Array) -> Array:
 		if not a_pos and b_pos:
 			return false
 		if a.t == b.t:
-			var a_id := a.segment.get_instance_id() if a.segment != null else -1
-			var b_id := b.segment.get_instance_id() if b.segment != null else -1
-			return a_id < b_id
+			var a_null := a.segment == null
+			var b_null := b.segment == null
+			if a_null != b_null:
+				return a_null
+			if a_null:
+				return false
+			return a.segment.get_instance_id() < b.segment.get_instance_id()
 		return a.t < b.t
 	)
 	return sorted

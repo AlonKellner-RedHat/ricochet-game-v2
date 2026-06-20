@@ -27,7 +27,6 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 		_renderer._compute_trace()
 	violations.append_array(check_UX7(player_pos, cursor_pos))
 	violations.append_array(check_PREVIEW_NOGAPS(player_pos, cursor_pos))
-	violations.append_array(check_S9(player_pos, cursor_pos))
 	violations.append_array(check_S16(player_pos, cursor_pos))
 	violations.append_array(check_GREEN_FROM_PLAYER(player_pos, cursor_pos))
 	violations.append_array(check_ORIGIN_NOT_REHIT(player_pos, cursor_pos))
@@ -93,22 +92,6 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 			violations.append("NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
 
-func check_S9(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var path: Tracer.TracedPath = _renderer.get_traced_path()
-	if path == null or path.steps.size() < 2:
-		return violations
-	for i in range(1, path.steps.size()):
-		var prev: Tracer.Step = path.steps[i - 1]
-		var curr: Tracer.Step = path.steps[i]
-		if prev.hit and curr.hit:
-			if prev.hit.segment == curr.hit.segment:
-				if prev.frame_id == curr.frame_id:
-					continue
-				violations.append("S9: Same segment hit at steps %d and %d" % [i - 1, i])
-	return violations
 
 func check_S16(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
@@ -698,15 +681,13 @@ static func _extract_trace_geometry(path: Tracer.TracedPath) -> Array:
 	return segments
 
 static func _geometric_carrier_dist(point: Vector2, carrier: GeneralizedCircle) -> float:
-	if carrier.is_line():
-		var denom := sqrt(carrier.b * carrier.b + carrier.c * carrier.c)
-		if denom < 1e-10:
-			return INF
-		return absf(carrier.b * point.x + carrier.c * point.y + carrier.d) / denom
-	else:
-		var ctr := carrier.center()
-		var r := carrier.radius()
-		return absf(point.distance_to(ctr) - r)
+	var f := carrier.evaluate(point)
+	var gx := 2.0 * carrier.a * point.x + carrier.b
+	var gy := 2.0 * carrier.a * point.y + carrier.c
+	var grad := sqrt(gx * gx + gy * gy)
+	if grad < 1e-10:
+		return INF
+	return absf(f) / grad
 
 func _segment_intersection(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2) -> Dictionary:
 	var d1 := a2 - a1

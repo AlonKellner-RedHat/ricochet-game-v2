@@ -142,6 +142,17 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 					s.path.cursor_index = s.path.steps.size()
 					s.cursor_injected = true
 					s.current_mode = post_cursor_mode
+				if not is_null_seg and hp.blocked_left and hp.blocked_right:
+					var orig_surf_zl: Surface = s.norm_to_surface.get(hp.segment)
+					if orig_surf_zl and orig_surf_zl.is_target and hp.on_segment:
+						s.path.targets_hit[orig_surf_zl.id] = true
+					var result_zl = _apply_effect(s, hp, true, orig_surf_zl, plan_entries)
+					if result_zl == 2:
+						trace_done = true
+						break
+					if result_zl == 1:
+						stage_ended = true
+						break
 				walk_t = hp.t
 				step_origin_pos = hp.point.coords
 				continue
@@ -170,10 +181,9 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				s.path.cursor_index = s.path.steps.size()
 				s.cursor_injected = true
 				s.current_mode = post_cursor_mode
-				s.ray = Ray.from_coords(hp.point.coords, s.ray.direction)
-				s.origin_on_surface = null
-				stage_ended = true
-				break
+				walk_t = hp.t
+				step_origin_pos = hp.point.coords
+				continue
 
 			# --- Target tracking ---
 			var orig_surf: Surface = s.norm_to_surface.get(hp.segment)
@@ -329,28 +339,6 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 	if cached_norm != null:
 		s.norm_surfaces = cached_norm.surfaces
 		s.norm_to_surface = cached_norm.mapping
-	elif s.norm_surfaces.size() > 0 and s.transform_stack.size() > 0:
-		var last_mobius: MobiusTransform = s.transform_stack.back().inverse.mobius
-		var new_norms: Array = []
-		var new_mapping: Dictionary = {}
-		for ns in s.norm_surfaces:
-			var orig_surf: Surface = s.norm_to_surface.get(ns.segment)
-			if orig_surf == null:
-				continue
-			var new_seg := Segment.from_coords(
-				last_mobius.apply(ns.segment.start.coords),
-				last_mobius.apply(ns.segment.end.coords),
-				last_mobius.apply(ns.segment.via.coords))
-			new_seg.full = ns.segment.full
-			var state := GameState.new()
-			var left := _normalize_config(orig_surf.active_side_config(Side.Value.LEFT, state), new_seg)
-			var right := _normalize_config(orig_surf.active_side_config(Side.Value.RIGHT, state), new_seg)
-			var new_surf := Surface.new(new_seg, left, right, orig_surf.is_target, orig_surf.player_solid)
-			new_mapping[new_surf.segment] = orig_surf
-			new_norms.append(new_surf)
-		s.norm_surfaces = new_norms
-		s.norm_to_surface = new_mapping
-		cache.set_normalized(s.frame.id, s.norm_surfaces, s.norm_to_surface.duplicate())
 	else:
 		s.norm_surfaces = _build_normalized(surfaces, s.frame, s.norm_to_surface, cache, s.transform_stack)
 		cache.set_normalized(s.frame.id, s.norm_surfaces, s.norm_to_surface.duplicate())
@@ -361,25 +349,41 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 		var frame_inv := cache.invert_cached(s.frame)
 		s.aim_in_frame = frame_inv.apply(s.aim_point_pt.coords)
 
-static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, _cache: TransformCache = null, transform_stack: Array = []) -> Array:
+static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mapping: Dictionary, cache: TransformCache = null, transform_stack: Array = []) -> Array:
 	out_mapping.clear()
 	if frame.id == MobiusTransform.IDENTITY_ID:
 		for surf in surfaces:
 			out_mapping[surf.segment] = surf
 		return surfaces
 
+	var frame_inv: MobiusTransform = cache.invert_cached(frame) if cache else frame.invert()
+
 	var result: Array = []
 	for surf in surfaces:
-		var new_seg: Segment = surf.segment
-		for i in range(transform_stack.size() - 1, -1, -1):
-			new_seg = new_seg.transformed(transform_stack[i].inverse)
+		var new_seg: Segment
+		if _carrier_fixed_by_all(surf.segment, transform_stack):
+			new_seg = surf.segment
+		else:
+			new_seg = Segment.from_coords(
+				frame_inv.apply(surf.segment.start.coords),
+				frame_inv.apply(surf.segment.end.coords),
+				frame_inv.apply(surf.segment.via.coords))
+			new_seg.full = surf.segment.full
 		var state := GameState.new()
 		var left := _normalize_config(surf.active_side_config(Side.Value.LEFT, state), new_seg)
 		var right := _normalize_config(surf.active_side_config(Side.Value.RIGHT, state), new_seg)
 		var new_surf := Surface.new(new_seg, left, right, surf.is_target, surf.player_solid)
-		out_mapping[new_surf.segment] = surf
+		out_mapping[new_seg] = surf
 		result.append(new_surf)
 	return result
+
+static func _carrier_fixed_by_all(seg: Segment, stack: Array) -> bool:
+	var carrier := seg.get_carrier()
+	for t in stack:
+		var tt: TrackedTransform = t
+		if not (tt.inverse == tt and tt.carrier != null and tt.carrier == carrier):
+			return false
+	return true
 
 static func _normalize_config(config: SideConfig, norm_seg: Segment) -> SideConfig:
 	if config == null or config.effect == null:
