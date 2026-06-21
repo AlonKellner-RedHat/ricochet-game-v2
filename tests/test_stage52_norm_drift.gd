@@ -5,6 +5,81 @@ const H := preload("res://tests/test_helpers.gd")
 func before_each() -> void:
 	H.reset_counters()
 
+# ==========================================================================
+# Stage A: GeneralizedCircle.transformed_by — Hermitian carrier transform
+# ==========================================================================
+
+func test_line_reflected_through_line_stays_line() -> void:
+	var line_x0 := GeneralizedCircle.from_line(1.0, 0.0, 0.0)  # x = 0
+	var mirror := GeneralizedCircle.from_line(1.0, 0.0, -500.0)  # x = 500
+	var refl := ReflectionEffect.new(mirror)
+
+	var result := line_x0.transformed_by(refl.get_tracked_transform().mobius)
+
+	assert_true(result.is_line(), "Line reflected through line must stay a line")
+	# x=0 reflected through x=500 → x=1000
+	var test_point := Vector2(1000.0, 42.0)
+	assert_almost_eq(result.evaluate(test_point), 0.0, 0.01,
+		"Reflected line should pass through (1000, y)")
+
+func test_circle_reflected_through_line_preserves_radius() -> void:
+	var circle := GeneralizedCircle.from_circle(Vector2(300.0, 400.0), 100.0)
+	var mirror := GeneralizedCircle.from_line(1.0, 0.0, -500.0)  # x = 500
+	var refl := ReflectionEffect.new(mirror)
+
+	var result := circle.transformed_by(refl.get_tracked_transform().mobius)
+
+	assert_false(result.is_line(), "Circle reflected through line should stay a circle")
+	assert_almost_eq(result.radius(), 100.0, 0.01,
+		"Line reflection is isometry — radius must be preserved")
+	# center (300,400) reflected through x=500 → (700,400)
+	var ctr := result.center()
+	assert_almost_eq(ctr.x, 700.0, 0.01, "Center x reflected through x=500")
+	assert_almost_eq(ctr.y, 400.0, 0.01, "Center y unchanged by vertical reflection")
+
+func test_line_reflected_through_circle_becomes_circle() -> void:
+	var line_x0 := GeneralizedCircle.from_line(1.0, 0.0, 0.0)  # x = 0
+	var circle := GeneralizedCircle.from_circle(Vector2(500.0, 500.0), 200.0)
+	var refl := ReflectionEffect.new(circle)
+
+	var result := line_x0.transformed_by(refl.get_tracked_transform().mobius)
+
+	assert_false(result.is_line(),
+		"Line reflected through circle should become a circle (a != 0)")
+
+func test_transformed_by_identity_is_unchanged() -> void:
+	var line := GeneralizedCircle.from_line(3.0, 4.0, -5.0)
+	var identity := MobiusTransform.identity()
+
+	var result := line.transformed_by(identity)
+
+	# Coefficients should be proportional (same carrier up to scale)
+	assert_true(result.is_line(), "Line through identity stays line")
+	# Check that the carrier represents the same geometric object
+	assert_almost_eq(result.evaluate(Vector2(5.0 / 3.0, 0.0)), 0.0, 0.01,
+		"Same line after identity transform")
+
+func test_conformal_compose_equals_sequential() -> void:
+	var carrier := GeneralizedCircle.from_line(1.0, 0.0, 0.0)  # x = 0
+	var mirror_a := GeneralizedCircle.from_line(1.0, 0.0, -300.0)  # x = 300
+	var mirror_b := GeneralizedCircle.from_line(1.0, 0.0, -700.0)  # x = 700
+	var R_a := ReflectionEffect.new(mirror_a).get_tracked_transform().mobius
+	var R_b := ReflectionEffect.new(mirror_b).get_tracked_transform().mobius
+
+	# Sequential: transform by R_a, then by R_b
+	var seq := carrier.transformed_by(R_a).transformed_by(R_b)
+	# Composed: compose R_a ∘ R_b, then transform once
+	var composed := R_a.compose(R_b)
+	var comp := carrier.transformed_by(composed)
+
+	# Both should represent the same line (x = 0 → x = 600 → x = 800)
+	assert_true(seq.is_line(), "Sequential result should be a line")
+	assert_true(comp.is_line(), "Composed result should be a line")
+	# Test at the expected position
+	var test_pt := Vector2(800.0, 123.0)
+	assert_almost_eq(seq.evaluate(test_pt), 0.0, 0.1, "Sequential: line at x=800")
+	assert_almost_eq(comp.evaluate(test_pt), 0.0, 0.1, "Composed: line at x=800")
+
 # --- Gradient-based carrier distance (numerically stable for all carrier types) ---
 
 static func _carrier_dist(point: Vector2, carrier: GeneralizedCircle) -> float:
@@ -29,6 +104,113 @@ static func _is_at_bounds(p: Vector2) -> bool:
 	var bounds := Rect2(0, 0, 1920, 1080)
 	return (p.x <= bounds.position.x + 2.0 or p.x >= bounds.end.x - 2.0 or
 		p.y <= bounds.position.y + 2.0 or p.y >= bounds.end.y - 2.0)
+
+# ==========================================================================
+# Stage B: Provenance-enforced normalization in _build_normalized
+# ==========================================================================
+
+func test_normalized_carrier_is_line_after_line_reflections() -> void:
+	var room_walls := RoomBuilder.create_room_surfaces(Rect2(0, 0, 1920, 1080))
+	var mirror_a := _mirror_line(Vector2(800.0, 0.0), Vector2(800.0, 1080.0))
+	var mirror_b := _mirror_line(Vector2(1200.0, 0.0), Vector2(1200.0, 1080.0))
+
+	var surfaces: Array = []
+	surfaces.append_array(room_walls)
+	surfaces.append(mirror_a)
+	surfaces.append(mirror_b)
+
+	# Build a deep stack of alternating line reflections
+	var stack: Array = []
+	for i in 12:
+		var refl: TransformativeEffect = mirror_a.active_side_config(
+			Side.Value.LEFT, GameState.new()).effect if i % 2 == 0 else mirror_b.active_side_config(
+			Side.Value.LEFT, GameState.new()).effect
+		stack.append(refl.get_tracked_transform())
+
+	var frame := MobiusTransform.identity()
+	for t in stack:
+		frame = frame.compose(t.mobius)
+
+	var n2s := {}
+	var norms := Tracer._build_normalized(surfaces, frame, n2s, null, stack)
+
+	# Every original line carrier should remain a line after normalization
+	for ns in norms:
+		var norm_surf: Surface = ns
+		var orig_surf: Surface = n2s.get(norm_surf.segment)
+		if orig_surf == null or norm_surf.segment == orig_surf.segment:
+			continue
+		if orig_surf.segment.get_carrier().is_line():
+			assert_true(norm_surf.segment.get_carrier().is_line(),
+				"Surface %d: line carrier must stay a line after 12 line reflections" % orig_surf.id)
+
+func test_normalized_carrier_preserves_circle_radius() -> void:
+	var mirror := _mirror_line(Vector2(500.0, 0.0), Vector2(500.0, 1080.0))
+	var circle_seg := Segment.from_coords(
+		Vector2(300.0, 300.0), Vector2(300.0, 500.0), Vector2(200.0, 400.0))
+	var circle_carrier := circle_seg.get_carrier()
+	assert_false(circle_carrier.is_line(), "Precondition: test surface is a circle")
+	var orig_radius := circle_carrier.radius()
+
+	var circle_surf := Surface.new(circle_seg,
+		SideConfig.new(null, false), SideConfig.new(null, false), false, false)
+
+	var surfaces: Array = [mirror, circle_surf]
+
+	# Stack: 6 reflections in the same line mirror
+	var refl_effect: TransformativeEffect = mirror.active_side_config(
+		Side.Value.LEFT, GameState.new()).effect
+	var stack: Array = []
+	for i in 6:
+		stack.append(refl_effect.get_tracked_transform())
+	# After 6 self-inverse reflections, net is identity — but let's test with odd too
+	stack.resize(5)  # 5 reflections: net = one reflection
+
+	var frame := MobiusTransform.identity()
+	for t in stack:
+		frame = frame.compose(t.mobius)
+
+	var n2s := {}
+	var norms := Tracer._build_normalized(surfaces, frame, n2s, null, stack)
+
+	for ns in norms:
+		var norm_surf: Surface = ns
+		var orig_surf: Surface = n2s.get(norm_surf.segment)
+		if orig_surf != circle_surf or norm_surf.segment == orig_surf.segment:
+			continue
+		var norm_carrier := norm_surf.segment.get_carrier()
+		assert_false(norm_carrier.is_line(),
+			"Circle should stay a circle after line reflections")
+		assert_almost_eq(norm_carrier.radius(), orig_radius, 0.01,
+			"Circle radius must be preserved by isometric (line) reflections")
+
+func test_normalized_carrier_through_circle_reflection_may_change_type() -> void:
+	var circle_mirror_carrier := GeneralizedCircle.from_circle(Vector2(500.0, 500.0), 200.0)
+	var circle_mirror_seg := Segment.full_from_carrier(circle_mirror_carrier)
+	var circle_refl := ReflectionEffect.new(circle_mirror_carrier)
+	var circle_mirror_surf := Surface.new(circle_mirror_seg,
+		SideConfig.new(circle_refl, true), SideConfig.new(null, false), false, false)
+
+	var line_seg := Segment.from_coords(Vector2(0.0, 0.0), Vector2(0.0, 1080.0), Vector2(0.0, 540.0))
+	var line_surf := Surface.new(line_seg,
+		SideConfig.new(null, false), SideConfig.new(null, false), false, false)
+
+	var surfaces: Array = [circle_mirror_surf, line_surf]
+
+	var stack: Array = [circle_refl.get_tracked_transform()]
+	var frame := circle_refl.get_tracked_transform().mobius
+
+	var n2s := {}
+	var norms := Tracer._build_normalized(surfaces, frame, n2s, null, stack)
+
+	for ns in norms:
+		var norm_surf: Surface = ns
+		var orig_surf: Surface = n2s.get(norm_surf.segment)
+		if orig_surf != line_surf or norm_surf.segment == orig_surf.segment:
+			continue
+		# A line reflected through a circle should NOT be forced to stay a line
+		assert_false(norm_surf.segment.get_carrier().is_line(),
+			"Line reflected through circle should become a circle (no provenance enforcement)")
 
 # ==========================================================================
 # TDD: These tests should FAIL before the fix, PASS after

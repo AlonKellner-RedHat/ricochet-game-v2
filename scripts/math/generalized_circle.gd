@@ -38,3 +38,59 @@ static func from_circle(p_center: Vector2, p_radius: float) -> GeneralizedCircle
 	var p_c := -2.0 * p_center.y
 	var p_d := p_center.x * p_center.x + p_center.y * p_center.y - p_radius * p_radius
 	return GeneralizedCircle.new(p_a, p_b, p_c, p_d)
+
+func transformed_by(mobius: MobiusTransform) -> GeneralizedCircle:
+	var w := Vector2(b / 2.0, -c / 2.0)
+	var wc := Vector2(w.x, -w.y)
+
+	var alpha := mobius.a
+	var beta := mobius.b
+	var gamma := mobius.c
+	var delta := mobius.d
+
+	var N00: Vector2
+	var N01: Vector2
+	var N10: Vector2
+	var N11: Vector2
+	var H00: float
+	var H01: Vector2
+	var H10: Vector2
+	var H11: float
+
+	if mobius.conjugating:
+		N00 = MobiusTransform.cconj(delta)
+		N01 = MobiusTransform.cconj(-beta)
+		N10 = MobiusTransform.cconj(-gamma)
+		N11 = MobiusTransform.cconj(alpha)
+		H00 = a
+		H01 = wc
+		H10 = w
+		H11 = d
+	else:
+		N00 = delta
+		N01 = -beta
+		N10 = -gamma
+		N11 = alpha
+		H00 = a
+		H01 = w
+		H10 = wc
+		H11 = d
+
+	var Nh00 := MobiusTransform.cconj(N00)
+	var Nh01 := MobiusTransform.cconj(N10)
+	var Nh10 := MobiusTransform.cconj(N01)
+	var Nh11 := MobiusTransform.cconj(N11)
+
+	var rH00 := Vector2(H00, 0)
+	var rH11 := Vector2(H11, 0)
+
+	var T00 := MobiusTransform.cmul(Nh00, rH00) + MobiusTransform.cmul(Nh01, H10)
+	var T01 := MobiusTransform.cmul(Nh00, H01) + MobiusTransform.cmul(Nh01, rH11)
+	var T10 := MobiusTransform.cmul(Nh10, rH00) + MobiusTransform.cmul(Nh11, H10)
+	var T11 := MobiusTransform.cmul(Nh10, H01) + MobiusTransform.cmul(Nh11, rH11)
+
+	var R00 := MobiusTransform.cmul(T00, N00) + MobiusTransform.cmul(T01, N10)
+	var R01 := MobiusTransform.cmul(T00, N01) + MobiusTransform.cmul(T01, N11)
+	var R11 := MobiusTransform.cmul(T10, N01) + MobiusTransform.cmul(T11, N11)
+
+	return GeneralizedCircle.new(R00.x, 2.0 * R01.x, -2.0 * R01.y, R11.x)

@@ -358,6 +358,8 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 
 	var frame_inv: MobiusTransform = cache.invert_cached(frame) if cache else frame.invert()
 
+	var isometric: bool = _is_isometric_stack(transform_stack)
+
 	var result: Array = []
 	for surf in surfaces:
 		var new_seg: Segment
@@ -369,6 +371,14 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 				frame_inv.apply(surf.segment.end.coords),
 				frame_inv.apply(surf.segment.via.coords))
 			new_seg.full = surf.segment.full
+			if isometric:
+				var orig_carrier: GeneralizedCircle = surf.segment.get_carrier()
+				var direct: GeneralizedCircle = orig_carrier.transformed_by(frame_inv)
+				if orig_carrier.is_line():
+					direct = GeneralizedCircle.from_line(direct.b, direct.c, direct.d)
+				else:
+					direct = GeneralizedCircle.from_circle(direct.center(), orig_carrier.radius())
+				new_seg._carrier = direct
 		var state := GameState.new()
 		var left := _normalize_config(surf.active_side_config(Side.Value.LEFT, state), new_seg)
 		var right := _normalize_config(surf.active_side_config(Side.Value.RIGHT, state), new_seg)
@@ -382,6 +392,13 @@ static func _carrier_fixed_by_all(seg: Segment, stack: Array) -> bool:
 	for t in stack:
 		var tt: TrackedTransform = t
 		if not (tt.inverse == tt and tt.carrier != null and tt.carrier == carrier):
+			return false
+	return true
+
+static func _is_isometric_stack(stack: Array) -> bool:
+	for t in stack:
+		var tt: TrackedTransform = t
+		if tt.carrier == null or not tt.carrier.is_line():
 			return false
 	return true
 
