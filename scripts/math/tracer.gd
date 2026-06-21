@@ -31,6 +31,7 @@ class TracedPath extends RefCounted:
 	var steps: Array = []
 	var targets_hit: Dictionary = {}
 	var cursor_index: int = -1
+	var hit_count: int = 0
 
 class TraceState:
 	var path: TracedPath
@@ -142,17 +143,30 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 					s.path.cursor_index = s.path.steps.size()
 					s.cursor_injected = true
 					s.current_mode = post_cursor_mode
-				if not is_null_seg and hp.blocked_left and hp.blocked_right:
-					var orig_surf_zl: Surface = s.norm_to_surface.get(hp.segment)
-					if orig_surf_zl and orig_surf_zl.is_target and hp.on_segment:
-						s.path.targets_hit[orig_surf_zl.id] = true
-					var result_zl = _apply_effect(s, hp, true, orig_surf_zl, plan_entries)
-					if result_zl == 2:
-						trace_done = true
-						break
-					if result_zl == 1:
-						stage_ended = true
-						break
+				if not is_null_seg:
+					s.step_left_blocked = s.step_left_blocked or hp.blocked_left
+					s.step_right_blocked = s.step_right_blocked or hp.blocked_right
+					if hp.at_endpoint > 0 and not (s.step_left_blocked and s.step_right_blocked):
+						for ns in s.norm_surfaces:
+							if ns.segment == hp.segment:
+								continue
+							var ep := Intersection.at_which_endpoint(hp.point.coords, ns.segment)
+							if ep > 0:
+								var sides := Intersection.endpoint_blocked_sides(
+									hp.point.coords, ns.segment, s.ray, ep)
+								s.step_left_blocked = s.step_left_blocked or sides[0]
+								s.step_right_blocked = s.step_right_blocked or sides[1]
+					if s.step_left_blocked and s.step_right_blocked:
+						var orig_surf_zl: Surface = s.norm_to_surface.get(hp.segment)
+						if orig_surf_zl and orig_surf_zl.is_target and hp.on_segment:
+							s.path.targets_hit[orig_surf_zl.id] = true
+						var result_zl = _apply_effect(s, hp, true, orig_surf_zl, plan_entries)
+						if result_zl == 2:
+							trace_done = true
+							break
+						if result_zl == 1:
+							stage_ended = true
+							break
 				walk_t = hp.t
 				step_origin_pos = hp.point.coords
 				continue
@@ -222,6 +236,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if not stage_ended:
 			break
 
+	s.path.hit_count = s.hit_count
 	return s.path
 
 static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_blocked: bool, orig_surf: Surface, plan_entries: Array) -> int:

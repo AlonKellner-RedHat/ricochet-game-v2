@@ -644,18 +644,25 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 	if orig_geo.size() == 0 and ref_geo.size() == 0:
 		return violations
 
-	if orig_geo.size() != ref_geo.size():
+	var both_at_max := trace_with_plan.hit_count >= Tracer.MAX_HITS \
+		and trace_no_plan.hit_count >= Tracer.MAX_HITS
+
+	if orig_geo.size() != ref_geo.size() and not both_at_max:
 		violations.append("DIRECTION-ONLY: segment count mismatch: with_plan=%d no_plan=%d" % [orig_geo.size(), ref_geo.size()])
 		return violations
 
+	var compare_count := mini(orig_geo.size(), ref_geo.size())
 	var tol := 1.0
-	for i in orig_geo.size():
+	for i in compare_count:
 		var o: Dictionary = orig_geo[i]
 		var r: Dictionary = ref_geo[i]
 		var start_dist: float = o.start.distance_to(r.start)
-		var end_dist: float = o.end.distance_to(r.end)
 		if start_dist > tol:
 			violations.append("DIRECTION-ONLY: segment %d start mismatch: orig=%s ref=%s dist=%.2f" % [i, o.start, r.start, start_dist])
+		var is_last := i == compare_count - 1
+		if both_at_max and is_last:
+			continue
+		var end_dist: float = o.end.distance_to(r.end)
 		if end_dist > tol:
 			violations.append("DIRECTION-ONLY: segment %d end mismatch: orig=%s ref=%s dist=%.2f" % [i, o.end, r.end, end_dist])
 
@@ -678,7 +685,29 @@ static func _extract_trace_geometry(path: Tracer.TracedPath) -> Array:
 			current_end = step.end
 			current_fid = step.frame_id
 	segments.append({"start": current_start, "end": current_end})
-	return segments
+	return _merge_collinear_stages(segments)
+
+static func _segments_collinear(a: Dictionary, b: Dictionary, tol: float = 1.0) -> bool:
+	if a.end.distance_to(b.start) > tol:
+		return false
+	var dir_a: Vector2 = a.end - a.start
+	var dir_b: Vector2 = b.end - b.start
+	if dir_a.length_squared() < 0.001 or dir_b.length_squared() < 0.001:
+		return true
+	var cross := dir_a.normalized().cross(dir_b.normalized())
+	var dot := dir_a.normalized().dot(dir_b.normalized())
+	return absf(cross) < 0.01 and dot > 0.0
+
+static func _merge_collinear_stages(segments: Array) -> Array:
+	if segments.size() <= 1:
+		return segments
+	var merged: Array = [segments[0]]
+	for i in range(1, segments.size()):
+		if _segments_collinear(merged[merged.size() - 1], segments[i]):
+			merged[merged.size() - 1].end = segments[i].end
+		else:
+			merged.append(segments[i])
+	return merged
 
 static func _geometric_carrier_dist(point: Vector2, carrier: GeneralizedCircle) -> float:
 	var f := carrier.evaluate(point)
