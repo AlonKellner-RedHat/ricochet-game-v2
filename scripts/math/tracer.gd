@@ -55,6 +55,7 @@ class TraceState:
 	var cursor_hp: Intersection.HitRecord
 	var origin_on_surface: Surface = null
 	var transform_sources: Array = []
+	var cursor_injected_at_zero_length: bool = false
 
 enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
 
@@ -122,7 +123,20 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if _start_inf or _end_inf:
 				vis_via = Vector2(INF, INF)
 			elif is_wrap:
-				vis_via = s.frame.apply(Vector2(INF, INF))
+				var wrap_surf: Surface = s.norm_to_surface.get(hp.segment)
+				if wrap_surf and not wrap_surf.segment.get_carrier().is_line():
+					var visual_carrier := wrap_surf.segment.get_carrier().transformed_by(s.frame)
+					var vc := visual_carrier.center()
+					var vr := visual_carrier.radius()
+					var chord_mid := (vis_start + vis_end) / 2.0
+					var to_mid := chord_mid - vc
+					if to_mid == Vector2.ZERO:
+						var chord_dir := vis_end - vis_start
+						vis_via = vc + Vector2(-chord_dir.y, chord_dir.x).normalized() * vr
+					else:
+						vis_via = vc - to_mid.normalized() * vr
+				else:
+					vis_via = s.frame.apply(Vector2(INF, INF))
 			else:
 				vis_via = s.frame.apply((step_origin_pos + hp.point.coords) / 2.0)
 				if is_inf(vis_via.x) or is_inf(vis_via.y):
@@ -140,9 +154,12 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 					trace_done = true
 					break
 				if is_cursor:
+					var was_planned := s.current_mode != TraceMode.PHYSICAL
 					s.path.cursor_index = s.path.steps.size()
 					s.cursor_injected = true
 					s.current_mode = post_cursor_mode
+					if was_planned:
+						s.cursor_injected_at_zero_length = true
 				if not is_null_seg:
 					s.step_left_blocked = s.step_left_blocked or hp.blocked_left
 					s.step_right_blocked = s.step_right_blocked or hp.blocked_right
@@ -162,14 +179,20 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 							s.path.targets_hit[orig_surf_zl.id] = true
 						var result_zl = _apply_effect(s, hp, true, orig_surf_zl, plan_entries)
 						if result_zl == 2:
-							trace_done = true
-							break
+							if s.cursor_injected_at_zero_length:
+								s.step_left_blocked = false
+								s.step_right_blocked = false
+							else:
+								trace_done = true
+								break
 						if result_zl == 1:
 							stage_ended = true
 							break
 				walk_t = hp.t
 				step_origin_pos = hp.point.coords
 				continue
+
+			s.cursor_injected_at_zero_length = false
 
 			if is_wrap and not is_null_seg:
 				has_wrapped = true
@@ -192,9 +215,12 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 			# --- Cursor check ---
 			if is_cursor:
+				var was_planned := s.current_mode != TraceMode.PHYSICAL
 				s.path.cursor_index = s.path.steps.size()
 				s.cursor_injected = true
 				s.current_mode = post_cursor_mode
+				if was_planned:
+					s.cursor_injected_at_zero_length = true
 				walk_t = hp.t
 				step_origin_pos = hp.point.coords
 				continue
@@ -233,6 +259,9 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 		if trace_done:
 			break
+		if s.cursor_injected_at_zero_length:
+			s.cursor_injected_at_zero_length = false
+			continue
 		if not stage_ended:
 			break
 
@@ -375,10 +404,13 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 
 	var isometric: bool = _is_isometric_stack(transform_stack)
 
+	var reflecting_carrier: GeneralizedCircle = _get_reflecting_carrier(transform_stack) if transform_stack.size() == 1 else null
+
 	var result: Array = []
 	for surf in surfaces:
 		var new_seg: Segment
-		if _carrier_fixed_by_all(surf.segment, transform_stack):
+		var carrier_fixed := _carrier_fixed_by_all(surf.segment, transform_stack)
+		if carrier_fixed:
 			new_seg = surf.segment
 		else:
 			new_seg = Segment.from_coords(
@@ -394,6 +426,11 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 				else:
 					direct = GeneralizedCircle.from_circle(direct.center(), orig_carrier.radius())
 				new_seg._carrier = direct
+		if not carrier_fixed and not new_seg.full and reflecting_carrier != null and not reflecting_carrier.is_line():
+			var eval_s := reflecting_carrier.evaluate(new_seg.start.coords)
+			var eval_e := reflecting_carrier.evaluate(new_seg.end.coords)
+			if eval_s < 0.0 and eval_e < 0.0:
+				continue
 		var state := GameState.new()
 		var left := _normalize_config(surf.active_side_config(Side.Value.LEFT, state), new_seg)
 		var right := _normalize_config(surf.active_side_config(Side.Value.RIGHT, state), new_seg)
@@ -409,6 +446,12 @@ static func _carrier_fixed_by_all(seg: Segment, stack: Array) -> bool:
 		if not (tt.inverse == tt and tt.carrier != null and tt.carrier == carrier):
 			return false
 	return true
+
+static func _get_reflecting_carrier(stack: Array) -> GeneralizedCircle:
+	if stack.is_empty():
+		return null
+	var top: TrackedTransform = stack.back()
+	return top.carrier
 
 static func _is_isometric_stack(stack: Array) -> bool:
 	for t in stack:

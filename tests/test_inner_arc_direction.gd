@@ -42,23 +42,19 @@ func _first_reflected_arc(path: Tracer.TracedPath) -> Tracer.Step:
 	return null
 
 
-func test_arc_via_side_relative_to_surface() -> void:
+func test_arc_via_on_carrier_circle() -> void:
 	var d := _inner_trace()
 	var path: Tracer.TracedPath = d["path"]
 	var surface_carrier: GeneralizedCircle = d["carrier"]
-	var player: Vector2 = d["player"]
 
 	var arc_step := _first_reflected_arc(path)
 	assert_not_null(arc_step, "Should have a reflected arc step")
 	if arc_step == null:
 		return
 
-	var eval_via := surface_carrier.evaluate(arc_step.via)
-	var eval_player := surface_carrier.evaluate(player)
-
-	assert_true(eval_player < 0, "Player should be inside circle (eval < 0)")
-	assert_true(signf(eval_via) == signf(eval_player),
-		"Via should be on same side as player. via_eval=%.2f player_eval=%.2f" % [eval_via, eval_player])
+	var eval_via := absf(surface_carrier.evaluate(arc_step.via))
+	assert_lt(eval_via, 1.0,
+		"Via should be on the surface carrier circle (|eval|=%.4f)" % eval_via)
 
 
 func test_arc_visually_crosses_surface() -> void:
@@ -235,16 +231,17 @@ func test_antipodal_via_is_inside_carrier() -> void:
 		"Flipped-via arc should stay inside surface, but %d/21 samples are outside (worst=%.2f)" % [outside, worst_eval])
 
 
-func test_wrapping_arc_via_is_image_of_infinity() -> void:
+func test_wrapping_arc_via_is_on_carrier() -> void:
 	var d := _inner_trace()
+	var surface_carrier: GeneralizedCircle = d["carrier"]
 	var arc_step := _first_reflected_arc(d["path"])
 	assert_not_null(arc_step, "Should have a reflected arc step")
 	if arc_step == null:
 		return
 
-	var expected_via := arc_step.frame.apply(Vector2(INF, INF))
-	assert_almost_eq(arc_step.via, expected_via, Vector2(1.0, 1.0),
-		"Wrapping arc via should be frame.apply(INF)=%s, got %s" % [expected_via, arc_step.via])
+	var eval_via := absf(surface_carrier.evaluate(arc_step.via))
+	assert_lt(eval_via, 1.0,
+		"Wrapping arc via should be on the surface carrier (evaluate=%.4f)" % eval_via)
 
 
 func test_inner_arc_stays_inside_surface() -> void:
