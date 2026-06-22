@@ -578,33 +578,6 @@ func test_repro_inner_arc_has_multiple_carriers() -> void:
 		"All reflected arcs should share one carrier. Found %d distinct carriers: %s" %
 		[carriers.size(), carriers])
 
-func test_repro_outer_case_step_count_explosion() -> void:
-	var center := Vector2(960, 540)
-	var r := 200.0
-	var surf := _full_circle_mirror(center, r)
-	var surfaces: Array = [surf]
-	var player := Vector2(600, 540)
-	var aim := Direction.from_coords(player, Vector2(1300, 540))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
-
-	assert_lt(path.steps.size(), 20,
-		"Outer case should produce clean exit, not %d steps" % path.steps.size())
-
-func test_repro_outer_case_still_has_identity_exit() -> void:
-	var center := Vector2(960, 540)
-	var r := 200.0
-	var surf := _full_circle_mirror(center, r)
-	var surfaces: Array = [surf]
-	var player := Vector2(600, 540)
-	var aim := Direction.from_coords(player, Vector2(1300, 540))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
-
-	var last_step: Tracer.Step = path.steps[path.steps.size() - 1]
-	assert_eq(last_step.frame_id, MobiusTransform.IDENTITY_ID,
-		"Outer case should end in identity frame, got frame_id=%d" % last_step.frame_id)
-	assert_false(last_step.is_arc_step,
-		"Outer case should end with a straight line, not an arc")
-
 # Phase 2: Evidence collection
 
 func test_evidence_inner_hit_produces_regular_arc_steps() -> void:

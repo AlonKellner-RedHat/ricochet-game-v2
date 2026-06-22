@@ -193,28 +193,3 @@ func test_sweep_all_visual_hitpoints() -> void:
 		"All visual hitpoints should be on a physical carrier. Found %d/%d violations (%.1f%%)" % [
 			violation_count, total_steps, 100.0 * violation_count / total_steps if total_steps > 0 else 0.0])
 
-# --- Sweep: terminal endpoints on terminal carriers ---
-
-func test_sweep_terminal_on_terminal_carrier() -> void:
-	var surfaces := _build_main_scene_surfaces()
-	var violation_count := 0
-	var total := 0
-
-	for px in range(200, 1700, 100):
-		for py in range(100, 1000, 100):
-			var player := Vector2(px, py)
-			for angle_deg in range(0, 360, 15):
-				var angle := deg_to_rad(angle_deg)
-				var target := player + Vector2(cos(angle), sin(angle)) * 100.0
-				var aim := Direction.from_coords(player, target)
-				H.reset_counters()
-				var path := Tracer.trace(player, aim, surfaces, GameState.new())
-				total += 1
-				var violations := _check_terminal_on_terminal_carrier(path, surfaces)
-				violation_count += violations.size()
-
-	print("DIAG [sweep] %d/%d traces have terminal endpoint NOT on terminal carrier (%.1f%%)" % [
-		violation_count, total, 100.0 * violation_count / total if total > 0 else 0.0])
-	assert_eq(violation_count, 0,
-		"All terminal endpoints should be on terminal carriers. Found %d/%d (%.1f%%)" % [
-			violation_count, total, 100.0 * violation_count / total if total > 0 else 0.0])

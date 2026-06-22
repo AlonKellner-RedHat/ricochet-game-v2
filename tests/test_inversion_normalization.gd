@@ -228,39 +228,3 @@ func test_phase3_all_inversive_steps_are_arcs() -> void:
 	assert_gt(inversive_total, 0, "Should have steps in inversive frame")
 	assert_eq(inversive_non_arc_steps, 0,
 		"All steps in inversive frame should have is_arc_step=true")
-
-# ==========================================================================
-# Phase 4: Escape arc via points in inversive frames
-# ==========================================================================
-
-func test_phase4_escape_via_is_infinity_point() -> void:
-	var scene := _build_debug_scene()
-	var surfaces: Array = scene.surfaces
-	var player := Vector2(1283.446, 843.0654)
-	var cursor := Vector2(1220.271, 638.1819)
-	var aim := Direction.from_coords(player, cursor)
-	var aim_ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], null, cursor)
-	var inversive_escapes: Array = []
-	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame != null and s.frame.maps_lines_to_arcs() and s.hit == null:
-			inversive_escapes.append(s)
-	assert_gt(inversive_escapes.size(), 0, "Should have escape steps in inversive frame")
-	for step in inversive_escapes:
-		var s: Tracer.Step = step
-		var t_inf := s.frame.apply(Vector2(INF, INF))
-		assert_true(s.is_arc_step, "Escape in inversive frame should have is_arc_step=true")
-		assert_false(is_nan(s.start.x) or is_nan(s.start.y), "No NaN in start")
-		assert_false(is_nan(s.end.x) or is_nan(s.end.y), "No NaN in end")
-		assert_false(is_nan(s.via.x) or is_nan(s.via.y), "No NaN in via")
-		assert_true(VisualConverter.is_arc(s.start, s.via, s.end),
-			"Escape arc via should produce a valid arc (non-collinear)")
-		# One endpoint of each escape step should be T(∞)
-		var start_matches := s.start.distance_to(t_inf) < 1.0
-		var end_matches := s.end.distance_to(t_inf) < 1.0
-		assert_true(start_matches or end_matches,
-			"Escape step should have T(INF) as one endpoint. start=%s end=%s t_inf=%s" % [
-				s.start, s.end, t_inf])

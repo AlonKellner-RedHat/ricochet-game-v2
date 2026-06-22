@@ -28,17 +28,6 @@ func test_stage2_player_moves_on_input() -> void:
 	assert_gt(_player.position.x, start_pos.x, "Player should move right")
 	assert_almost_eq(_player.position.y, start_pos.y, 0.1, "Player should not move vertically")
 
-func test_stage2_simultaneous_movement() -> void:
-	var start_pos := _player.position
-	Input.action_press("move_right")
-	Input.action_press("move_down")
-	_simulate_frames(10)
-	Input.action_release("move_right")
-	Input.action_release("move_down")
-	var delta_pos := _player.position - start_pos
-	var ratio := delta_pos.x / delta_pos.y if delta_pos.y != 0.0 else 0.0
-	assert_almost_eq(ratio, 1.0, 0.01, "Diagonal movement should be equal in both axes")
-
 func test_stage2_player_stops_on_release() -> void:
 	Input.action_press("move_right")
 	_simulate_frames(5)

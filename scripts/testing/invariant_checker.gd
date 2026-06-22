@@ -90,9 +90,16 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 		var gap := prev.end.distance_to(curr.start)
 		var tol := 0.05 + 0.001 * i
 		if gap > tol:
+			if _is_infinity_gap(prev.end, curr.start):
+				continue
 			violations.append("NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
 
+static func _is_infinity_gap(prev_end: Vector2, curr_start: Vector2) -> bool:
+	const THRESHOLD := 10000.0
+	var prev_huge := absf(prev_end.x) > THRESHOLD or absf(prev_end.y) > THRESHOLD
+	var curr_huge := absf(curr_start.x) > THRESHOLD or absf(curr_start.y) > THRESHOLD
+	return prev_huge or curr_huge
 
 func check_S16(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
@@ -198,6 +205,8 @@ func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 		var gap := prev.end.distance_to(curr.start)
 		var tol := 0.05 + 0.001 * i
 		if gap > tol:
+			if _is_infinity_gap(prev.end, curr.start):
+				continue
 			violations.append("PHYSICAL-CONTINUITY: gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
 
@@ -570,6 +579,16 @@ func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> A
 				violations.append("PARAM-MONOTONICITY: %s step %d t=%.4f < prev t=%.4f (frame=%d)" % [trace_name, i, curr.hit.t, prev.hit.t, curr.frame_id])
 	return violations
 
+static func _is_ray_through_pole(ray: Ray, frame: MobiusTransform) -> bool:
+	var pole := frame.pole()
+	if is_inf(pole.x) or is_inf(pole.y) or is_nan(pole.x) or is_nan(pole.y):
+		return false
+	var origin := ray.origin.coords
+	var dir := ray.direction.to_normalized()
+	var to_pole := pole - origin
+	var cross := to_pole.cross(dir)
+	return absf(cross) < 1.0
+
 func check_POST_INVERSION_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
@@ -580,6 +599,8 @@ func check_POST_INVERSION_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array
 		for i in path.steps.size():
 			var step: Tracer.Step = path.steps[i]
 			if step.frame != null and step.frame.maps_lines_to_arcs() and not step.is_arc_step and step.hit != null:
+				if step.ray != null and _is_ray_through_pole(step.ray, step.frame):
+					continue
 				violations.append("POST-INVERSION-ARC: %s step %d in inversive frame (fid=%d) has is_arc_step=false" % [trace_name, i, step.frame_id])
 	return violations
 

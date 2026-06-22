@@ -21,21 +21,31 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2) -> Trace
 	var cursor_shift := 0
 	for i in path.steps.size():
 		var step: Tracer.Step = path.steps[i]
-		var via_inf := is_inf(step.via.x) and is_inf(step.via.y)
 		var end_inf := is_inf(step.end.x) or is_inf(step.end.y)
 		var start_inf := is_inf(step.start.x) or is_inf(step.start.y)
+		var step_via := step.via
+		var via_inf := is_inf(step_via.x) and is_inf(step_via.y)
+		if (end_inf or start_inf) and via_inf and step.ray != null:
+			var dir := step.ray.direction.to_normalized()
+			if end_inf and not start_inf:
+				step_via = step.start + dir
+			elif start_inf and not end_inf:
+				step_via = step.end - dir
+			via_inf = is_inf(step_via.x) and is_inf(step_via.y)
 		if not via_inf and not end_inf and not start_inf:
 			result.steps.append(step)
 			continue
 		if end_inf and not start_inf and not via_inf:
-			var clip := _clip_to_bounds(step.start, step.via.normalized(), bounds)
-			var via_mid := (step.start + clip) / 2.0
-			result.steps.append(Tracer.Step.new(step.start, clip, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+			var clip := _clip_to_bounds(step.start, step_via.normalized(), bounds)
+			if clip != step.start:
+				var via_mid := (step.start + clip) / 2.0
+				result.steps.append(Tracer.Step.new(step.start, clip, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
 			continue
 		if start_inf and not end_inf and not via_inf:
-			var clip := _clip_to_bounds(step.end, step.via.normalized(), bounds)
-			var via_mid := (clip + step.end) / 2.0
-			result.steps.append(Tracer.Step.new(clip, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+			var clip := _clip_to_bounds(step.end, step_via.normalized(), bounds)
+			if clip != step.end:
+				var via_mid := (clip + step.end) / 2.0
+				result.steps.append(Tracer.Step.new(clip, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
 			continue
 		var start_in := grown.has_point(step.start)
 		var end_in := grown.has_point(step.end)
