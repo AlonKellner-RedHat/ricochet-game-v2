@@ -58,6 +58,7 @@ func test_sweep_with_plans() -> void:
 		TEST_LEVELS_DIR + "room_with_mirror.tscn",
 		TEST_LEVELS_DIR + "two_mirrors.tscn",
 		TEST_LEVELS_DIR + "room_with_inversion.tscn",
+		TEST_LEVELS_DIR + "full_circle_mirror.tscn",
 	]
 
 	var total_failures: Array[Dictionary] = []

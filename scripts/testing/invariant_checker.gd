@@ -44,6 +44,7 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_ON_SEGMENT_CONSISTENCY(player_pos, cursor_pos))
 	violations.append_array(check_SHARED_RAY(player_pos, cursor_pos))
 	violations.append_array(check_RAY_ALIGNMENT(player_pos, cursor_pos))
+	violations.append_array(check_ARC_MIDPOINT_ALIGNMENT(player_pos, cursor_pos))
 	violations.append_array(check_PARAMETER_MONOTONICITY(player_pos, cursor_pos))
 	violations.append_array(check_POST_INVERSION_ARC(player_pos, cursor_pos))
 	violations.append_array(check_VIA_ON_ARC(player_pos, cursor_pos))
@@ -501,6 +502,46 @@ func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[Stri
 				var cross_e := (bt_end - origin).cross(aim_dir)
 				if absf(cross_e) > threshold:
 					violations.append("RAY-ALIGNMENT: %s step %d end cross=%.2f (bt=%s)" % [trace_name, i, cross_e, bt_end])
+	return violations
+
+func check_ARC_MIDPOINT_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var _traces := _get_named_traces()
+	for trace_name in _traces:
+		var path: Tracer.TracedPath = _traces[trace_name]
+		if path.steps.size() == 0:
+			continue
+		var first_step: Tracer.Step = path.steps[0]
+		if first_step.ray == null:
+			continue
+		var origin := first_step.ray.origin.coords
+		var aim_dir := first_step.ray.direction.to_vector().normalized()
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			if not step.is_arc_step or step.frame == null or step.ray == null:
+				continue
+			if step.hit == null:
+				continue
+			if not VisualConverter.is_arc(step.start, step.via, step.end):
+				continue
+			if _is_at_bounds(step.start, bounds) or _is_at_bounds(step.end, bounds):
+				continue
+			var p := VisualConverter.arc_params(step.start, step.via, step.end)
+			var ctr: Vector2 = p["center"]
+			var r: float = p["radius"]
+			var sa: float = p["start_angle"]
+			var ea: float = p["end_angle"]
+			var mid_angle := sa + (ea - sa) * 0.5
+			var arc_mid := ctr + Vector2(cos(mid_angle), sin(mid_angle)) * r
+			var bt_mid := step.frame.invert().apply(arc_mid)
+			if bt_mid.length() > 1e5:
+				continue
+			var cross := (bt_mid - origin).cross(aim_dir)
+			if absf(cross) > 10.0:
+				violations.append("ARC-MIDPOINT-ALIGNMENT: %s step %d cross=%.2f (arc_mid=%s bt=%s)" % [trace_name, i, cross, arc_mid, bt_mid])
 	return violations
 
 func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:

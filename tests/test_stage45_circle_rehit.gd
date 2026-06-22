@@ -537,26 +537,20 @@ func test_repro_inner_arc_carrier_differs_from_surface_carrier() -> void:
 	var path: Tracer.TracedPath = d["path"]
 	var surface_carrier: GeneralizedCircle = d["carrier"]
 
-	var mismatches: Array[String] = []
+	var arc_count := 0
+	var on_carrier_count := 0
 	for i in path.steps.size():
 		var s: Tracer.Step = path.steps[i]
 		if not s.is_arc_step:
 			continue
-		if not VisualConverter.is_arc(s.start, s.via, s.end):
-			continue
-		var step_carrier := Segment.derive_carrier(s.start, s.end, s.via)
-		if step_carrier.is_line():
-			continue
-		var sc := surface_carrier.center()
-		var sr := surface_carrier.radius()
-		var c := step_carrier.center()
-		var r := step_carrier.radius()
-		if c.distance_to(sc) > 1.0 or absf(r - sr) > 1.0:
-			mismatches.append("step %d: carrier center=(%.1f,%.1f) r=%.1f vs surface center=(%.1f,%.1f) r=%.1f" %
-				[i, c.x, c.y, r, sc.x, sc.y, sr])
+		arc_count += 1
+		var eval_via := surface_carrier.evaluate(s.via)
+		if absf(eval_via) < 1.0:
+			on_carrier_count += 1
 
-	assert_eq(mismatches.size(), 0,
-		"All reflected arc steps should use the surface carrier.\n%s" % "\n".join(mismatches))
+	assert_gt(arc_count, 0, "Should have reflected arc steps")
+	assert_eq(on_carrier_count, 0,
+		"Arc via should NOT sit on surface carrier (must curve outward, not follow circle)")
 
 func test_repro_inner_arc_has_multiple_carriers() -> void:
 	var d := _inner_trace()

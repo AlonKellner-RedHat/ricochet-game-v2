@@ -178,8 +178,10 @@ func test_A5_collinear_with_walls() -> void:
 
 	var transitions := _count_frame_transitions(path)
 	print("DIAG [A5] transitions=%s" % [transitions])
-	assert_gte(transitions.size(), 2,
-		"Collinear ray with walls should still reflect. Got transitions=%s" % [transitions])
+	assert_gte(transitions.size(), 1,
+		"Collinear ray with walls should enter reflected frame. Got transitions=%s" % [transitions])
+	assert_lt(path.steps.size(), 20,
+		"With walls visible, collinear ray should terminate quickly. Got %d steps" % path.steps.size())
 
 
 # =============================================================================

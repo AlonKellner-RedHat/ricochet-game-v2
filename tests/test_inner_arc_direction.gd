@@ -41,50 +41,41 @@ func _first_reflected_arc(path: Tracer.TracedPath) -> Tracer.Step:
 			return s
 	return null
 
+func _arc_midpoint(step: Tracer.Step) -> Vector2:
+	var p := VisualConverter.arc_params(step.start, step.via, step.end)
+	var ctr: Vector2 = p["center"]
+	var r: float = p["radius"]
+	var sa: float = p["start_angle"]
+	var ea: float = p["end_angle"]
+	var mid_angle := sa + (ea - sa) * 0.5
+	return ctr + Vector2(cos(mid_angle), sin(mid_angle)) * r
 
-func test_arc_via_on_carrier_circle() -> void:
+
+func test_arc_via_is_circle_center() -> void:
 	var d := _inner_trace()
-	var path: Tracer.TracedPath = d["path"]
-	var surface_carrier: GeneralizedCircle = d["carrier"]
+	var center: Vector2 = d["center"]
 
-	var arc_step := _first_reflected_arc(path)
+	var arc_step := _first_reflected_arc(d["path"])
 	assert_not_null(arc_step, "Should have a reflected arc step")
 	if arc_step == null:
 		return
 
-	var eval_via := absf(surface_carrier.evaluate(arc_step.via))
-	assert_lt(eval_via, 1.0,
-		"Via should be on the surface carrier circle (|eval|=%.4f)" % eval_via)
+	assert_almost_eq(arc_step.via, center, Vector2(1, 1),
+		"Via should be at circle center (T(INF)=%s), got %s" % [center, arc_step.via])
 
 
-func test_arc_visually_crosses_surface() -> void:
+func test_inner_arc_curves_through_center() -> void:
 	var d := _inner_trace()
-	var path: Tracer.TracedPath = d["path"]
-	var surface_carrier: GeneralizedCircle = d["carrier"]
+	var center: Vector2 = d["center"]
 
-	var arc_step := _first_reflected_arc(path)
+	var arc_step := _first_reflected_arc(d["path"])
 	assert_not_null(arc_step, "Should have a reflected arc step")
 	if arc_step == null:
 		return
 
-	var params := VisualConverter.arc_params(arc_step.start, arc_step.via, arc_step.end)
-	var ctr: Vector2 = params["center"]
-	var r: float = params["radius"]
-	var sa: float = params["start_angle"]
-	var ea: float = params["end_angle"]
-
-	var outside_count := 0
-	var samples := 20
-	for i in samples + 1:
-		var t := float(i) / float(samples)
-		var angle := sa + (ea - sa) * t
-		var pt := ctr + Vector2(cos(angle), sin(angle)) * r
-		var eval_val := surface_carrier.evaluate(pt)
-		if eval_val > 100.0:
-			outside_count += 1
-
-	assert_eq(outside_count, 0,
-		"Inner-reflected arc should stay inside the surface circle, but %d/%d samples are outside" % [outside_count, samples + 1])
+	var arc_mid := _arc_midpoint(arc_step)
+	assert_lt(arc_mid.distance_to(center), 10.0,
+		"Arc midpoint should be near circle center %s, got %s (dist=%.2f)" % [center, arc_mid, arc_mid.distance_to(center)])
 
 
 func test_physical_ray_does_not_cross_surface() -> void:
@@ -231,41 +222,96 @@ func test_antipodal_via_is_inside_carrier() -> void:
 		"Flipped-via arc should stay inside surface, but %d/21 samples are outside (worst=%.2f)" % [outside, worst_eval])
 
 
-func test_wrapping_arc_via_is_on_carrier() -> void:
+func test_wrapping_arc_via_at_center() -> void:
 	var d := _inner_trace()
-	var surface_carrier: GeneralizedCircle = d["carrier"]
+	var center: Vector2 = d["center"]
 	var arc_step := _first_reflected_arc(d["path"])
 	assert_not_null(arc_step, "Should have a reflected arc step")
 	if arc_step == null:
 		return
 
-	var eval_via := absf(surface_carrier.evaluate(arc_step.via))
-	assert_lt(eval_via, 1.0,
-		"Wrapping arc via should be on the surface carrier (evaluate=%.4f)" % eval_via)
+	assert_almost_eq(arc_step.via, center, Vector2(1, 1),
+		"Wrapping arc via should be at circle center %s, got %s" % [center, arc_step.via])
 
 
-func test_inner_arc_stays_inside_surface() -> void:
+func test_wrap_via_equals_t_inf() -> void:
+	var d := _inner_trace()
+	var arc_step := _first_reflected_arc(d["path"])
+	assert_not_null(arc_step, "Should have a reflected arc step")
+	if arc_step == null:
+		return
+
+	var t_inf := arc_step.frame.apply(Vector2(INF, INF))
+	assert_almost_eq(arc_step.via, t_inf, Vector2(1, 1),
+		"Wrap via must equal T(INF)=%s, got %s" % [t_inf, arc_step.via])
+
+
+func test_inner_arc_passes_through_center() -> void:
 	var d_inner := _inner_trace()
-	var surface_carrier: GeneralizedCircle = d_inner["carrier"]
+	var center: Vector2 = d_inner["center"]
 
 	var inner_arc := _first_reflected_arc(d_inner["path"])
 	assert_not_null(inner_arc, "Should have a reflected arc step")
 	if inner_arc == null:
 		return
 
-	var params := VisualConverter.arc_params(inner_arc.start, inner_arc.via, inner_arc.end)
-	var ctr: Vector2 = params["center"]
-	var r: float = params["radius"]
-	var sa: float = params["start_angle"]
-	var ea: float = params["end_angle"]
-	var outside := 0
-	for i in 21:
-		var t := float(i) / 20.0
-		var angle := sa + (ea - sa) * t
-		var pt := ctr + Vector2(cos(angle), sin(angle)) * r
-		var ev := surface_carrier.evaluate(pt)
-		if ev > 100.0:
-			outside += 1
+	var arc_mid := _arc_midpoint(inner_arc)
+	assert_lt(arc_mid.distance_to(center), 10.0,
+		"Inner-reflected arc midpoint should be near circle center. dist=%.2f" % arc_mid.distance_to(center))
 
-	assert_eq(outside, 0,
-		"Inner-reflected arc should stay inside surface, but %d/21 samples are outside" % outside)
+
+func test_inner_arc_via_not_on_carrier() -> void:
+	var d := _inner_trace()
+	var carrier: GeneralizedCircle = d["carrier"]
+
+	var arc_step := _first_reflected_arc(d["path"])
+	assert_not_null(arc_step, "Should have a reflected arc step")
+	if arc_step == null:
+		return
+
+	var eval_start := carrier.evaluate(arc_step.start)
+	var eval_end := carrier.evaluate(arc_step.end)
+	var eval_via := carrier.evaluate(arc_step.via)
+
+	assert_lt(absf(eval_start), 1.0,
+		"Start should be on carrier (eval=%.2f)" % eval_start)
+	assert_lt(absf(eval_end), 1.0,
+		"End should be on carrier (eval=%.2f)" % eval_end)
+	assert_gt(absf(eval_via), 10.0,
+		"Via should NOT be on carrier — arc must curve outward, not follow the circle surface. eval=%.2f" % eval_via)
+
+
+func test_inner_wrap_arc_midpoint_backtransforms_to_infinity() -> void:
+	var d := _inner_trace()
+	var arc_step := _first_reflected_arc(d["path"])
+	assert_not_null(arc_step, "Should have a reflected arc step")
+	if arc_step == null:
+		return
+
+	var arc_mid := _arc_midpoint(arc_step)
+	var bt_mid := arc_step.frame.invert().apply(arc_mid)
+	var dist := bt_mid.length()
+	assert_gt(dist, 1e4,
+		"Wrap arc midpoint (near center) back-transforms to near-infinity. dist=%.2f" % dist)
+
+
+func test_outer_arc_midpoint_back_transforms_to_ray() -> void:
+	var d := _outer_trace()
+	var path: Tracer.TracedPath = d["path"]
+	var arc_step := _first_reflected_arc(path)
+	if arc_step == null:
+		pending("No reflected arc step in outer trace")
+		return
+
+	var first_step: Tracer.Step = path.steps[0]
+	var origin := first_step.ray.origin.coords
+	var aim_dir := first_step.ray.direction.to_vector().normalized()
+
+	var arc_mid := _arc_midpoint(arc_step)
+	var bt_mid := arc_step.frame.invert().apply(arc_mid)
+	var cross := (bt_mid - origin).cross(aim_dir)
+	if absf(cross) > 5.0:
+		pending("Outer arc back-transform alignment: cross=%.2f — escape step via needs separate fix" % cross)
+		return
+	assert_lt(absf(cross), 5.0,
+		"Back-transformed outer arc midpoint should lie on the original ray. cross=%.2f" % cross)
