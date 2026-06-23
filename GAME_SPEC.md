@@ -17,17 +17,28 @@ Engine: **Godot 4.6+** with **GDScript**. Developed against Godot 4.6.x stable. 
 | Plan construction and removal | Done |
 | Planned trace with image chains | Done |
 | Step tree merge and divergence | Done |
-| Invariant sweep testing (15 checks, 10 scenes, 29k combos) | Done |
+| Circle inversion effect — math, rendering, trace, planner | Done |
 | Arrow flight with freeze/animation/skip | Done |
 | Camera tracking during arrow flight (§4.5) | Done |
 | Game systems: checkpoint, undo, reset (§3.3) | Done |
-| Circle inversion effect — math, rendering, physical trace | Done |
 | Epsilon removal — three-tier provenance endpoint detection (§31.3) | Done |
-| Rigid motion effect | Todo |
-| Projective effects | Todo |
-| Visibility polygon (§15) | Todo |
-| State-changing surfaces | Todo |
-| Level editor | Todo |
+| Effect.Kind enum + TransformativeEffect base class (v0.8.0) | Done |
+| Boundless tracer — beyond-infinity handling (v1.0.0) | Done |
+| Full segments / unbounded tracing (v1.0.0–v1.1.0) | Done |
+| Source-based cancellation / transform stack (v1.1.0) | Done |
+| Hermitian carrier transform (v1.2.0) | Done |
+| No surface filtering principle (v1.3.0) | Done |
+| Zero invariant violations (v1.4.0) | Done |
+| Multi-bounce validation (v1.5.0) | Done |
+| DRY refactor — Tracer, PathRenderer, Effects (v1.6.0) | Done |
+| Invariant sweep testing (24 checks, 10 scenes) | Done |
+| Rigid motion effect | Planned |
+| Projective effects | Planned |
+| Compound transformative effect | Planned |
+| Visibility polygon (§15) | Planned |
+| State-changing surfaces (CategoricalResolver) | Planned |
+| Level editor | Planned |
+| Menus, HUD, save system | Planned |
 
 ---
 
@@ -320,7 +331,7 @@ MobiusTransform:
 | **Apply to a point** | Let `z = x + iy`. If `conjugating`: use `z̄` (conjugate z). Compute `w = (α·z' + β) / (γ·z' + δ)` where `z' = z` if conformal, `z' = z̄` if conjugating. Result is `(Re(w), Im(w))`. |
 | **Compose** | Depends on the conjugating flags of both operands (see composition table below). |
 | **Invert** | `M⁻¹ = [[δ, -β], [-γ, α]] / (αδ - βγ)`. The `conjugating` flag is preserved (anti-conformal inverse is still anti-conformal). |
-| **Transform a carrier** | Hermitian matrix form: `M⁻ᴴ · H · M⁻¹`, adjusted for conjugation. |
+| **Transform a carrier** | Hermitian matrix form: `M⁻ᴴ · H · M⁻¹`, adjusted for conjugation. Implemented in `GeneralizedCircle.transformed_by(mobius)`. For anti-conformal (conjugating) transforms, the conjugate transpose is adjusted so the result stays Hermitian. |
 | **Identity** | `[[1,0],[0,1]]`, `conjugating = false`. |
 
 **Composition table:** When composing `M₁ ∘ M₂` (apply M₂ first, then M₁):
@@ -519,8 +530,11 @@ A segment is defined by **three points only**: `start`, `end`, and `via`. The `v
 Segment:
     start:    Vector2
     end:      Vector2
-    via: Vector2   # any point on the segment between start and end
+    via:      Vector2   # any point on the segment between start and end
+    full:     bool      # true = unbounded (full circle or full line, no endpoints)
 ```
+
+When `full = true`, the segment represents the entire carrier (a full circle or a full line) with no endpoint clipping. All intersection points on the carrier are valid hits regardless of arc containment. Full segments are created via `Segment.full_from_carrier()`.
 
 These three points **fully determine the segment**, including its carrier:
 
@@ -604,6 +618,8 @@ Each surface has a stable `id` assigned at creation, never reused. Tie-breaking 
 
 ### 9.4 State-conditional behavior
 
+> **Status: PLANNED** — The `ConfigResolver` abstraction (including `FixedResolver` and `CategoricalResolver`) is not yet implemented. Surfaces currently hold fixed `SideConfig` per side directly, without a resolver layer. The `SideConfig.state_change` field exists structurally but is not applied during tracing.
+
 A surface's active configuration is determined by a **ConfigResolver** — an abstraction with two built-in implementations:
 
 ```
@@ -644,33 +660,48 @@ Example: a breakable mirror uses `CategoricalResolver` with `state_key = "mirror
 
 ### 10.1 Effect base class and hierarchy
 
-All effects extend a common `Effect` base class. Dispatch uses method calls, not type checks.
+All effects extend a common `Effect` base class. Dispatch uses `kind()` (returning `Effect.Kind` enum) and method calls, not type checks.
 
 ```
 Effect (extends RefCounted):
-    func is_terminal() → bool          # default: false
-    func is_transformative() → bool    # default: false
-    func is_projective() → bool        # default: false (todo)
-    func get_mobius() → MobiusTransform        # default: identity
-    func get_inverse_mobius() → MobiusTransform # default: get_mobius().invert()
+    enum Kind { PASS, TERMINAL, TRANSFORMATIVE, PROJECTIVE }
+
+    func kind() → Kind                         # default: PASS
+    func is_terminal() → bool                  # kind() == TERMINAL
+    func is_transformative() → bool            # kind() == TRANSFORMATIVE
+    func get_mobius() → MobiusTransform         # default: identity
+    func get_inverse_mobius() → MobiusTransform  # default: identity
+    func get_tracked_transform() → TrackedTransform
     func normalized(carrier: GeneralizedCircle) → Effect  # default: self
+    func get_display_name() → String
+    func get_display_color() → Color
 
 TerminalEffect (extends Effect):
-    func is_terminal() → true
+    func kind() → TERMINAL
 
 TransformativeEffect (extends Effect):
-    func is_transformative() → true
-    # Subclasses override get_mobius() and get_inverse_mobius()
+    _mobius:   MobiusTransform
+    _tracked:  TrackedTransform
+    _carrier:  GeneralizedCircle
+
+    func kind() → TRANSFORMATIVE
+    func get_mobius() → _mobius
+    func get_inverse_mobius() → _tracked.inverse.mobius
+    func get_tracked_transform() → _tracked
+    func _create_normalized() → TransformativeEffect   # subclass override
+    func normalized(carrier) → _create_normalized()
 
 ReflectionEffect (extends TransformativeEffect):
-    func normalized(carrier) → ReflectionEffect.new(carrier)
-    # Returns a new instance with the given carrier (used when frame normalization
-    # transforms the surface's geometry)
+    func _create_normalized() → ReflectionEffect.new(carrier)
+
+CircleInversionEffect (extends TransformativeEffect):
+    func _create_normalized() → CircleInversionEffect.new(carrier)
+    # Requires circle carrier (a ≠ 0)
 ```
 
-Future effect types will extend `Effect` or `TransformativeEffect`:
-- `ProjectiveEffect` will add `apply_forward()` and `back_propagate()` methods
-- `CircleInversionEffect`, `RigidMotionEffect` will extend `TransformativeEffect`
+**Implemented effects:** `TerminalEffect`, `ReflectionEffect`, `CircleInversionEffect`. The `Kind.PROJECTIVE` enum value exists for forward compatibility but no projective effects are implemented yet.
+
+**Planned effects:** `RigidMotionEffect` (§10.2), `ProjectiveEffect` and subtypes (§10.4), `CompoundTransformativeEffect` (§10.3).
 
 A surface side's effect is an `Effect` instance, or `null` (pass-through). A surface with `null` on both sides and `interactive = false` on both sides has no gameplay effect and is not clickable for plan construction. However, it still participates in ray tracing as a pass-through — the ray passes through it, producing a step. If `is_target = true`, the pass-through still registers a target hit.
 
@@ -682,9 +713,11 @@ All are Möbius transformations. Composition = matrix multiplication.
 
 **Circle inversion:** Inverts the ray through the surface's carrier circle. Carrier must be a circle (`a ≠ 0`). **The inversion circle is always the surface's own carrier** — no separate parameter. Self-inverse. Circle inversion is what makes arc paths appear in the visual frame.
 
-**Rigid motion:** Rotation by θ and translation by d. General Euclidean isometry excluding reflections. Möbius matrix: `[[e^{iθ}, d], [0, 1]]`. Not self-inverse; inverse is precomputed and cached. Enables teleport/portal mechanics.
+**Rigid motion:** *(Status: PLANNED)* Rotation by θ and translation by d. General Euclidean isometry excluding reflections. Möbius matrix: `[[e^{iθ}, d], [0, 1]]`. Not self-inverse; inverse is precomputed and cached. Enables teleport/portal mechanics.
 
 ### 10.3 Compound transformative effects
+
+> **Status: PLANNED** — `CompoundTransformativeEffect` is not yet implemented.
 
 A single surface may apply multiple transformative effects in sequence. The compound is their composition, precomputed as a single `MobiusTransform`. `CompoundTransformativeEffect` **is a subtype of** `TransformativeEffect` — it implements the same interface (`get_mobius()`, `get_inverse_mobius()`) and fits in the `SideConfig` type union without modification.
 
@@ -699,6 +732,8 @@ Examples: reflect + translate = glide reflection. Reflect + rotate = rotated ref
 
 ### 10.4 Projective effects
 
+> **Status: PLANNED** — No projective effects are implemented. `Effect.Kind.PROJECTIVE` exists in the enum for forward compatibility.
+
 All produce an outgoing **line ray** in the visual frame, determined solely by the hit point. Incoming direction is discarded. The Möbius frame **resets to identity** after a projective effect.
 
 **Line normal projection:** Outgoing ray ⊥ to the surface line at the hit point. Back-propagation: `H` = orthogonal projection of target onto surface line.
@@ -709,9 +744,11 @@ All produce an outgoing **line ray** in the visual frame, determined solely by t
 
 ### 10.5 Terminal effect: block
 
-Stops the ray. No outgoing ray, no frame update. Also the **implicit effect after 256 hits** (§12.6).
+Stops the ray. No outgoing ray, no frame update. Also the **implicit effect after 32 hits** (§12.6).
 
 ### 10.6 State changes
+
+> **Status: PLANNED** — The `SideConfig.state_change` field exists structurally but state changes are not applied during tracing. `GameState.flags` exists but is not mutated by surface hits.
 
 Orthogonal to the three effect categories. Any surface side may carry an optional state change.
 
@@ -903,7 +940,7 @@ func trace(shared_ray: Ray, surfaces: Array, mode: TraceMode,
     norm_surfaces = []
     norm_to_surface = {}           # normalized Segment → original Surface mapping
 
-    while hit_count < 256:
+    while hit_count < 32:
         # === Stage boundary: recompute frame and normalize surfaces ===
         if frame_dirty:
             frame = compose_all(transform_stack)       # product of TrackedTransforms
@@ -1009,6 +1046,8 @@ func trace(shared_ray: Ray, surfaces: Array, mode: TraceMode,
 - **`skip_segment`** (single segment, reference equality) replaces the `excluded_surfaces` set. Only the most recently hit segment is excluded — the next stage clears it.
 - **Blockage accumulation** at endpoints: `blocked_left` and `blocked_right` accumulate across all segments sharing the endpoint. An effect fires only when both sides are blocked (`is_fully_blocked()`). This handles Y-junctions and T-junctions correctly.
 - **Transform stack** stores `TrackedTransform` objects (forward + inverse pair). The frame is recomposed from the stack on each stage boundary, enabling inverse-pair cancellation (§8.1).
+- **Source-based cancellation:** When a new transform is the inverse of the top of the stack AND originates from the same surface (same source), the pair is popped instead of pushed. This prevents infinite loops with self-inverse effects (reflection, circle inversion) when the ray re-hits the same surface.
+- **No surface filtering:** All surfaces always participate in hit detection. The tracer never filters surfaces by position, proximity, or any other spatial criterion. This is a conscious architectural decision — simpler, more correct, and avoids edge cases from culling.
 - The origin hitpoint (t=0) is always injected and sorted last by `projective_sort`. When reached, the ray escapes to bounds (forward and return segments).
 
 ### 12.2 Step record
@@ -1045,7 +1084,7 @@ func to_visual_path(traced: TracedPath) → VisualPath:
 
 ### 12.6 Effect limit
 
-Maximum **256 total hits** per arrow path (including pass-throughs). After 256, the path terminates. This prevents infinite loops from any source — including overlapping pass-through surfaces.
+Maximum **32 total hits** per arrow path (including pass-throughs). After 32, the path terminates. This prevents infinite loops from any source — including overlapping pass-through surfaces.
 
 When the limit is reached, the preview shows a truncation marker (small stop icon) at the final hit point. During arrow flight, the arrow stops with a distinct visual cue (flash/fade).
 
@@ -1102,6 +1141,8 @@ func plan_transformative_subchain(sub_origin, sub_target, entries, initial_frame
 Each leg is a straight line in the normalized frame. In the visual frame, legs may be arcs.
 
 ### 13.3 Projective break points
+
+> **Status: PLANNED** — Projective break points and mixed chain planning depend on projective effects (§10.4), which are not yet implemented. The planner currently handles only transformative sub-chains (§13.2).
 
 Projective surfaces are **break points** that partition the plan into transformative sub-chains. At each break point:
 
@@ -1350,6 +1391,8 @@ There is no separate post-cursor computation. Both traces run the full path from
 
 ## 15. Visibility
 
+> **Status: PLANNED** — The visibility system is not yet implemented. The design below is the intended specification for future development. The infrastructure it depends on (same intersection pipeline, same effects) is in place.
+
 ### 15.1 Purpose
 
 The visibility system highlights the **set of cursor positions that will not cause divergence** for the current plan. It answers: "if I place my cursor here, will the planned path and the physical path agree?" The highlighted region is exactly the set of valid aim positions. *(Principle 14: visibility shares the world.)*
@@ -1398,11 +1441,11 @@ func compute_visibility(origin, plan, scene, game_state) → VisibilityResult:
                 points_of_interest, current_origin, truncating_segments)
         
         # Cast rays toward each point of interest.
-        # Uses the SAME find_earliest_hit as physical tracing (§12.1).
+        # Uses the SAME find_all_hits as physical tracing (§12.1).
         cast_results = []
         for poi in points_of_interest:
             ray = Ray(current_origin, Direction(current_origin, poi))
-            hit = find_earliest_hit(ray, frame_surfaces,
+            hit = find_all_hits(ray, frame_surfaces,
                                      see_through=truncating_segments)
             obstruction = determine_obstruction_side(hit, poi)
             cast_results.append(CastResult(poi, hit, obstruction))
@@ -1480,7 +1523,7 @@ func cast_parallel_source(direction, lit_segments, scene, game_state):
     cast_results = []
     for poi in pois:
         ray = Ray(poi.source, Direction(poi.source, poi.source + direction))
-        hit = find_earliest_hit(ray, scene.surfaces, see_through=lit_segments)
+        hit = find_all_hits(ray, scene.surfaces, see_through=lit_segments)
         obstruction = determine_obstruction_linear(hit, poi)
         cast_results.append(CastResult(poi.target, hit, obstruction))
     
@@ -1853,6 +1896,8 @@ Each `SurfaceData` includes the segment geometry (start, end, via), per-side eff
 
 ### 19.2 Editor requirements
 
+> **Status: PLANNED** — The level editor is not yet implemented. Levels are currently created programmatically in code.
+
 The level editor must support:
 
 | Feature | Behavior |
@@ -1901,7 +1946,7 @@ The format must be human-readable for debugging.
 
 The math layer has **zero Godot engine dependencies** beyond `Vector2`. Testable in isolation.
 
-**GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (256 steps × N surfaces per frame), avoid object allocation in hot loops — reuse arrays, use `PackedFloat64Array` for batch math where possible. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
+**GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (32 steps × N surfaces per frame), avoid object allocation in hot loops — reuse arrays, use `PackedFloat64Array` for batch math where possible. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
 
 **Resource mapping:** `LevelData`, `SurfaceData`, and effect configurations extend Godot `Resource`. Each has `@export` properties for serialization to `.tres`. Surfaces in the scene tree are `Node2D` instances that reference their `SurfaceData` resource.
 
@@ -2006,7 +2051,7 @@ The arrow is animated step-by-step along the computed `TracedPath`:
    - Line steps (visual): linear interpolation.
    - Arc steps (visual): parametric interpolation along the arc. The parameter `t ∈ [0, 1]` interpolates from start to end via the via point. The arrow position at each t is computed by slerp (spherical-linear interpolation) around the center, with winding direction determined by the via point (cross-product sign of `(start - center) × (via - center)`).
 2. At each hit point: brief bounce event (visual flash, sound cue). If the hit triggers a state change (e.g., surface breaks), the surface visually updates at this moment during the animation.
-3. Speed: constant visual speed along the path (not constant parametric speed — arcs travel at the same visual speed as lines). Default arrow speed: **800 units/sec**. Configurable per level.
+3. Speed: constant visual speed along the path (not constant parametric speed — arcs travel at the same visual speed as lines). Default arrow speed: **1600 units/sec**. Configurable per level.
 
 ### 21.3 Ray escape during flight
 
@@ -2096,7 +2141,7 @@ Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.
 
 | Constraint | Value | Rationale |
 |------------|-------|-----------|
-| Max total hits per arrow path | **256** | All hits count (including pass-through). Prevents infinite loops. |
+| Max total hits per arrow path | **32** | All hits count (including pass-through). Prevents infinite loops. |
 | Inversion circle = carrier | Always | No separate inversion-circle parameter. |
 | Min segment length | > 0 | Zero-length segments never hit. Validated at load. |
 | Frame determinant | ≠ 0 | Möbius matrix must be invertible. Validated on composition. |
@@ -2104,6 +2149,7 @@ Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.
 | Direction representation | Two points | No stored angles or unit vectors. |
 | Ordering method | Cross-product sign | No `atan2`. |
 | Epsilon decisions | Forbidden | No `\|x\| < ε` for topology-changing decisions. |
+| Surface filtering | Forbidden | All surfaces always participate in hit detection. No spatial filtering, proximity culling, or pre-selection. |
 | UI click tolerance | 8 pixels (§4.2) | UI-layer tolerance — does NOT violate the no-epsilon constraint, which applies only to topology-changing geometric decisions in the math layer. |
 | Reflection carrier | Must be a line (`a = 0`) | Validated at level load and editor save. |
 | Inversion carrier | Must be a circle (`a ≠ 0`) | Validated at level load and editor save. |
@@ -2186,6 +2232,8 @@ Simple shape (triangle pointing toward cursor, or circle). Wireframe aesthetic.
 
 ## 26. UI/HUD
 
+> **Status: PLANNED** — The HUD and menu systems are not yet implemented. The game currently runs with a basic plan display (`PlanHUD`) but no menus, level select, or pause screen.
+
 ### 26.1 Gameplay HUD
 
 | Element | Content |
@@ -2213,6 +2261,8 @@ Simple shape (triangle pointing toward cursor, or circle). Wireframe aesthetic.
 
 ## 27. Save system and progression
 
+> **Status: PLANNED** — The save system is not yet implemented.
+
 ### 27.1 What is persisted
 
 - Level completion (per level: completed yes/no, best shot count).
@@ -2229,19 +2279,21 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 ## 28. Implementation phases
 
-### Phase 0: Core abstractions
+> **Implementation status:** Phases 0–5 are complete. Phase 6 onward is planned. The TDD documents map phases to numbered stages — see TDD_01 through TDD_08 for details. Stages 44–51 were repurposed during development; see TDD_05 for the reconciliation table.
+
+### Phase 0: Core abstractions *(Done)*
 - `Direction`, `Ray`, `Segment` data classes (§8).
 - `GeneralizedCircle` class with fields `(a, b, c, d)` — method implementations (`is_line()`, `center()`, `radius()`, `contains_point()`) are added in Phase 1.
 - `MobiusTransform` struct with `conjugating` flag, complex number helpers (§5.2, §5.3).
-- `Surface`, `SideConfig`, `ConfigResolver` with `FixedResolver` and `CategoricalResolver` (§9).
-- `TransformativeEffect`, `ProjectiveEffect`, `TerminalEffect` interfaces (§10.1).
+- `Surface`, `SideConfig` (§9). *(ConfigResolver deferred to Phase 8.)*
+- `Effect` base with `Kind` enum, `TransformativeEffect`, `TerminalEffect` (§10.1). *(ProjectiveEffect deferred to Phase 6.)*
 - `HitRecord`, `Step`, `StepTree` data structures (§11.2, §14).
-- `GameState`, `CheckpointData`, `LevelData` data structures (§18, §19).
+- `GameState`, `CheckpointData` data structures (§18). *(LevelData deferred to Phase 8.)*
 - `TransformCache` with provenance-keyed lookup (§17).
 
 **Deliverable:** all core types compile, have correct field definitions, and can be instantiated. No algorithms — just the type system skeleton that subsequent phases build on.
 
-### Phase 1: Math foundations
+### Phase 1: Math foundations *(Done)*
 - `GeneralizedCircle` class with `is_line()`, `center()`, `radius()`, `contains_point()`.
 - `MobiusTransform` class with apply, compose, invert, transform_carrier.
 - `Segment` class with start, end, via (carrier derived via cache), side determination.
@@ -2251,7 +2303,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** math layer passes unit tests for intersection, transform composition, and carrier transformation.
 
-### Phase 2: Basic effects and ray tracing
+### Phase 2: Basic effects and ray tracing *(Done)*
 - `TransformativeEffect` (reflection only), `TerminalEffect` (block).
 - `Surface` and `SideConfig` classes.
 - `trace()` function — the physical ray tracing loop.
@@ -2261,7 +2313,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** ray tracing works with reflection and block effects. Traced paths are correct.
 
-### Phase 3: Preview rendering and player input
+### Phase 3: Preview rendering and player input *(Done)*
 - `VisualConverter` — math→visual conversion (line segments only at this phase).
 - `PathRenderer` — draws traced paths via `_draw()`.
 - `Player` — CharacterBody2D with movement and aiming.
@@ -2270,7 +2322,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** player can move, aim, and see a real-time trajectory preview with reflections.
 
-### Phase 4: Planning algorithm
+### Phase 4: Planning algorithm *(Done)*
 - `Planner` — image chain method for transformative sub-chains.
 - Plan construction input: click to add, right-click to remove.
 - Step tree: planned vs physical paths, divergence detection.
@@ -2278,7 +2330,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** player can build plans, see the ideal path, and observe divergence when the plan doesn't match the physical trace.
 
-### Phase 5: Circle inversion and arc visualization
+### Phase 5: Circle inversion and arc visualization *(Done)*
 - `CircleInversionEffect` (transformative).
 - Frame transform composition (non-identity frames).
 - `VisualConverter` extended: math→visual now produces arc segments.
@@ -2287,7 +2339,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** circle inversion works. Arrow paths curve in the visual frame. Arcs render correctly.
 
-### Phase 6: Projective effects and mixed planning
+### Phase 6: Projective effects and mixed planning *(Planned)*
 - `LineNormalProjection`, `CircleNormalProjection`, `SemicircleDirectionalProjection`.
 - Back-propagation for each projective effect.
 - Mixed chain planning algorithm.
@@ -2297,14 +2349,14 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** all effect types work. Mixed plans with transformative and projective surfaces produce correct previews.
 
-### Phase 7: Visibility system
+### Phase 7: Visibility system *(Planned)*
 - Visibility polygon computation (multiple regions).
 - Rendering visibility regions.
 - Consistency with trajectory (same pipeline, same scene state).
 
 **Deliverable:** visibility overlay shows where the player can validly aim.
 
-### Phase 8: Game loop
+### Phase 8: Game loop *(Planned)*
 - Level loading from `.tres` resources.
 - Target surface mechanics (hit detection, win condition).
 - Shot lifecycle (freeze, trace, animate, evaluate, unfreeze).
@@ -2316,7 +2368,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 Minimal sound events for Phase 8: `fire`, `bounce`, `break`, `target_hit`, `level_complete`. Use placeholder sounds (simple .wav files). Full audio design is deferred (§33).
 
-### Phase 9a: Basic level editor
+### Phase 9a: Basic level editor *(Planned)*
 - Surface placement (line and arc segments).
 - Effect assignment (per side, including interactive flag).
 - Target and spawn point placement.
@@ -2324,7 +2376,7 @@ Minimal sound events for Phase 8: `fire`, `bounce`, `break`, `target_hit`, `leve
 
 **Deliverable:** levels can be created, saved, and loaded.
 
-### Phase 9b: Advanced level editor
+### Phase 9b: Advanced level editor *(Planned)*
 - Cache override definition.
 - Test mode (play within editor).
 - Validation on save (all constraints from §23).
@@ -2332,7 +2384,7 @@ Minimal sound events for Phase 8: `fire`, `bounce`, `break`, `target_hit`, `leve
 
 **Deliverable:** levels can be tested within the editor with full simulation. Validation catches constraint violations before save.
 
-### Phase 10: Polish and testing
+### Phase 10: Polish and testing *(Partially done — invariant sweep operational)*
 - Invariant-based testing (§29.3).
 - Performance profiling and optimization.
 - Computation cache implementation and validation.
@@ -2372,11 +2424,11 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 #### Tier 1: User experience invariants
 
-**UX1. Visibility predicts non-divergence.** If the cursor lies within a visibility region, the planned and physical paths agree up to the cursor (no divergence). *(§15.)*
+**UX1. Visibility predicts non-divergence.** *(PLANNED — depends on visibility system §15.)* If the cursor lies within a visibility region, the planned and physical paths agree up to the cursor (no divergence).
 
-**UX2. Divergence implies outside visibility.** If the planned and physical paths diverge, the cursor is outside all visibility regions. *(Contrapositive of UX1.)*
+**UX2. Divergence implies outside visibility.** *(PLANNED — depends on visibility system §15.)* If the planned and physical paths diverge, the cursor is outside all visibility regions. (Contrapositive of UX1.)
 
-**UX3. Physical preview matches arrow flight.** The non-red sections of the preview (ALIGNED + ALIGNED_POST_PLANNED + DIVERGED_PHYSICAL) exactly match the arrow's actual flight path when fired. Same hit points, same surfaces, same order. *(Principle 2.)*
+**UX3. Physical preview matches arrow flight.** The non-red sections of the preview (ALIGNED + ALIGNED_POST_PLANNED + DIVERGED_PHYSICAL) exactly match the arrow's actual flight path when fired. Same hit points, same surfaces, same order. *(Principle 2.)* **Tested as:** `PHYSICAL_PREVIEW_MATCH`.
 
 **UX4. Firing the same shot twice produces the same result.** Same position, cursor, plan, and game state → identical arrow path. *(Principle 17.)*
 
@@ -2384,13 +2436,13 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **UX6. All targets reachable.** If the player has hit all targets (across one or more shots), the level is complete. No target is silently "unhit" despite being contacted. *(§24.2.)*
 
-**UX7. Plan preview shows the plan.** The solid-colored path (ALIGNED + DIVERGED_PLANNED) forms a continuous path from the player toward the cursor. *(§4.3.)*
+**UX7. Plan preview shows the plan.** The solid-colored path (ALIGNED + DIVERGED_PLANNED) forms a continuous path from the player toward the cursor. *(§4.3.)* **Tested as:** `UX7`, `GREEN_FROM_PLAYER`, `SOLID_PATH_TO_CURSOR`.
 
-**UX8. Plan feedback is immediate.** The preview updates every frame as the cursor moves, showing which planned entries are active. *(§4.2.)*
+**UX8. Plan feedback is immediate.** The preview updates every frame as the cursor moves, showing which planned entries are active. *(§4.2.)* Not directly testable as a unit invariant.
 
-**UX9. Block surfaces stop the arrow.** When the arrow hits a terminal surface, it stops. No pass-through. *(§10.5.)*
+**UX9. Block surfaces stop the arrow.** When the arrow hits a terminal surface, it stops. No pass-through. *(§10.5.)* **Tested as:** `TRACE_ENDS_AT_SURFACE_OR_BOUNDS`.
 
-**UX10. State changes are visible during flight.** Surface state changes appear at the moment the arrow reaches the triggering hit point. *(§21.2.)*
+**UX10. State changes are visible during flight.** *(PLANNED — depends on state changes §10.6.)* Surface state changes appear at the moment the arrow reaches the triggering hit point.
 
 **UX11. Empty plan = fire straight.** With no plan entries, the arrow fires straight toward the cursor. *(§13.5.)*
 
@@ -2398,41 +2450,57 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **S1. Cache: carrier ↔ via round-trip.** `derive_via(start, end, derive_carrier(start, end, via))` returns the exact original `via` (same Point ID). *(§17.2, Principle 22.)*
 
-**S2. Cache: transform round-trip.** For every point P transformed by effect E: applying E's inverse returns a Point with the same ID as P. *(§17.)*
+**S2. Cache: transform round-trip.** For every point P transformed by effect E: applying E's inverse returns a Point with the same ID as P. *(§17.)* **Tested as:** `BACK_TRANSFORM_ALIGNMENT`.
 
 **S3. Determinism.** Same inputs → identical step trees (same count, types, Point IDs, frame IDs). *(Principle 17.)*
 
-**S4. Divergence is monotonic.** Once divergence occurs at index `i`, all steps at `≥ i` are diverged types. No re-convergence. *(§14.2.)*
+**S4. Divergence is monotonic.** Once divergence occurs at index `i`, all steps at `≥ i` are diverged types. No re-convergence. *(§14.2.)* **Tested as:** `SINGLE_DIVERGENCE`.
 
 **S5. Aligned steps share provenance.** For ALIGNED/ALIGNED_POST_PLANNED steps, planned and physical have identical `start.id` and `frame_id`. *(§14.8.)*
 
-**S6. Aligned steps match.** Before divergence: same hit surface ID, side, and frame ID. Checked by provenance, not coordinates. *(§14.8.)*
+**S6. Aligned steps match.** Before divergence: same hit surface ID, side, and frame ID. Checked by provenance, not coordinates. *(§14.8.)* **Tested as:** `PLAN_EFFECTS_APPLIED`.
 
-**S7. Per-entry state matches.** For aligned steps: planner's `state_at[i]` equals the physical trace's game state at step `i`. *(§13.7 + §14.8.)*
+**S7. Per-entry state matches.** *(PLANNED — depends on state changes §10.6.)* For aligned steps: planner's `state_at[i]` equals the physical trace's game state at step `i`.
 
-**S8. Forward-first hit ordering.** Selected hit has smallest `t > 0`. If no `t > 0`: most negative `t < 0`. *(§11.3.)*
+**S8. Forward-first hit ordering.** Selected hit has smallest `t > 0`. If no `t > 0`: most negative `t < 0`. *(§11.3.)* **Tested as:** `PARAMETER_MONOTONICITY`, `PHYSICS_COMPLIANCE`.
 
-**S9. Exclusion respected.** The `skip_segment` segment is excluded from the hit result. *(§11.4, §12.1.)*
+**S9. Exclusion respected.** The `skip_segment` segment is excluded from the hit result. *(§11.4, §12.1.)* **Tested as:** `ORIGIN_NOT_REHIT`.
 
-**S10. Projective resets frame.** After every projective hit, `frame_id == IDENTITY_ID`. *(§10.7.)*
+**S10. Projective resets frame.** *(PLANNED — depends on projective effects §10.4.)* After every projective hit, `frame_id == IDENTITY_ID`.
 
-**S11. Three points on carrier.** Start/end/via evaluate to ≈0 under the carrier equation. *(Derivation validation.)*
+**S11. Three points on carrier.** Start/end/via evaluate to ≈0 under the carrier equation. *(Derivation validation.)* **Tested as:** `HITPOINT_ON_CARRIER`.
 
-**S12. Side determination consistent.** LEFT/RIGHT at every hit matches the cross-product formula (§9.2). *(§9.2.)*
+**S12. Side determination consistent.** LEFT/RIGHT at every hit matches the cross-product formula (§9.2). *(§9.2.)* **Tested as:** `ON_SEGMENT_CONSISTENCY`.
 
-**S13. Visibility: no self-intersection.** Region boundaries do not self-intersect. *(§15.)*
+**S13. Visibility: no self-intersection.** *(PLANNED — depends on visibility system §15.)* Region boundaries do not self-intersect.
 
-**S14. Visibility: edges on geometry.** Every polygon edge lies on a surface carrier or a ray from the origin. *(§15.2.)*
+**S14. Visibility: edges on geometry.** *(PLANNED — depends on visibility system §15.)* Every polygon edge lies on a surface carrier or a ray from the origin.
 
-**S15. Visibility: non-overlapping.** Distinct regions do not overlap. *(§15.1.)*
+**S15. Visibility: non-overlapping.** *(PLANNED — depends on visibility system §15.)* Distinct regions do not overlap.
 
-**S16. No NaN/Inf in output.** No NaN/Inf in any coordinate field (except the `Vector2(INF, INF)` escape sentinel). *(§31.)*
+**S16. No NaN/Inf in output.** No NaN/Inf in any coordinate field (except the `Vector2(INF, INF)` escape sentinel). *(§31.)* **Tested as:** `S16`.
 
 **S17. Provenance IDs unique.** Every Point has a unique ID. *(§8.1.)*
 
-**S18. Frame determinant non-zero.** Every MobiusTransform has `|αδ - βγ|² > 0`. *(§23.)*
+**S18. Frame determinant non-zero.** Every MobiusTransform has `|αδ - βγ|² > 0`. *(§23.)* **Tested as:** `S18_FRAME_DETERMINANT`.
 
-**S19. Trace preserves real state.** After a preview trace, `GameState.flags` is unchanged. *(§12.1.)*
+**S19. Trace preserves real state.** *(PLANNED — depends on state changes §10.6.)* After a preview trace, `GameState.flags` is unchanged.
+
+#### Additional implemented invariants
+
+The following invariants are tested by the sweep but not in the original specification:
+
+| Check name | Description |
+|------------|-------------|
+| `PREVIEW_NOGAPS` | No gaps between consecutive step endpoints in the preview path |
+| `PHYSICAL_CONTINUITY` | Step endpoints connect seamlessly (end of step N = start of step N+1) |
+| `SHARED_RAY` | All steps within a stage reference the same Ray object |
+| `RAY_ALIGNMENT` | Ray direction is preserved across steps within a transformative sub-chain |
+| `ARC_MIDPOINT_ALIGNMENT` | Arc step midpoints lie on the arc's carrier circle |
+| `POST_INVERSION_ARC` | Steps after circle inversion correctly produce arcs (not lines) |
+| `VIA_ON_ARC` | Step via points lie on the step's arc carrier |
+| `VISUAL_ON_PHYSICAL_CARRIER` | Visual segment points lie on the physical carrier |
+| `DIRECTION_ONLY` | Only the direction (not position) changes after a plan bounce |
 
 ### 29.4 Test level data
 
@@ -2450,14 +2518,14 @@ Screenshot comparison for known test scenes at known positions. Catches renderin
 
 Preview must update **every frame at 60fps** (~16.6ms per frame). Target: preview computation (planning + physical trace + visibility + visual conversion) should complete in under **5ms** on a mid-range CPU, leaving ~11ms for rendering and input processing. The preview computation includes:
 - Planning algorithm.
-- Physical trace (up to 256 steps).
+- Physical trace (up to 32 steps).
 - Visibility computation.
 - Math→visual conversion.
 - Draw calls.
 
 ### 30.2 Worst case
 
-256 steps × N surfaces per step = O(256N) intersection tests per frame. For small N (< 100), this is within budget. For larger scenes, spatial indexing (grid or BVH) may be needed.
+32 steps × N surfaces per step = O(32N) intersection tests per frame. For small N (< 100), this is within budget. For larger scenes, spatial indexing (grid or BVH) may be needed.
 
 ### 30.3 Optimization targets
 
@@ -2524,7 +2592,7 @@ When the system classifies a point (on-segment, which side, intersection index),
 ### 31.5 Frame composition stability
 
 Mitigations:
-- 256-effect limit bounds chain length.
+- 32-effect limit bounds chain length.
 - Cache stores intermediate results (no recomputation through full chain).
 - Projective effects reset the frame, breaking long chains.
 - Manual overrides enforce exact cycle identities.

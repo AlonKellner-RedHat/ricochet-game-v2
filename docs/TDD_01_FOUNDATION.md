@@ -771,7 +771,7 @@ Identical to Stage 5. No visual changes — this stage is pure infrastructure.
 | Per-entry state | S7 | — | — | Stage 54+ | Not yet introduced |
 | Forward-first ordering | S8 | — | — | Stage 11+ | Not yet introduced |
 | Exclusion respected | S9 | — | — | Stage 16+ | Not yet introduced |
-| Projective resets frame | S10 | — | — | Stage 47+ | Not yet introduced |
+| Projective resets frame | S10 | — | — | Stage 73+ | Not yet introduced |
 | Three points on carrier | S11 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Side determination | S12 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Visibility no self-intersect | S13 | — | — | Stage 35+ | Not yet introduced |

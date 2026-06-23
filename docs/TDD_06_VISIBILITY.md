@@ -2,7 +2,9 @@
 
 **Stages 34a--38** | Visibility polygon, obstruction, UX invariants, plan-aware visibility
 
-**Implementation order note:** Stage numbers (34a--38) are preserved from the original TDD_04 for traceability. These stages are implemented AFTER TDD_05 (advanced effects, Stages 40--51). This matches GAME_SPEC §28: "Phase 7 (visibility) requires Phase 6 (all effects)." The visibility system must handle arc carriers from circle inversion, transformed surfaces from rigid motion, and frame resets from projective effects.
+**Implementation order note:** Stage numbers (34a--38) are preserved from the original TDD_04 for traceability. These stages are implemented AFTER TDD_05's planned future stages (70--78: rigid motion, projective effects, compound effects). This matches GAME_SPEC §28: "Phase 7 (visibility) requires Phase 6 (all effects)." The visibility system must handle arc carriers from circle inversion, transformed surfaces from rigid motion, and frame resets from projective effects.
+
+> **Status: PLANNED** — All stages in this document depend on unimplemented prerequisites (rigid motion, projective effects) from TDD_05 stages 70--78.
 
 ### Stage Status
 
@@ -39,42 +41,45 @@ No stage is complete until the user has personally verified every interactive te
 
 ---
 
-## Prior Art Summary (Stages 1--51)
+## Prior Art Summary (current state)
 
-By Stage 51, the following systems exist and are tested:
+The following systems exist and are tested. This summary reflects the actual codebase as of v1.6.0, not the original TDD_05 plan.
 
 - **Project skeleton:** Godot 4.6 project with GUT testing framework, directory structure (`scripts/math/`, `scripts/visual/`, `scripts/game/`, `tests/`).
 - **Player:** `CharacterBody2D` with WASD movement, gravity-aware mode, jump.
 - **Cursor:** World-space mouse tracking via `get_global_mouse_position()`.
-- **Math layer:** `Direction`, `Ray`, `GeneralizedCircle`, `Segment` (three-point with carrier derivation and side determination), `Point` (with provenance and unique ID), `TransformCache` (provenance-keyed bidirectional store).
-- **Intersection system:** `intersect_line_with_gcircle` (line-line and line-circle cases), segment bounds filtering, side determination at hit point.
-- **Hit selection:** `HitRecord`, `find_earliest_hit` (forward/beyond partition, tie-breaking by surface ID, exclusion via `excluded_surfaces`).
-- **Surface system:** `Surface` (segment + policy), `SideConfig` (effect + state_change + interactive flag), `FixedResolver`.
-- **Effect system (complete):**
-  - `TerminalEffect` (block) -- stops the ray.
+- **Math layer:** `Direction`, `Ray`, `GeneralizedCircle` (with Hermitian carrier transform), `Segment` (three-point with carrier derivation, side determination, `full` flag for unbounded segments), `Point` (with provenance and unique ID), `TransformCache` (provenance-keyed bidirectional store).
+- **Intersection system:** `intersect_line_with_carrier` (line-line and line-circle cases), segment bounds filtering, three-tier provenance endpoint detection (no epsilon), side determination at hit point.
+- **Hit selection:** `HitRecord`, `find_all_hits` (forward/beyond partition, tie-breaking by surface ID, skip_segment exclusion).
+- **Surface system:** `Surface` (segment + policy), `SideConfig` (effect + state_change + interactive flag).
+- **Effect system (partial):**
+  - `Effect` base class with `Kind` enum (`PASS`, `TERMINAL`, `TRANSFORMATIVE`, `PROJECTIVE`)
+  - `TransformativeEffect` base class
   - `ReflectionEffect` -- mirrors ray across carrier line. Anti-conformal. Self-inverse.
   - `CircleInversionEffect` -- inverts ray through carrier circle. Anti-conformal. Self-inverse. Produces arc paths in visual frame.
-  - `RigidMotionEffect` -- rotation + translation portal. Conformal. Not self-inverse.
-  - `LineNormalProjection`, `CircleNormalProjection`, `SemicircleDirectionalProjection` -- projective effects with frame reset and back-propagation.
-  - `CompoundTransformativeEffect` -- precomputed composition of multiple transformative effects.
-- **MobiusTransform:** Full implementation with conformal/anti-conformal composition, inversion, carrier transformation.
-- **Physical trace loop:** Up to 256 hits, pass-through handling, frame updates for all effect types.
-- **Planning system:** Image chain method, transformative sub-chains, projective break points, mixed chain algorithm. Plan construction/removal UI.
+  - `TerminalEffect` (block) -- stops the ray.
+  - **Not yet implemented:** `RigidMotionEffect`, projective effects, `CompoundTransformativeEffect`
+- **MobiusTransform:** Full implementation with conformal/anti-conformal composition, inversion, Hermitian carrier transformation.
+- **Physical trace loop:** Stage-based hitpoint walk, up to 32 hits, pass-through handling, source-based cancellation on transform stack, no surface filtering. Frame updates for transformative effects.
+- **Planning system:** Image chain method, transformative sub-chains. Plan construction/removal UI. **Not yet implemented:** projective break points, mixed chain algorithm.
 - **Step tree:** Planned vs physical paths, divergence detection, 5 step types rendered.
-- **Arrow flight:** Spacebar fires, game freeze, arrow animates along traced path (line and arc segments), skip via key.
+- **Arrow flight:** Spacebar fires, game freeze, arrow animates at 1600 u/s along traced path (line and arc segments), skip via key.
 - **Checkpoint system:** Save before shot, undo (Z), full reset (R), deep-copy game state.
 - **Plan retention:** Plan preserved after shot, resolves to current surface state.
 - **Arc rendering:** `draw_arc()` integration for circle inversion visual paths.
+- **Invariant sweep:** 24 invariant checks across 10 test scenes, zero violations.
+
+**Prerequisites for this document:** TDD_05 planned future stages (70--78) must be completed first — visibility requires rigid motion, projective effects, and compound effects.
 
 ---
 
 ## Stage 34a: Visibility Infrastructure
 
 ### Overview
-Build the visibility computation infrastructure: collect points of interest from surface endpoints, sort them radially using cross-product signs (not atan2), and construct simple visibility regions. Introduces the `see_through` parameter on `find_earliest_hit` (§11.6), distinct from `excluded_surfaces`.
+Build the visibility computation infrastructure: collect points of interest from surface endpoints, sort them radially using cross-product signs (not atan2), and construct simple visibility regions. Introduces the `see_through` parameter on `find_all_hits` (§11.6), distinct from `origin_on_seg` / `skip_segment`.
 
 ### Prerequisites
-Stage 51 (all advanced effects -- visibility must handle arc carriers from circle inversion, transformed surfaces from rigid motion, and frame resets from projective effects).
+Stage 78 (all advanced effects -- visibility must handle arc carriers from circle inversion, transformed surfaces from rigid motion, and frame resets from projective effects).
 
 ### What Is Introduced
 
@@ -82,16 +87,16 @@ Stage 51 (all advanced effects -- visibility must handle arc carriers from circl
 |----------|------|----------------|
 | Script | `scripts/math/visibility.gd` -- visibility computation | §15.1, §15.2, §15.3 |
 | Behavior | Points of interest: all surface endpoints (start, end) -- no tangent points yet | §15.2 |
-| Behavior | Cast rays toward each POI using `find_earliest_hit` | §15.2 |
+| Behavior | Cast rays toward each POI using `find_all_hits` | §15.2 |
 | Behavior | Radial ordering: cross-product sign against fixed reference direction (not atan2) | §15.5, §31.2 |
 | Function | `build_regions_from_casts()` -> Array[GeneralizedPolygon] | §15.3 |
 | Behavior | Full 360 degree cast from player position (iteration 0 of §15.2 loop) | §15.2 |
-| Behavior | Visibility casts use same `find_earliest_hit` pipeline as physical tracing | Principle 14, §15.6 |
-| Parameter | `find_earliest_hit` gains `see_through: Set[Surface]` parameter -- surfaces in this set are transparent (rays pass through without recording a hit). Distinct from `excluded_surfaces`. | §11.6 |
+| Behavior | Visibility casts use same `find_all_hits` pipeline as physical tracing | Principle 14, §15.6 |
+| Parameter | `find_all_hits` gains `see_through: Set[Segment]` parameter -- segments in this set are transparent (rays pass through without recording a hit). Distinct from `origin_on_seg` / `skip_segment`. | §11.6 |
 
 ### Overview Note
 
-The visibility system requires a `see_through` parameter on `find_earliest_hit` (§11.6), distinct from `excluded_surfaces`. `see_through` surfaces are treated as transparent; `excluded_surfaces` prevents re-hitting the departure surface. Both can be active simultaneously.
+The visibility system requires a `see_through` parameter on `find_all_hits` (§11.6), distinct from `origin_on_seg` / `skip_segment`. `see_through` segments are treated as transparent; `origin_on_seg` handles the departure segment. Both can be active simultaneously.
 
 ### Unit Tests Added
 
@@ -102,9 +107,9 @@ The visibility system requires a `see_through` parameter on `find_earliest_hit` 
 5. **`test_stage34a_S13_no_self_intersection`**: Build visibility regions for several test scenes. For each region, verify no edge crosses another edge of the same region. Invariant validated: S13.
 6. **`test_stage34a_S14_edges_on_geometry`**: For each edge of each visibility region, verify it lies on either a surface carrier or a ray from the player origin. Invariant validated: S14.
 7. **`test_stage34a_S15_non_overlapping`**: Build visibility regions. For each pair of regions, verify they do not overlap (sample interior points of one region, check they are not inside the other). Invariant validated: S15.
-8. **`test_stage34a_visibility_uses_same_intersection`**: Verify that visibility casts use `find_earliest_hit` -- the same function as physical tracing. (Implementation test: mock or trace call to confirm shared pipeline.) Validates: Principle 14, §15.6.
-9. **`test_stage34a_see_through_parameter`**: Call `find_earliest_hit` with `see_through={surface_A}`. Ray would hit A first. Expected: A skipped, next surface returned. Validates: §11.6.
-10. **`test_stage34a_see_through_distinct_from_excluded`**: Set both `see_through={A}` and `excluded_surfaces={B}`. Ray hits A then B then C. Expected: C returned. Validates: §11.6 distinctness.
+8. **`test_stage34a_visibility_uses_same_intersection`**: Verify that visibility casts use `find_all_hits` -- the same function as physical tracing. (Implementation test: mock or trace call to confirm shared pipeline.) Validates: Principle 14, §15.6.
+9. **`test_stage34a_see_through_parameter`**: Call `find_all_hits` with `see_through={surface_A}`. Ray would hit A first. Expected: A skipped, next surface returned. Validates: §11.6.
+10. **`test_stage34a_see_through_distinct_from_origin`**: Set both `see_through={A}` and `origin_on_seg=B`. Ray hits A then B then C. Expected: C returned. Validates: §11.6 distinctness.
 11. **`test_stage34a_build_regions_exact_vertices`**: Feed `build_regions_from_casts` a hand-constructed array of 6 CastResults with known obstruction sides and hit points. Verify the output polygon has the exact expected vertices (coordinate comparison, not just property tests). Validates: region builder produces correct geometry.
 12. **`test_stage34a_three_pois_same_angle`**: Three surface endpoints are collinear with the player (all at the same radial angle from the origin). Expected: radial ordering handles them via provenance/surface ID tie-breaking. No sorting instability, no crash. Validates: n>2 radial ordering edge case.
 
@@ -186,7 +191,7 @@ Stage 34a (visibility infrastructure -- POI collection, radial ordering, and bas
 6. **`test_stage34b_filter_to_cone_wide`**: A truncating cone that spans > 180 degrees (possible with a wide mirror). Verify POIs inside the wide cone are kept and those outside are filtered. Validates: `filter_to_cone` with major-arc cones.
 7. **`test_stage34b_intersect_regions_split_surface`**: A surface partially obstructed by two separate blockers, creating two disjoint lit sub-segments. Verify `intersect_regions_with_surface` returns both lit sub-segments. Validates: multi-segment illumination.
 8. **`test_stage34b_passthrough_transparent_to_visibility`**: Pass-through surface (null effect, interactive=false) between player and a block surface. Compute visibility. Expected: visibility region is bounded by the block surface, NOT by the pass-through. The pass-through does not cast a shadow. Validates: §15.6 visibility consistency -- pass-through surfaces don't obstruct visibility.
-9. **`test_stage34b_see_through_excluded_and_origin_triple`**: Ray starts on surface A (origin-on-surface -> A excluded internally). Surface B is in `see_through`. Surface C is in `excluded_surfaces`. Surface D is ahead. Expected: ray skips A (origin exclusion), passes through B (see-through), skips C (excluded), hits D. All three exclusion mechanisms work simultaneously. Validates: §11.4 + §11.6 triple interaction.
+9. **`test_stage34b_see_through_and_origin_interaction`**: Ray starts on segment A (`origin_on_seg=A`). Segment B is in `see_through`. Segment C is `skip_segment`. Segment D is ahead. Expected: ray handles A (origin segment), passes through B (see-through), skips C (skip_segment), hits D. All three exclusion mechanisms work simultaneously. Validates: §11.4 + §11.6 interaction.
 10. **`test_stage34b_visibility_perf_smoke`**: Compute visibility for a scene with 8 surfaces. Measure time via `Time.get_ticks_usec()`. Expected: < 20ms. This is an early warning signal, not a hard pass/fail. Log the value. Validates: visibility architecture is viable before more complexity is added.
 11. **`test_stage34b_build_regions_both_sided_obstruction`**: CastResult at a mid-segment hit (both-sided obstruction). Expected: region breaks at this point -- two separate regions, not one continuous region. Validates: both-sided obstruction splits regions correctly.
 12. **`test_stage34b_build_regions_enclosed_player`**: Player completely surrounded by surfaces (no gaps). Expected: zero visibility regions (or a single degenerate region). Validates: enclosed-player edge case.
@@ -616,7 +621,7 @@ See standard protocol at top of document.
 | Per-entry state | S7 | -- | -- | Stage 54+ | Not yet introduced |
 | Forward-first ordering | S8 | Stage 11 | Stage 11 | Stage 65 | Tested |
 | Exclusion respected | S9 | Stage 16 | Stage 16 | Stage 65 | Tested |
-| Projective resets frame | S10 | Stage 47 | Stage 47 | Stage 65 | Tested |
+| Projective resets frame | S10 | Stage 73 | Stage 73 | Stage 65 | Tested |
 | Three points on carrier | S11 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Side determination | S12 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Visibility no self-intersect | S13 | Stage 34a | Stage 34a | Stage 65 | Tested (infra, rendering/edge cases, multi-surface, multi-step) |

@@ -53,13 +53,13 @@ By Stage 18, the following systems exist and are tested:
 - **Cursor:** World-space mouse tracking via `get_global_mouse_position()`.
 - **Math layer:** `Direction`, `Ray`, `GeneralizedCircle`, `Segment` (three-point with carrier derivation and side determination), `Point` (with provenance and unique ID), `TransformCache` (provenance-keyed bidirectional store).
 - **Intersection system:** `intersect_line_with_gcircle` (line-line and line-circle cases), segment bounds filtering, side determination at hit point.
-- **Hit selection:** `HitRecord`, `find_earliest_hit` (forward/beyond partition, tie-breaking by surface ID, exclusion via `excluded_surfaces`).
+- **Hit selection:** `HitRecord`, `find_all_hits` (returns all hits; ordering via `projective_sort`, origin handling via `origin_on_seg`/`origin_carrier`).
 - **Surface system:** `Surface` (segment + policy), `SideConfig` (effect + state_change + interactive flag), `FixedResolver`.
 - **Effects:** `TerminalEffect` (block) — stops the ray.
 - **Room boundaries:** 4 block surfaces forming a rectangular room (red, terminal both sides).
-- **Physical trace loop:** Up to 256 hits, pass-through handling (null effect advances ray, adds to exclusion set), block terminates.
+- **Physical trace loop:** Stage-based hitpoint walk, up to 32 hits, pass-through handling (null effect advances ray), `skip_segment` exclusion, block terminates.
 - **Preview rendering:** Green solid line from player to cursor, green dashed line from cursor to wall (physical continuation).
-- **Arrow shooting:** Spacebar fires, game freeze (`get_tree().paused`), arrow animates at 800 u/s along traced path, skip via any non-movement key.
+- **Arrow shooting:** Spacebar fires, game freeze (`get_tree().paused`), arrow animates at 1600 u/s along traced path, skip via any non-movement key.
 - **Tested invariants:** S1, S3, S8, S9, S11, S12, S16, S17, UX3, UX4, UX7 (partial), UX9, UX11 (partial).
 
 ---
@@ -1215,7 +1215,7 @@ Reference standard protocol (top of document).
 | Per-entry state | S7 | — | Stage 54+ | Not yet introduced |
 | Forward-first ordering | S8 | Stage 11 | Stage 11 | Tested (inherited) |
 | Exclusion respected | S9 | Stage 15 | Stage 15 | Tested (inherited) |
-| Projective resets frame | S10 | — | Stage 47+ | Not yet introduced |
+| Projective resets frame | S10 | — | Stage 73+ | Not yet introduced |
 | Three points on carrier | S11 | Stage 7 | Stage 7 | Tested (inherited) |
 | Side determination | S12 | Stage 7 | Stage 7 | Tested (inherited, reinforced at Stage 20b) |
 | Visibility no self-intersect | S13 | — | Stage 35+ | Not yet introduced |

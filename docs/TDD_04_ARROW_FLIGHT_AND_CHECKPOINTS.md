@@ -91,9 +91,9 @@ Stages 1--30 (complete math layer, surfaces, physical trace loop, preview render
 | Category | Prior Stage | Behavior | How to Verify |
 |----------|-------------|----------|---------------|
 | **Math** | Stages 4--8 | Direction, Ray, GeneralizedCircle, Segment, TransformCache all correct | Run GUT math tests |
-| **Math** | Stages 9--12 | Intersection system: line-line, line-circle, find_earliest_hit | Run GUT intersection tests |
+| **Math** | Stages 9--12 | Intersection system: line-line, line-circle, find_all_hits | Run GUT intersection tests |
 | **Math** | Stages 13--16 | Surface effects: FixedResolver, SideConfig, TerminalEffect, ReflectionEffect | Run GUT effect tests |
-| **Math** | Stages 17--20 | Physical trace loop (256 limit, pass-through) | Run GUT trace tests |
+| **Math** | Stages 17--20 | Physical trace loop (32 limit, pass-through) | Run GUT trace tests |
 | **Visual** | Stage 5 | Green solid preview line from player to cursor | Move mouse, observe |
 | **Visual** | Stages 21--24 | Preview: green solid to cursor, green dashed past cursor | Move mouse with/without plan |
 | **Visual** | Stages 25--30 | Step tree rendering with 5 step types in correct colors/styles | Create diverging plan, observe |
@@ -321,7 +321,7 @@ See standard protocol at top of document.
 | Per-entry state | S7 | -- | -- | Stage 54+ | Not yet introduced |
 | Forward-first ordering | S8 | Stage 11 | Stage 11 | Stage 65 | Tested |
 | Exclusion respected | S9 | Stage 16 | Stage 16 | Stage 65 | Tested |
-| Projective resets frame | S10 | -- | -- | Stage 47+ | Not yet introduced |
+| Projective resets frame | S10 | -- | -- | Stage 73+ | Not yet introduced |
 | Three points on carrier | S11 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Side determination | S12 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Visibility no self-intersect | S13 | -- | -- | Stage 34a+ | Not yet introduced |

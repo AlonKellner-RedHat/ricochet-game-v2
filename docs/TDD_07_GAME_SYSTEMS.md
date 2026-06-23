@@ -2,19 +2,21 @@
 
 **Stages 52--60** | State-conditional surfaces, multi-shot puzzles, targets, win condition, game loop, menus, HUD, save system
 
+> **Status: PLANNED** — All stages in this document are pending implementation. Note: stage number 52 conflicts with test file `test_stage52_norm_drift.gd` which covers a different topic (norm drift fix from v1.2.0). Some infrastructure exists: `GameState` class, `SideConfig.state_change` field, `Surface.is_target`, `TracedPath.targets_hit`.
+
 ### Stage Status
 
 | Stage | Topic | Status |
 |-------|-------|--------|
-| 52 | CategoricalResolver and State-Conditional Surfaces | Todo |
-| 53 | State Changes on Hit | Todo |
-| 54 | State Simulation During Planning | Todo |
-| 55 | Target Surfaces and Hit Detection | Todo |
-| 56 | Win Condition and Multi-Shot Puzzles | Todo |
-| 57 | Game Loop and Level Loading | Todo |
-| 58 | Menus (Main, Level Select, Pause) | Todo |
-| 59 | HUD | Todo |
-| 60 | Save System | Todo |
+| 52 | CategoricalResolver and State-Conditional Surfaces | Planned |
+| 53 | State Changes on Hit | Planned |
+| 54 | State Simulation During Planning | Planned |
+| 55 | Target Surfaces and Hit Detection | Planned |
+| 56 | Win Condition and Multi-Shot Puzzles | Planned |
+| 57 | Game Loop and Level Loading | Planned |
+| 58 | Menus (Main, Level Select, Pause) | Planned |
+| 59 | HUD | Planned |
+| 60 | Save System | Planned |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
@@ -48,7 +50,7 @@ Implement `CategoricalResolver` -- a `ConfigResolver` subtype that selects per-s
 Extends the GameState class introduced in Stage 12 with CategoricalResolver integration.
 
 ### Prerequisites
-Stages 1--51 (full math layer, all effect types, intersection system, physical trace, step tree, planning, visibility, arrow flight, checkpoints, arc rendering, all surface colors).
+TDD_05 Stage 78 + TDD_06 Stage 38 (full math layer, all effect types, visibility system, physical trace, step tree, planning, arrow flight, checkpoints, arc rendering).
 
 ### What Is Introduced
 
@@ -543,7 +545,7 @@ Stages 1--56 (all trace, planning, state, target, win condition, checkpoint syst
 | Behavior | Win check after state promotion | §16.7 |
 | Behavior | Player falls when standing surface breaks during shot | §21.4 |
 | Invariant | UX10: state changes visible during flight | §21.2 |
-| Property | `LevelData.arrow_speed: float` -- default 800, configurable per level | §21.2 |
+| Property | `LevelData.arrow_speed: float` -- default 1600, configurable per level | §21.2 |
 
 ### Unit Tests Added
 
@@ -561,7 +563,7 @@ Stages 1--56 (all trace, planning, state, target, win condition, checkpoint syst
 12. **`test_stage57_initial_flags_applied`**: Load a level with initial_flags {"wall_intact": true}. Expected: GameState.flags contains "wall_intact" = true. Validates: level initialization.
 13. **`test_stage57_spawn_point`**: Load a level with spawn_point (100, 200). Expected: player spawns at (100, 200). Validates: §19.1 spawn.
 14. **`test_stage57_per_level_arrow_speed`**: Load level with arrow_speed=400. Fire. Expected: arrow travels at 400 u/s. Validates: §21.2.
-15. **`test_stage57_default_arrow_speed`**: Load level without explicit arrow_speed. Expected: arrow at 800 u/s. Validates: §21.2 default.
+15. **`test_stage57_default_arrow_speed`**: Load level without explicit arrow_speed. Expected: arrow at 1600 u/s. Validates: §21.2 default.
 16. **`test_stage57_level_bounds_arc_aabb`**: Level with arc surface (center=(200,200), r=100, 0 to pi/2 span). Auto-computed bounds include the arc's AABB (from center, radius, angular span), not just three defining points. Validates: §19.1.
 17. **`test_stage57_state_change_visual_timing`**: Fire at breakable wall. Record frame when arrow reaches hit point (distance/speed). Record frame when surface visual changes. Expected: same frame (+/-1). Validates: §21.2 timing, UX10.
 18. **`test_stage57_cache_cleared_between_shots`**: Fire shot 1 (populates TransformCache with entries). Fire shot 2. Expected: shot 2 starts with a fresh cache (no stale entries from shot 1). Verify by checking cache size is 0 (or contains only manual overrides) at the start of shot 2's trace. Validates: §17.5 "Persists for the duration of a shot. Cleared between shots."
@@ -986,7 +988,7 @@ Reference standard protocol at top of document.
 | Per-entry state | S7 | Stage 54 | Stage 54 | Stage 65 | Tested |
 | Forward-first ordering | S8 | Stage 11 | Stage 11 | Stage 65 | Tested |
 | Exclusion respected | S9 | Stage 16 | Stage 16 | Stage 65 | Tested |
-| Projective resets frame | S10 | Stage 47 | Stage 47 | Stage 65 | Tested |
+| Projective resets frame | S10 | Stage 73 | Stage 73 | Stage 65 | Tested |
 | Three points on carrier | S11 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Side determination | S12 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Visibility no self-intersect | S13 | Stage 35 | Stage 35 | Stage 65 | Tested |

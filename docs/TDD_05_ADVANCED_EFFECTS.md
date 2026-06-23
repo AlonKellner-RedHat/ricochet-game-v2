@@ -1,6 +1,6 @@
 # TDD Document 5: Advanced Effects
 
-**Stages 40--51** | Circle inversion (arcs), rigid motion (portals), projective effects, mixed planning, compound effects
+**Stages 40--51, 70--78** | Circle inversion (arcs), bug fixes & architectural improvements (44--51), planned: rigid motion (portals), projective effects, mixed planning, compound effects (70--78)
 
 ### Stage Status
 
@@ -9,19 +9,27 @@
 | 40 | Circle Inversion Effect | Done |
 | 41 | Arc Segment Rendering | Done |
 | 42 | Circle Inversion in Physical Trace | Done |
-| 42.5 | Arc Collision Shapes for Player Physics | Todo |
-| 43 | Circle Inversion in Planner | Todo |
-| 44 | Visibility with Circles | Todo |
-| 45 | Rigid Motion Effect (Portals) | Todo |
-| 46 | Rigid Motion in Trace/Planner/Visibility | Todo |
-| 47 | Line Normal Projection Effect | Todo |
-| 48 | Circle Normal Projection Effect | Todo |
-| 49 | Semi-Circle Directional Projection Effect | Todo |
-| 49.5 | Parallel-Source Visibility Mode | Todo |
-| 50 | Mixed Planning Chain | Todo |
-| 51 | Compound Transformative Effect | Todo |
+| 42.5 | Arc Collision Shapes for Player Physics | Done |
+| 43 | Circle Inversion in Planner | Done |
+| 44 | Reflection formula fix | Done |
+| 45 | Arc via pole / circle rehit / grazing fixes | Done |
+| 46 | Epsilon removal | Done |
+| 47 | Escape via fix | Done |
+| 48 | Full segments | Done |
+| 49 | Mid-air termination | Done |
+| 50 | Spurious reflection fix | Done |
+| 51 | Conjugation side fix | Done |
+| 70 | Visibility with Circles | Planned |
+| 71 | Rigid Motion Effect (Portals) | Planned |
+| 72 | Rigid Motion in Trace/Planner/Visibility | Planned |
+| 73 | Line Normal Projection Effect | Planned |
+| 74 | Circle Normal Projection Effect | Planned |
+| 75 | Semi-Circle Directional Projection Effect | Planned |
+| 76 | Parallel-Source Visibility Mode | Planned |
+| 77 | Mixed Planning Chain | Planned |
+| 78 | Compound Transformative Effect | Planned |
 
-**Effect hierarchy note:** The effect hierarchy uses an Effect base class with `is_terminal()`, `is_transformative()`, `get_mobius()`, `get_inverse_mobius()`, and `normalized()` methods. All effects extend Effect. Dispatch uses method calls, not type checks.
+**Effect hierarchy note:** The effect hierarchy uses an `Effect` base class with an `Effect.Kind` enum (`TERMINAL`, `TRANSFORMATIVE`) for dispatch. `TransformativeEffect` is a base class providing `get_mobius()`, `get_inverse_mobius()`, and `normalized()` methods. All effects extend `Effect`. Dispatch uses `kind` enum comparison, not type checks.
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
@@ -50,6 +58,23 @@ No stage is complete until the user has personally verified every interactive te
 ---
 
 **Note:** Stage 39 does not exist — the numbering skips from 38 (TDD_04) to 40 (this document). This is a residual gap from renumbering during plan revisions. All references to Stage 39 have been corrected to Stage 38.
+
+### Stage Reconciliation: Stages 44–51
+
+During implementation, stages 44–51 were used for bug fixes, edge cases, and architectural improvements that arose organically, rather than the originally planned features (RigidMotion, Projective effects, etc.). The original planned content has been renumbered to stages 70–78 (see "Planned Future Stages" at the end of this document).
+
+| Stage # | Original TDD Topic | Actual Implementation | Test File |
+|---------|-------------------|----------------------|-----------|
+| 44 | Visibility with circles | Reflection formula fix | `test_stage44_reflection_formula.gd` |
+| 45 | RigidMotionEffect | Arc via pole / circle rehit / grazing | `test_stage45_*.gd` |
+| 46 | Rigid motion integration | Epsilon removal | `test_stage46_epsilon_removal.gd` |
+| 47 | LineNormalProjection | Escape via fix | `test_stage47_escape_via.gd` |
+| 48 | CircleNormalProjection | Full segments | `test_stage48_full_segment.gd` |
+| 49 | SemicircleDirectional | Mid-air termination | `test_stage49_mid_air_termination.gd` |
+| 50 | Mixed planning chain | Spurious reflection fix | `test_stage50_spurious_reflection.gd` |
+| 51 | Compound effect | Conjugation side fix | `test_stage51_conjugation_side.gd` |
+
+The original stage content for these features has been moved to stages 70–78 below.
 
 ---
 
@@ -485,7 +510,94 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 44: Visibility with Circles
+## Stage 44: Reflection Formula Fix
+
+> **Note:** This stage was originally planned for "Visibility with Circles." The original content has been moved to Stage 70.
+
+Test file: `test_stage44_reflection_formula.gd`
+
+Fixed the reflection Mobius formula to correctly handle general-position carriers. Validates the mathematical correctness of `ReflectionEffect.normalized()` against known reflection identities.
+
+---
+
+## Stage 45: Arc Via Pole, Circle Rehit, and Grazing Fixes
+
+> **Note:** This stage was originally planned for "Rigid Motion Effect (Portals)." The original content has been moved to Stage 71.
+
+Test files: `test_stage45_arc_via_pole.gd`, `test_stage45_circle_rehit.gd`, `test_stage45_grazing.gd`
+
+Fixed three classes of edge cases in the tracer:
+- **Arc via pole:** Correct via-point computation when the Mobius transform maps the segment through the pole (infinity).
+- **Circle rehit:** Prevent the tracer from immediately re-hitting the same circle surface after an inversion effect.
+- **Grazing:** Handle rays that pass tangentially near a surface without a proper intersection.
+
+---
+
+## Stage 46: Epsilon Removal
+
+> **Note:** This stage was originally planned for "Rigid Motion in Trace/Planner/Visibility." The original content has been moved to Stage 72.
+
+Test file: `test_stage46_epsilon_removal.gd`
+
+Removed all epsilon-based topology decisions from the intersection and tracing pipeline. Replaced with three-tier provenance endpoint detection (S31.3.1): (1) exact coordinate match via provenance, (2) structural collinearity (cross-product == 0.0), (3) quadratic solver. This was a foundational architectural improvement.
+
+---
+
+## Stage 47: Escape Via Fix
+
+> **Note:** This stage was originally planned for "Line Normal Projection Effect." The original content has been moved to Stage 73.
+
+Test file: `test_stage47_escape_via.gd`
+
+Fixed the via-point computation for escape steps (rays that reach infinity). The via point for beyond-infinity segments is now correctly computed through the Mobius pole, ensuring proper arc rendering when the frame involves circle inversion.
+
+---
+
+## Stage 48: Full Segments
+
+> **Note:** This stage was originally planned for "Circle Normal Projection Effect." The original content has been moved to Stage 74.
+
+Test file: `test_stage48_full_segment.gd`
+
+Added `Segment.full` boolean for unbounded segments (full circles, full lines with no endpoints). When `full = true`, all intersection points on the carrier are valid hits regardless of arc containment. Created via `Segment.full_from_carrier()`.
+
+---
+
+## Stage 49: Mid-Air Termination
+
+> **Note:** This stage was originally planned for "Semi-Circle Directional Projection Effect." The original content has been moved to Stage 75.
+
+Test file: `test_stage49_mid_air_termination.gd`
+
+Fixed trace termination when a ray terminates mid-air (e.g., hitting a terminal surface that only blocks one side while the other side is pass-through). Ensured correct step generation for partial blockage scenarios.
+
+---
+
+## Stage 50: Spurious Reflection Fix
+
+> **Note:** This stage was originally planned for "Mixed Planning Chain." The original content has been moved to Stage 77.
+
+Test file: `test_stage50_spurious_reflection.gd`
+
+Fixed spurious reflection effects firing when they shouldn't -- specifically cases where blockage accumulation at endpoints incorrectly triggered an effect on the wrong surface. Tightened the blockage accumulation logic in the hitpoint walk.
+
+---
+
+## Stage 51: Conjugation Side Fix
+
+> **Note:** This stage was originally planned for "Compound Transformative Effect." The original content has been moved to Stage 78.
+
+Test file: `test_stage51_conjugation_side.gd`
+
+Fixed side determination under anti-conformal (conjugating) Mobius transforms. The conjugation flag was not being accounted for when determining LEFT/RIGHT sides after circle inversion, causing incorrect side assignment and wrong effect selection.
+
+---
+
+# Planned Future Stages
+
+> **Status: PLANNED** -- The stages below describe features that have not yet been implemented. They were originally numbered as Stages 44--51 and 49.5, but those numbers were repurposed during development (see the Stage Reconciliation table above). The content has been renumbered to stages 70--78 to avoid confusion with the actual test files.
+
+## Stage 70: Visibility with Circles
 
 ### Overview
 Extend the visibility system to handle circular arc surfaces. This requires tangent point computation (from an external point to a circle), filtering tangent points to arc bounds, adding tangent points to points of interest, and propagating visibility through inversion surfaces. Curved region boundaries become possible in the visual frame after inversion. After a CircleNormalProjection effect, the visibility origin shifts to the circle center -- this is DISTINCT from circle inversion propagation, where the origin reflects through the circle. Inversion is transformative (origin = inverse(player) through circle); circle-normal-projection is projective (origin = circle center, point-source from center).
@@ -583,7 +695,7 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 45: Rigid Motion Effect (Portals)
+## Stage 71: Rigid Motion Effect (Portals)
 
 ### Overview
 Implement `RigidMotionEffect`, a conformal Mobius transformation that combines rotation by angle theta and translation by displacement d. Unlike reflection and circle inversion, rigid motion is NOT self-inverse -- the inverse must be precomputed and stored. Rigid motion enables portal/teleport mechanics. Surfaces with rigid motion render in cyan.
@@ -668,7 +780,7 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 46: Rigid Motion in Trace/Planner/Visibility
+## Stage 72: Rigid Motion in Trace/Planner/Visibility
 
 ### Overview
 Wire RigidMotionEffect to surfaces and integrate it into the physical trace, planner, and visibility systems. Rigid motion acts as a portal: the arrow enters one surface and exits at a rotated and translated position. Unlike reflection and inversion (anti-conformal), rigid motion is conformal, so the Mobius composition follows the conformal-conformal case. Surfaces render in cyan.
@@ -766,7 +878,7 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 47: Line Normal Projection Effect
+## Stage 73: Line Normal Projection Effect
 
 ### Overview
 Implement `LineNormalProjection`, the first projective effect. Projective effects differ fundamentally from transformative effects: the outgoing ray's direction depends only on the hit point (not the incoming direction), the Mobius frame resets to identity, and a new Direction is created. For line normal projection, the outgoing ray is perpendicular to the surface line at the hit point. Back-propagation finds the orthogonal projection of the target onto the surface line. Projective surfaces render in orange.
@@ -855,13 +967,13 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 48: Circle Normal Projection Effect
+## Stage 74: Circle Normal Projection Effect
 
 ### Overview
 Implement `CircleNormalProjection`, a projective effect for arc surfaces. The outgoing ray travels along the radius at the hit point (from the circle center through the hit point). Back-propagation finds the intersection of line(center, target) with the arc segment. Like all projective effects, the frame resets to identity and a new Direction is created.
 
 ### Prerequisites
-Stage 47 (line normal projection establishes the projective pattern in the trace loop).
+Stage 73 (line normal projection establishes the projective pattern in the trace loop).
 
 ### What Is Introduced
 
@@ -905,7 +1017,7 @@ Stage 47 (line normal projection establishes the projective pattern in the trace
 |----------|-------------|----------|---------------|
 | Math layer | Stages 4--10 | Core math | GUT tests |
 | Math layer | Stages 40, 45 | Transformative effects | GUT tests |
-| Math layer | Stage 47 | Line normal projection | GUT tests |
+| Math layer | Stage 73 | Line normal projection | GUT tests |
 | Visual | Stages 5, 41--42 | Line/arc rendering | Move mouse |
 | Interaction | Stages 2--3 | Player, cursor | Press WASD, move mouse |
 | Trace | Stages 11--14, 42, 46--47 | Physical trace with all effects | GUT tests |
@@ -939,7 +1051,7 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 49: Semi-Circle Directional Projection Effect
+## Stage 75: Semi-Circle Directional Projection Effect
 
 ### Overview
 Implement `SemicircleDirectionalProjection`, a projective effect where the outgoing direction is always normal to the semicircle's diameter line, regardless of hit position. The diameter is determined by the segment's start and end points. The exit direction (which of the two normals) depends on the approach side -- the ray exits toward the side opposite the approach. Back-propagation traces a line from the target in the negative normal direction to find the intersection with the arc.
@@ -1026,7 +1138,7 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 49.5: Parallel-Source Visibility Mode
+## Stage 76: Parallel-Source Visibility Mode
 
 ### Overview
 Implement parallel-source visibility for plans containing line-normal or semicircle-directional projection effects. After such a projective effect, visibility uses parallel rays emanating from the lit sub-segment in the fixed outgoing direction, rather than point-source radial casting. This requires `cast_parallel_source()`, `determine_obstruction_linear()`, and `project_point_onto_segment_along_direction()`.
@@ -1107,7 +1219,7 @@ When a projective surface is in the plan, the visibility region shape changes fr
 
 ---
 
-## Stage 50: Mixed Planning Chain
+## Stage 77: Mixed Planning Chain
 
 ### Overview
 Implement the full `plan_mixed` algorithm from §13.4, handling plans that contain both transformative and projective effects. The algorithm has three passes: Pass 0 (iterative state simulation), Pass 1 (backward geometry -- walk plan in reverse, partition at projective break points), and Pass 2 (forward origin fill -- solve each transformative sub-chain). This stage reproduces the §16.4 worked example with mirrors and a line normal projection.
@@ -1151,13 +1263,13 @@ Stages 47--49 (all three projective effects implemented).
 15. **`test_stage50_portal_exit_inside_inversion`**: Portal exits the arrow inside an inversion circle. Arrow hits the inversion surface from the inside (RIGHT side). Expected: side determination is correct, effect resolves to the RIGHT side's config. Validates: inside-out hit side determination with portal + inversion interaction.
 16. **`test_stage50_projective_arc_then_transformative_line`**: Plan = [{ArcProjective, left}, {LineMirror, left}]. Projective resets frame to identity. The subsequent line reflection is applied in the identity frame. Expected: correct geometry -- no carryover from the arc frame. Validates: frame reset at projective cleanly transitions between arc and line geometry.
 17. **`test_stage50_reduced_sweep_checkpoint`**: Run 625-combination sweep on a test level with all effect types. Check S1-S6, S8-S12, S16-S18, UX3-UX4, UX7, UX9, UX11. Expected: zero violations. Validates: mid-project integration correctness.
-18. **`test_stage50_256_limit_post_cursor_continuation`**: Plan with a reflection. After the cursor, the post-cursor continuation (physical trace in planned frame) encounters 256 surfaces (many pass-throughs). Expected: continuation terminates at 256 total hits, truncation marker shown. Validates: §12.6 limit applies to post-cursor planned continuation.
+18. **`test_stage50_32_limit_post_cursor_continuation`**: Plan with a reflection. After the cursor, the post-cursor continuation (physical trace in planned frame) encounters 32 surfaces (many pass-throughs). Expected: continuation terminates at 32 total hits, truncation marker shown. Validates: §12.6 limit applies to post-cursor planned continuation.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 
 **RE-VALIDATION REQUIRED:** The plan preview for projective effects was marked incomplete in Stages 47-49. Now that `plan_mixed` is implemented, re-validate all projective interactive tests with plan active:
 
-- [ ] Add a LineNormalProjection surface to plan. Preview shows correct perpendicular exit path. *(Re-validates Stage 47 with complete planner.)*
+- [ ] Add a LineNormalProjection surface to plan. Preview shows correct perpendicular exit path. *(Re-validates Stage 73 with complete planner.)*
 - [ ] Add a CircleNormalProjection surface to plan. Preview shows correct radial exit path. *(Re-validates Stage 48.)*
 - [ ] Add a SemicircleDirectionalProjection surface to plan. Preview shows correct fixed-direction exit. *(Re-validates Stage 49.)*
 - [ ] Press Play with the §16.4 setup: two mirrors and a line normal projection.
@@ -1221,7 +1333,7 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 51: Compound Transformative Effect
+## Stage 78: Compound Transformative Effect
 
 ### Overview
 Implement `CompoundTransformativeEffect`, which stores an ordered array of elementary `TransformativeEffect` instances and precomputes their combined Mobius transform (and its inverse). It IS-A `TransformativeEffect`, implementing `get_mobius()` and `get_inverse_mobius()` to return the precomputed combined matrices. Composition uses the four-case table from §5.2 to handle mixed conformal/anti-conformal combinations correctly.
@@ -1328,9 +1440,11 @@ These tests verify effect combinations beyond those covered by the worked exampl
 
 ---
 
-## Appendix A: Invariant Introduction Map (All 29 Invariants, Status After Stage 51)
+## Appendix A: Invariant Introduction Map (All 29 Invariants, Projected Status After All Planned Stages)
 
-| Invariant | Full ID | Introduced | First Testable | Fully Testable | Status After Stage 51 |
+> **Note:** Stages 44--51 were repurposed for bug fixes (see Stage Reconciliation table above). Original planned content was renumbered to Stages 70--78 (PLANNED). Entries referencing Stage 73+ reflect projected status after planned stages are implemented, not current status.
+
+| Invariant | Full ID | Introduced | First Testable | Fully Testable | Projected Status |
 |-----------|---------|-----------|----------------|----------------|----------------------|
 | Carrier <-> via round-trip | S1 | Stage 8 | Stage 8 | Stage 65 | Tested (line + circle) |
 | Transform round-trip | S2 | Stage 20 | Stage 20 | Stage 65 | Tested (reflection, inversion, rigid motion, compound) |
@@ -1341,7 +1455,7 @@ These tests verify effect combinations beyond those covered by the worked exampl
 | Per-entry state | S7 | Stage 54+ | Stage 54+ | Stage 65 | Not yet introduced |
 | Forward-first ordering | S8 | Stage 11 | Stage 11 | Stage 65 | Tested |
 | Exclusion respected | S9 | Stage 16 | Stage 16 | Stage 65 | Tested |
-| Projective resets frame | S10 | Stage 47 | Stage 47 | Stage 65 | Tested (line, circle, semicircle projective) |
+| Projective resets frame | S10 | Stage 73 | Stage 73 | Stage 65 | Tested (line, circle, semicircle projective) |
 | Three points on carrier | S11 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Side determination | S12 | Stage 7 | Stage 7 | Stage 65 | Tested |
 | Visibility no self-intersect | S13 | Stage 35 | Stage 35 | Stage 65 | Tested (line + circle surfaces) |
@@ -1364,7 +1478,9 @@ These tests verify effect combinations beyond those covered by the worked exampl
 
 ---
 
-## Appendix B: Cumulative Test Count After Stage 51
+## Appendix B: Projected Cumulative Test Count (All Stages in This Document)
+
+> **Note:** Stages 44--51 were repurposed for bug fixes. The entries below for stages 44--51 reflect the ORIGINAL planned content (now renumbered to 70--78), not the actual implemented test counts. Actual test counts for the repurposed stages differ. See Stage Reconciliation table above.
 
 | Category | Count |
 |----------|-------|
@@ -1377,7 +1493,7 @@ These tests verify effect combinations beyond those covered by the worked exampl
 | Unit tests (Stage 44: visibility with circles) | +14 |
 | Unit tests (Stage 45: rigid motion effect) | +11 |
 | Unit tests (Stage 46: rigid motion integration) | +11 |
-| Unit tests (Stage 47: line normal projection) | +9 |
+| Unit tests (Stage 73: line normal projection) | +9 |
 | Unit tests (Stage 48: circle normal projection) | +7 |
 | Unit tests (Stage 49: semicircle projection) | +9 |
 | Unit tests (Stage 49.5: parallel-source visibility) | +12 |
@@ -1389,5 +1505,5 @@ These tests verify effect combinations beyond those covered by the worked exampl
 | **Total interactive test items after Stage 51** | **~180** |
 | Invariants actively tested | 21 (S1--S6, S8--S16, S17, S18, UX1--UX5, UX7, UX9, UX11) |
 | Invariants reinforced this document | S2, S5, S6, S10, S13--S15, S16, S18, UX1--UX3, UX9 |
-| Invariants introduced this document | S10 (Stage 47) |
+| Invariants introduced this document | S10 (Stage 73) |
 | Invariants not yet introduced | 4 (S7, S19, UX6, UX10) |

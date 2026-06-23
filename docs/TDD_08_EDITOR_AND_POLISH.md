@@ -2,17 +2,19 @@
 
 **Stages 61--67** | Level editor, test levels (worked examples), invariant sweep testing (160k combos), performance, visual polish
 
+> **Status: PLANNED** — All stages in this document depend on TDD_07 (game systems) being complete. Note: invariant sweep testing (Stage 65) is partially implemented ahead of schedule — `InvariantChecker` and `SweepRunner` exist with 24 invariant checks, but the full 160k-combo per-level sweep described here has not been run.
+
 ### Stage Status
 
 | Stage | Topic | Status |
 |-------|-------|--------|
-| 61 | Basic Level Editor -- Surface Placement | Todo |
-| 62 | Level Editor -- Effects, Targets, Spawn | Todo |
-| 63 | Level Editor -- Validation and Test Mode | Todo |
-| 64 | Test Levels for Worked Examples | Todo |
-| 65 | Invariant Sweep Testing | Todo |
-| 66 | Performance Optimization | Todo |
-| 67 | Visual Polish | Todo |
+| 61 | Basic Level Editor -- Surface Placement | Planned |
+| 62 | Level Editor -- Effects, Targets, Spawn | Planned |
+| 63 | Level Editor -- Validation and Test Mode | Planned |
+| 64 | Test Levels for Worked Examples | Planned |
+| 65 | Invariant Sweep Testing | Partially implemented |
+| 66 | Performance Optimization | Planned |
+| 67 | Visual Polish | Planned |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 
@@ -164,7 +166,7 @@ Stage 61 (basic editor with surface placement/deletion/movement).
 | Behavior | `.tres` serialization: three points as source of truth + per-side effect configs + state key + is_target + player_solid + serialized cache | §19.3 |
 | Data | `is_line_by_construction: bool` -- construction provenance flag stored in serialized cache. Line vs arc determined by editor placement, not coordinate comparison. | §31.3 |
 | Data | `LevelData.collision_bodies: Array[CollisionBodyData]` serialized to `.tres` — segment floors and rectangle platforms for player-only collision | §19.1 |
-| Field | `LevelData.arrow_speed` editable in editor properties panel (default 800) | §21.2 |
+| Field | `LevelData.arrow_speed` editable in editor properties panel (default 1600) | §21.2 |
 
 ### Unit Tests Added
 
@@ -520,7 +522,7 @@ Stage 64 (test levels exist with known-good configurations), Stage 60 (all game 
 
 > **Note:** This test extends the fixed-plan sweep to cover the combinatorial plan space. While exhaustive coverage of all possible plans is computationally prohibitive, testing the empty plan plus all single-entry plans provides good coverage of plan-dependent UX invariants.
 
-**Edge case note:** If a level has many pass-through surfaces, the physical trace may hit the 256-hit limit while the planned trace (which skips pass-throughs in image chains) has few steps. This causes divergence due to the hit limit, not geometry. The sweep should verify that this divergence correctly triggers UX2 (divergence → outside visibility) rather than producing an inconsistent state.
+**Edge case note:** If a level has many pass-through surfaces, the physical trace may hit the 32-hit limit while the planned trace (which skips pass-throughs in image chains) has few steps. This causes divergence due to the hit limit, not geometry. The sweep should verify that this divergence correctly triggers UX2 (divergence → outside visibility) rather than producing an inconsistent state.
 
 **Performance budget:** The full sweep (20x20 x 20x20 = 160K combinations per level) targets completion in under 10 minutes per level on a mid-range CPU. For CI/quick verification, a reduced sweep (5x5 x 5x5 = 625 combinations) is acceptable. The test infrastructure should support a `--quick-sweep` flag that uses the reduced grid. Full sweeps are required for release verification only.
 
@@ -625,7 +627,7 @@ The following tests verify graceful degradation under error conditions:
 
 2. **`test_failure_corrupted_tres_graceful`**: Load a `.tres` file with invalid surface data (e.g., zero-length segment). Expected: validation catches it at load, error reported, level not loaded. Validates: S23 constraints + S31.8.
 
-3. **`test_failure_256_limit_in_planned_trace`**: Plan causes the planned trace to accumulate 256 steps (many pass-throughs in sequence). Expected: trace terminates cleanly, truncation marker shown. Validates: S12.6 in planned mode.
+3. **`test_failure_32_limit_in_planned_trace`**: Plan causes the planned trace to accumulate 32 steps (many pass-throughs in sequence). Expected: trace terminates cleanly, truncation marker shown. Validates: S12.6 in planned mode.
 
 4. **`test_failure_degenerate_mobius_determinant`**: Construct a MobiusTransform with near-zero determinant (|ad-bg|^2 near machine epsilon but still positive). Apply it to a point. Expected: result is finite (no division-by-near-zero blowup). Validates: S31 numerical stability.
 
@@ -665,7 +667,7 @@ Stage 65 (invariant sweep provides the regression baseline for verifying optimiz
 | Script | `scripts/math/spatial_index.gd` -- grid or BVH spatial index for surface lookup | §30.2 |
 | Behavior | Incremental recomputation: if only cursor moved, recompute from last unchanged step | §30.3 |
 | Behavior | Frame transform caching: avoid recomputing M^-1 for unchanged frames | §30.3 |
-| Behavior | PackedFloat64Array for hot loops (intersection kernel: 256 steps x N surfaces) | §20.1 |
+| Behavior | PackedFloat64Array for hot loops (intersection kernel: 32 steps x N surfaces) | §20.1 |
 | Behavior | Spatial indexing when N > 100 surfaces | §30.2 |
 | Behavior | Target: preview computation < 5ms on mid-range CPU | §30.1 |
 
@@ -763,7 +765,7 @@ Stage 66 (performance optimized, all invariants verified -- visual polish must n
 | Behavior | Target animations: unhit targets pulse/glow; hit targets drawn dimmer with checkmark overlay | §22.1 |
 | Behavior | Hit event visuals: brief flash at bounce points during arrow flight | §21.2 |
 | Behavior | State change surfaces update visually at hit moment | §21.2 |
-| Behavior | Truncation marker: small stop icon at final hit point when 256-hit limit is reached | §12.6 |
+| Behavior | Truncation marker: small stop icon at final hit point when 32-hit limit is reached | §12.6 |
 | Behavior | Escape ray rendering: arrow to viewport edge, then disappears | §21.3 |
 | Script | `scripts/visual/visual_escape_segment.gd` -- VisualEscapeSegment: line from start in direction, extending to viewport edge | §12.3 |
 | Resource | `resources/sounds/fire.wav` -- placeholder fire sound | §28 |
@@ -788,7 +790,7 @@ Stage 66 (performance optimized, all invariants verified -- visual polish must n
 8. **`test_stage67_target_hit_dimmer`**: After a target is hit, its visual is drawn at reduced brightness. Expected: modulate alpha or value < 1.0. A checkmark overlay is visible. Validates: §22.1 hit target visual.
 9. **`test_stage67_hit_flash`**: During arrow flight, when the arrow hits a surface, a brief flash appears at the hit point. Expected: flash node spawns at hit position with duration < 0.3s. Validates: §21.2.
 10. **`test_stage67_state_change_visual_update`**: Arrow hits a breakable wall. Expected: wall visual updates (e.g., disappears or changes appearance) at the exact moment of the hit during flight animation. Validates: §21.2 state change visual.
-11. **`test_stage67_truncation_marker`**: Generate a trace that hits the 256-step limit. Expected: a small stop icon is rendered at the final hit point. Validates: §12.6 truncation marker.
+11. **`test_stage67_truncation_marker`**: Generate a trace that hits the 32-step limit. Expected: a small stop icon is rendered at the final hit point. Validates: §12.6 truncation marker.
 12. **`test_stage67_escape_flight_animation`**: During arrow flight animation, when the arrow reaches an escape step (no more surfaces to hit), the arrow flies along the escape direction to the viewport edge and disappears. This tests flight-animation-specific behavior; escape ray preview rendering is covered by Stage 15 (TDD_02). Validates: §21.3.
 13. **`test_stage67_line_width_surfaces`**: Surface lines are rendered at 3px width. Expected: draw call uses width=3. Validates: §22.4.
 14. **`test_stage67_line_width_preview`**: Trajectory/preview lines are rendered at 2px width. Expected: draw call uses width=2. Validates: §22.4.
@@ -811,7 +813,7 @@ Stage 66 (performance optimized, all invariants verified -- visual polish must n
 - [ ] Hit a target with an arrow. Target dims and shows a checkmark.
 - [ ] Fire an arrow that bounces. At each bounce point, a brief flash is visible.
 - [ ] Fire a shot that causes a state change (breaks a wall). The wall visually updates at the moment of impact during the flight animation.
-- [ ] Create a scenario with 256+ potential hits (if possible). Observe the truncation marker (stop icon) at the final hit.
+- [ ] Create a scenario with 32+ potential hits (if possible). Observe the truncation marker (stop icon) at the final hit.
 - [ ] Fire an arrow that escapes (no surface in path). Arrow flies to the viewport edge and disappears.
 - [ ] Listen for sounds: fire (on click), bounce (at each reflection), break (wall break), target_hit (target hit), level_complete (all targets hit).
 - [ ] Verify surface line thickness appears heavier (3px) than trajectory lines (2px).
@@ -875,7 +877,7 @@ See standard protocol at top of document.
 | `scripts/visual/target_renderer.gd` | Modify | Pulse/glow for unhit, dimmer + checkmark for hit |
 | `scripts/visual/hit_flash.gd` | Create | Brief flash at bounce points during flight |
 | `scripts/visual/visual_escape_segment.gd` | Create | Escape ray rendering to viewport edge |
-| `scripts/visual/truncation_marker.gd` | Create | Stop icon at 256-hit truncation point |
+| `scripts/visual/truncation_marker.gd` | Create | Stop icon at 32-hit truncation point |
 | `scripts/visual/path_renderer.gd` | Modify | Line widths (2px preview), step tree draw order |
 | `scripts/game/sound_manager.gd` | Create | Sound playback for game events |
 | `resources/sounds/fire.wav` | Create | Placeholder fire sound |
@@ -920,7 +922,7 @@ All 29 invariants reach "fully testable" status by Stage 65 (invariant sweep tes
 | 7 | Per-entry state matches | S7 | Stage 54 | Stage 54 | Stage 54 | Stage 65 |
 | 8 | Forward-first ordering | S8 | Stage 11 | Stage 11 | Stage 11 | Stage 65 |
 | 9 | Exclusion respected | S9 | Stage 16 | Stage 16 | Stage 16 | Stage 65 |
-| 10 | Projective resets frame | S10 | Stage 47 | Stage 47 | Stage 47 | Stage 65 |
+| 10 | Projective resets frame | S10 | Stage 73 | Stage 73 | Stage 73 | Stage 65 |
 | 11 | Three points on carrier | S11 | Stage 7 | Stage 7 | Stage 7 (GUT) | Stage 65 |
 | 12 | Side determination consistent | S12 | Stage 7 | Stage 7 | Stage 7 (GUT) | Stage 65 |
 | 13 | Visibility no self-intersection | S13 | Stage 35 | Stage 35 | Stage 37 | Stage 65 |

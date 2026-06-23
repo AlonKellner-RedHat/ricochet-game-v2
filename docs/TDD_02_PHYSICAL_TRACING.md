@@ -112,11 +112,11 @@ Stage 8 (TransformCache, Point, Segment with carrier derivation, GeneralizedCirc
 
 6. **`test_stage9_line_line_at_segment_endpoint`**: Ray intersects surface exactly at its start or end point. Expected: candidate returned (endpoints are inclusive). Validates: boundary condition.
 
-7. **`test_stage9_line_line_negative_t`**: Ray from (0, 100) toward (0, 200). Surface is horizontal at y=50 (behind the ray). Expected: one candidate with `t < 0`. Validates: beyond-infinity hits are returned (filtering happens in `find_earliest_hit`, not here).
+7. **`test_stage9_line_line_negative_t`**: Ray from (0, 100) toward (0, 200). Surface is horizontal at y=50 (behind the ray). Expected: one candidate with `t < 0`. Validates: beyond-infinity hits are returned (filtering happens in `find_all_hits`, not here).
 
 8. **`test_stage9_line_line_via_inf`**: Surface with `via = Vector2(INF, INF)` (line through infinity). Ray intersects the carrier but the hit point is between start and end (the finite portion). Expected: empty array (the segment through infinity excludes the finite portion). Validates: infinity segment bounds.
 
-9. **`test_stage9_S8_forward_first`**: Two surfaces: one in front of the ray (`t > 0`) and one behind (`t < 0`). Process both. Expected: both candidates returned with correct `t` values, forward hit has smaller positive `t`. Validates: S8 data correctness (selection logic is in `find_earliest_hit`, Stage 11).
+9. **`test_stage9_S8_forward_first`**: Two surfaces: one in front of the ray (`t > 0`) and one behind (`t < 0`). Process both. Expected: both candidates returned with correct `t` values, forward hit has smaller positive `t`. Validates: S8 data correctness (selection logic is in `find_all_hits`, Stage 11).
 
 ### Interactive User Tests
 
@@ -275,10 +275,12 @@ AI implements -> runs tests -> user tests -> feedback -> automate -> fix -> repe
 
 ---
 
-## Stage 11: HitRecord and Earliest Hit Selection
+## Stage 11: HitRecord and Hit Selection
 
 ### Overview
-Implement the `HitRecord` data structure and the `find_earliest_hit` function that scans all surfaces, collects intersection candidates, and selects the winner using the forward-first ordering from §11.3. This stage also implements origin-on-surface exclusion (t approximately 0 is excluded) and the `excluded_surfaces` parameter for pass-through tracking. Tie-breaking uses surface ID (smaller wins), then provenance rank.
+Implement the `HitRecord` data structure and the `find_all_hits` function that scans all segments, collects intersection candidates, and returns them all (selection/sorting is handled by `projective_sort` in the tracer). This stage also implements three-tier provenance endpoint detection (no epsilon) and the `origin_on_seg`/`origin_carrier` parameters for origin-segment handling.
+
+> **Implementation note:** The original design planned a `find_earliest_hit(ray, surfaces, excluded_surfaces)` function that selected a single winner. The actual implementation uses `find_all_hits(ray, segments, origin_on_seg, origin_carrier)` which returns ALL hits, with `projective_sort` handling ordering in the tracer. The `excluded_surfaces` set was replaced by `skip_segment` (single segment) in the tracer. Origin-on-surface exclusion uses three-tier provenance endpoint detection instead of epsilon-based `t ≈ 0` filtering.
 
 ### Prerequisites
 Stage 10 (full `intersect_line_with_gcircle` for both line and circle carriers).
@@ -287,11 +289,11 @@ Stage 10 (full `intersect_line_with_gcircle` for both line and circle carriers).
 
 | Category | Item | Spec Reference |
 |----------|------|----------------|
-| Data class | `HitRecord` -- `t`, `point`, `surface`, `side`, `provenance` | §11.2 |
-| Function | `find_earliest_hit(ray, surfaces, excluded_surfaces) -> HitRecord or null` | §11.3 |
-| Algorithm | Partition hits into forward (`t > 0`) and beyond (`t < 0`); select min by t; tie-break by surface ID then provenance | §11.3 |
-| Behavior | Origin-on-surface exclusion: `t approximately 0` excluded internally | §11.4 |
-| Behavior | `excluded_surfaces: Set` parameter for additional exclusions | §11.4, §12.1 |
+| Data class | `HitRecord` -- `t`, `point`, `segment`, `side`, `provenance` | §11.2 |
+| Function | `find_all_hits(ray, segments, origin_on_seg, origin_carrier) -> Array[HitRecord]` | §11.3 |
+| Algorithm | Returns all hits; ordering handled by `projective_sort` in the tracer | §11.3 |
+| Behavior | Three-tier provenance endpoint detection (no epsilon): exact coord match, ray-defining-point match, cross-product collinearity | §11.4, §31.3.1 |
+| Behavior | `origin_on_seg: Segment` parameter identifies the segment the ray originates from; `origin_carrier` provides its carrier | §11.4, §12.1 |
 | Behavior | Side determination at hit point: evaluate carrier at a point slightly before hit along ray, determine LEFT/RIGHT | §9.2 |
 
 ### Unit Tests Added
@@ -374,7 +376,7 @@ AI implements -> runs tests -> user tests -> feedback -> automate -> fix -> repe
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `scripts/math/intersection.gd` | Modify | Add HitRecord, find_earliest_hit, side determination at hit |
+| `scripts/math/intersection.gd` | Modify | Add HitRecord, find_all_hits, side determination at hit |
 | `tests/test_stage11_hit_selection.gd` | Create | HitRecord and earliest-hit selection unit tests |
 
 ---
@@ -537,9 +539,9 @@ Stage 12 (Surface, SideConfig, TerminalEffect stub, player_solid flag).
 
 8. **`test_stage13_player_collision_with_wall`**: Simulate player moving toward a wall surface. After `move_and_slide()`, player position does not pass through the wall. Validates: UX9 (block stops player) and collision.
 
-9. **`test_stage13_UX9_block_stops_ray`**: Create a ray aimed at a block surface. Call `find_earliest_hit`. The hit's surface has a TerminalEffect. The trace should stop at this hit (trace loop integration tested in Stage 14, but the data is verifiable here). Validates: UX9.
+9. **`test_stage13_UX9_block_stops_ray`**: Create a ray aimed at a block surface. Call `find_all_hits`. The hit's surface has a TerminalEffect. The trace should stop at this hit (trace loop integration tested in Stage 14, but the data is verifiable here). Validates: UX9.
 
-10. **`test_stage13_player_solid_false`**: Create a surface with `player_solid = false`. Player walks through it (no collision). Arrow tracing still interacts with it (`find_earliest_hit` returns it as a hit). Validates: §9.1, §25.1.
+10. **`test_stage13_player_solid_false`**: Create a surface with `player_solid = false`. Player walks through it (no collision). Arrow tracing still interacts with it (`find_all_hits` returns it as a hit). Validates: §9.1, §25.1.
 
 11. **`test_stage13_terminal_does_not_reset_frame`**: Trace through a transformative effect then hit a terminal surface. Expected: frame at terminal step is the composed frame (not identity). Terminal simply ends the path without resetting. Validates: §10.7. *(Forward placeholder — becomes meaningful at Stage 20b when transformative effects exist.)*
 
@@ -619,12 +621,12 @@ AI implements -> runs tests -> user tests -> feedback -> automate -> fix -> repe
 ### Overview
 Implement the `trace()` function from §12.1, but initially limited to a single iteration: find the first hit, record a Step, and stop. This introduces the Step data structure (start, end, frame, hit), TracedPath (steps array, targets_hit set), and the critical rule that `trace()` operates on a COPY of game state so mutations within the trace do not affect the caller's state. The Mobius frame is identity for now (no transformative effects yet). The Step data class stores `frame_id: int` (referencing the identity constant id=0 for now). Full MobiusTransform operations (apply, compose, invert) are introduced in Stage 20.
 
-The trace loop at this stage implements ONLY the terminal/block and null/pass-through branches. The TransformativeEffect branch (which calls `frame.compose()`) and the ProjectiveEffect branch are **deferred to Stage 21** when the full MobiusTransform exists. The loop should contain `assert(false, 'TransformativeEffect/ProjectiveEffect branch not implemented until Stage 20b/47. This surface has an unexpected effect type at this stage.')` in the TransformativeEffect and ProjectiveEffect branches — a hard error rather than silent pass-through. This catches accidental early use of unimplemented effects. The asserts are removed when Stage 20b implements transformative handling and Stage 47+ implements projective handling.
+The trace loop at this stage implements ONLY the terminal/block and null/pass-through branches. The TransformativeEffect branch (which calls `frame.compose()`) and the ProjectiveEffect branch are **deferred to Stage 21** when the full MobiusTransform exists. The loop should contain `assert(false, 'TransformativeEffect/ProjectiveEffect branch not implemented until Stage 20b/73. This surface has an unexpected effect type at this stage.')` in the TransformativeEffect and ProjectiveEffect branches — a hard error rather than silent pass-through. This catches accidental early use of unimplemented effects. The asserts are removed when Stage 20b implements transformative handling and Stage 73+ implements projective handling.
 
 **Forward dependency:** Step records store `frame_id: int` referencing the IDENTITY constant (id=0). Stage 20's full MobiusTransform implementation must preserve id=0 as the identity transform. Tests in Stages 14-19 depend on this.
 
 ### Prerequisites
-Stage 13 (room boundary surfaces exist, TerminalEffect stops the ray, `find_earliest_hit` functional).
+Stage 13 (room boundary surfaces exist, TerminalEffect stops the ray, `find_all_hits` functional).
 
 ### What Is Introduced
 
@@ -773,7 +775,7 @@ Stage 14 (trace produces Steps and TracedPath).
 
 10. **`test_stage15_escape_ray_no_inf_in_draw`**: The path renderer never calls `draw_line()` with INF coordinates. Escape steps are converted to viewport-edge-clipped line segments before drawing. Validates: S16 (no NaN/Inf in rendering output).
 
-11. **`test_stage15_arrow_ignores_collision_bodies`**: Place a collision body (`StaticBody2D` with `CollisionShape2D`) between the player and a wall Surface. Trace a ray. Expected: the ray passes through the collision body and hits the wall Surface. The collision body is not in the `surfaces` array and is not returned by `find_earliest_hit`. Validates: collision bodies are invisible to the arrow system.
+11. **`test_stage15_arrow_ignores_collision_bodies`**: Place a collision body (`StaticBody2D` with `CollisionShape2D`) between the player and a wall Surface. Trace a ray. Expected: the ray passes through the collision body and hits the wall Surface. The collision body is not in the `surfaces` array and is not returned by `find_all_hits`. Validates: collision bodies are invisible to the arrow system.
 
 12. **`test_stage15_cache_fresh_each_preview_frame`**: Compute preview at cursor position A (populates cache). Move cursor to position B. Compute preview again. Expected: results at B are correct (not contaminated by A's cached values). Validates: cache clearing between preview frames.
 
@@ -858,7 +860,9 @@ AI implements -> runs tests -> user tests -> feedback -> automate -> fix -> repe
 ## Stage 16: Multi-Hit Trace Loop
 
 ### Overview
-Extend `trace()` from a single-step function to a full loop: while `hit_count < 256`, keep finding hits. This stage implements pass-through handling (null effect adds the surface to `excluded_surfaces`, continues the ray from the hit point with the same direction) and the `excluded_surfaces` reset after each non-pass-through hit. All hits count toward the 256 limit, including pass-through. The TerminalEffect causes a `break` from the loop.
+Extend `trace()` from a single-step function to a full loop: while `hit_count < 32`, keep finding hits. This stage implements the stage-based hitpoint walk where all carrier intersections are precomputed per "stage" and walked in projective order. Pass-through handling continues the ray from the hit point with the same direction. The TerminalEffect causes the trace to stop.
+
+> **Implementation note:** The original design planned an `excluded_surfaces` set that accumulated pass-through surfaces and reset after non-pass-through hits. The actual implementation uses a stage-based hitpoint walk with `skip_segment` (single segment, reference equality) — only the most recently hit segment is skipped, and the next stage clears it. See GAME_SPEC.md §12.1 for the current architecture.
 
 ### Prerequisites
 Stage 15 (single-step trace works, preview renders traced path).
@@ -867,13 +871,13 @@ Stage 15 (single-step trace works, preview renders traced path).
 
 | Category | Item | Spec Reference |
 |----------|------|----------------|
-| Algorithm | Multi-hit trace loop: `while hit_count < 256` | §12.1, §12.6 |
-| Behavior | Pass-through handling: null effect adds surface to `excluded_surfaces`, ray continues | §12.1 |
-| Behavior | `excluded_surfaces` reset after each non-pass-through hit | §12.1 |
-| Behavior | All hits count toward 256 limit including pass-through | §12.6 |
-| Behavior | TerminalEffect causes `break` | §12.1 |
+| Algorithm | Stage-based hitpoint walk: `while hit_count < 32` | §12.1, §12.6 |
+| Behavior | Pass-through handling: ray continues from hit point with same direction | §12.1 |
+| Behavior | `skip_segment` (single segment) replaces `excluded_surfaces` set | §12.1 |
+| Behavior | All hits count toward 32 limit including pass-through | §12.6 |
+| Behavior | TerminalEffect stops the trace | §12.1 |
 | Behavior | Null effect (pass-through): no frame change, no direction change, ray continues from hit point | §10.7 |
-| Constant | `MAX_HITS = 256` | §12.6 |
+| Constant | `MAX_HITS = 32` | §12.6 |
 
 ### Unit Tests Added
 
@@ -881,13 +885,13 @@ Stage 15 (single-step trace works, preview renders traced path).
 
 2. **`test_stage16_pass_through_excluded_then_reset`**: Ray hits a pass-through surface. On the next iteration, that surface is in `excluded_surfaces` (ray does not re-hit it). After hitting a non-pass-through surface, `excluded_surfaces` is cleared. Validates: S9 exclusion mechanics.
 
-3. **`test_stage16_pass_through_counts_toward_limit`**: Scene with many overlapping pass-through surfaces. Verify that pass-through hits increment `hit_count`. After 256 total hits (all pass-through), the trace terminates. Validates: §12.6.
+3. **`test_stage16_pass_through_counts_toward_limit`**: Scene with many overlapping pass-through surfaces. Verify that pass-through hits increment `hit_count`. After 32 total hits (all pass-through), the trace terminates. Validates: §12.6.
 
 4. **`test_stage16_terminal_stops_loop`**: Ray hits a block surface on its second step (first step is pass-through). Expected: TracedPath has exactly 2 steps; loop did not continue past the terminal. Validates: TerminalEffect breaks loop.
 
-5. **`test_stage16_max_256_hits`**: Construct a scenario with 300+ potential pass-through hits (e.g., many overlapping surfaces). Expected: trace stops at exactly 256 hits. Validates: 256 limit enforced.
+5. **`test_stage16_max_32_hits`**: Construct a scenario with many overlapping pass-through surfaces. Expected: trace stops at exactly 32 hits. Validates: 32 limit enforced.
 
-6. **`test_stage16_S9_excluded_surfaces_not_in_results`**: After a pass-through hit, the next `find_earliest_hit` call does not return the just-passed-through surface. Validates: S9.
+6. **`test_stage16_S9_excluded_surfaces_not_in_results`**: After a pass-through hit, the next `find_all_hits` call does not return the just-passed-through surface. Validates: S9.
 
 7. **`test_stage16_escape_after_pass_through`**: Pass-through surface with no wall behind it. Ray passes through and escapes. Expected: 2 steps (pass-through hit + escape step with end=INF). Validates: escape after pass-through.
 
@@ -977,7 +981,7 @@ AI implements -> runs tests -> user tests -> feedback -> automate -> fix -> repe
 ## Stage 17: Arrow Shooting (Fire Button)
 
 ### Overview
-Implement the fire action (Spacebar). When fired, game time freezes (`get_tree().paused = true`), the physical trace is computed, and an arrow is animated along the traced path. The arrow is a line segment (~40u) with a triangular head (30 degree angle, ~16u), rotating to follow the path tangent. The arrow lerps from start to end per step at 800 u/s constant speed. After animation, the arrow disappears (no fade), game time unfreezes, and the preview reappears. Fire is a no-op if cursor == player (zero-length Direction). The arrow animator has `process_mode = PROCESS_MODE_ALWAYS` to run during pause.
+Implement the fire action (Spacebar). When fired, game time freezes (`get_tree().paused = true`), the physical trace is computed, and an arrow is animated along the traced path. The arrow is a line segment (~40u) with a triangular head (30 degree angle, ~16u), rotating to follow the path tangent. The arrow lerps from start to end per step at 1600 u/s constant speed. After animation, the arrow disappears (no fade), game time unfreezes, and the preview reappears. Fire is a no-op if cursor == player (zero-length Direction). The arrow animator has `process_mode = PROCESS_MODE_ALWAYS` to run during pause.
 
 ### Prerequisites
 Stage 16 (full multi-hit trace loop produces TracedPath).
@@ -990,14 +994,14 @@ Stage 16 (full multi-hit trace loop produces TracedPath).
 | Behavior | Game time freeze: `get_tree().paused = true` | §21.1, Principle 25 |
 | Script | `scripts/game/arrow_animator.gd` -- arrow flight animation | §21.2 |
 | Rendering | Arrow visual: line segment (~40u) + triangular head (30 degree, ~16u) | §22.1 |
-| Behavior | Arrow lerps along traced path at 800 u/s constant speed | §21.2 |
+| Behavior | Arrow lerps along traced path at 1600 u/s constant speed | §21.2 |
 | Behavior | Arrow rotates to follow tangent direction | §22.1 |
 | Behavior | Arrow disappears after animation (no fade) | §21.4 |
 | Behavior | Game time unfreeze after animation complete | §21.1 |
 | Behavior | `process_mode = PROCESS_MODE_ALWAYS` on arrow animator | §21.1 |
 | Behavior | No-op if cursor == player (zero-length Direction) | §4.1, §8.3 |
 | Behavior | Preview hidden during flight, reappears after | §21.1 |
-| Constant | `ARROW_SPEED = 800` u/s | §21.2 |
+| Constant | `ARROW_SPEED = 1600` u/s | §21.2 |
 | Constant | `ARROW_LENGTH = 40` units | §22.1 |
 | Constant | `ARROW_HEAD_ANGLE = 30` degrees | §22.1 |
 | Constant | `ARROW_HEAD_LENGTH = 16` units | §22.1 |
@@ -1010,7 +1014,7 @@ Stage 16 (full multi-hit trace loop produces TracedPath).
 
 3. **`test_stage17_fire_noop_zero_length`**: Cursor at player position. Fire action. Expected: no arrow spawned, game not paused, no trace computed. Validates: §8.3 degenerate case.
 
-4. **`test_stage17_arrow_speed_constant`**: Arrow travels at 800 u/s. For a step of length 800u, the animation takes approximately 1 second. Validates: §21.2.
+4. **`test_stage17_arrow_speed_constant`**: Arrow travels at 1600 u/s. For a step of length 1600u, the animation takes approximately 1 second. Validates: §21.2.
 
 5. **`test_stage17_arrow_follows_traced_path`**: Fire the arrow. Record the arrow's positions during animation. Expected: positions lie on the traced path (start to end of each step in sequence). Validates: UX3 (preview matches flight).
 
@@ -1074,7 +1078,7 @@ Stage 16 (full multi-hit trace loop produces TracedPath).
 
 | Prior Stage | Behavior | How to Verify |
 |-------------|----------|---------------|
-| Stage 16 | Multi-hit trace loop, pass-through, 256 limit | GUT tests |
+| Stage 16 | Multi-hit trace loop, pass-through, 32 limit | GUT tests |
 | Stage 15 | Preview: solid player-to-cursor + dashed cursor-to-wall | Interactive: preview reappears after shot |
 | Stage 14 | Single-step trace, TracedPath structure | GUT tests |
 | Stage 13 | Room boundary: 4 red walls, player collision | Interactive: walls visible, player constrained |
@@ -1199,7 +1203,7 @@ Stage 17 (arrow flight animation, game time freeze/unfreeze).
 | Prior Stage | Behavior | How to Verify |
 |-------------|----------|---------------|
 | Stage 17 | Arrow fires on Spacebar, flies along trace, disappears, unfreezes | Interactive: fire and observe |
-| Stage 16 | Multi-hit trace loop, pass-through, 256 limit | GUT tests |
+| Stage 16 | Multi-hit trace loop, pass-through, 32 limit | GUT tests |
 | Stage 15 | Preview: solid + dashed green lines | Interactive: preview visible before and after shot |
 | Stage 14 | Single-step trace, TracedPath | GUT tests |
 | Stage 13 | Room boundary: 4 red walls, player collision | Interactive: walls visible, player constrained |
