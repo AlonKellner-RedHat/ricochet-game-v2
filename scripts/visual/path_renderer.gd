@@ -101,16 +101,7 @@ func _draw_merged() -> void:
 			continue
 		_draw_step(ms, StepTypes.color(ms.type), not StepTypes.is_solid(ms.type))
 
-	for i in _merged_steps.size():
-		var ms: Tracer.Step = _merged_steps[i]
-		var col := StepTypes.color(ms.type)
-		col.a = 0.4
-		var s_local := ms.start - global_position
-		var e_local := ms.end - global_position
-		if _draw_bounds.has_point(s_local):
-			draw_circle(s_local, 4.0, col)
-		if _draw_bounds.has_point(e_local):
-			draw_circle(e_local, 4.0, col)
+	_draw_endpoint_circles(_merged_steps, func(s: Tracer.Step) -> Color: return StepTypes.color(s.type))
 
 func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: String) -> void:
 	if path == null or path.steps.size() == 0:
@@ -125,9 +116,21 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 			col = Color(base_color, 0.35)
 		_draw_step(step, col, step.hit == null)
 
+	_draw_endpoint_circles(path.steps, func(_s: Tracer.Step) -> Color: return base_color)
 	for i in path.steps.size():
 		var step: Tracer.Step = path.steps[i]
-		var col := base_color
+		var mid := ((step.start + step.end) / 2.0) - global_position + Vector2(0, -10)
+		if _draw_bounds.has_point(mid):
+			var col := Color(base_color, 0.4)
+			var font := ThemeDB.fallback_font
+			var lbl := "%s%d" % [label_prefix, i]
+			if step.hit == null:
+				lbl += "*"
+			draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
+
+func _draw_endpoint_circles(steps: Array, color_fn: Callable) -> void:
+	for step: Tracer.Step in steps:
+		var col: Color = color_fn.call(step)
 		col.a = 0.4
 		var s_local := step.start - global_position
 		var e_local := step.end - global_position
@@ -135,13 +138,6 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 			draw_circle(s_local, 4.0, col)
 		if _draw_bounds.has_point(e_local):
 			draw_circle(e_local, 4.0, col)
-		var mid := ((step.start + step.end) / 2.0) - global_position + Vector2(0, -10)
-		if _draw_bounds.has_point(mid):
-			var font := ThemeDB.fallback_font
-			var lbl := "%s%d" % [label_prefix, i]
-			if step.hit == null:
-				lbl += "*"
-			draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
 
 func _draw_step(step: Tracer.Step, col: Color, dashed: bool) -> void:
 	if step.is_arc_step and VisualConverter.is_arc(step.start, step.via, step.end):

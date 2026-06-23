@@ -133,33 +133,13 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if vis_start == vis_end:
 				if is_origin:
 					if hp_idx == 0 and not _start_inf:
-						var p_dir := s.ray.direction.to_vector().normalized()
-						var vis_shifted := s.frame.apply(step_origin_pos + p_dir)
-						if not (is_inf(vis_shifted.x) or is_inf(vis_shifted.y)):
-							var vis_dir2 := (vis_shifted - vis_start).normalized()
-							_add_escape_steps(s.path, vis_start, vis_dir2, s.frame, s.shared_ray, step_origin_pos, p_dir)
+						_try_escape(s, vis_start, step_origin_pos)
 					trace_done = true
 					break
 				if is_cursor:
-					var was_planned := s.current_mode != TraceMode.PHYSICAL
-					s.path.cursor_index = s.path.steps.size()
-					s.cursor_injected = true
-					s.current_mode = post_cursor_mode
-					if was_planned:
-						s.cursor_injected_at_zero_length = true
+					_inject_cursor(s, post_cursor_mode)
 				if not is_null_seg:
-					s.step_left_blocked = s.step_left_blocked or hp.blocked_left
-					s.step_right_blocked = s.step_right_blocked or hp.blocked_right
-					if hp.at_endpoint > 0 and not (s.step_left_blocked and s.step_right_blocked):
-						for ns in s.norm_surfaces:
-							if ns.segment == hp.segment:
-								continue
-							var ep := Intersection.at_which_endpoint(hp.point.coords, ns.segment)
-							if ep > 0:
-								var sides := Intersection.endpoint_blocked_sides(
-									hp.point.coords, ns.segment, s.ray, ep)
-								s.step_left_blocked = s.step_left_blocked or sides[0]
-								s.step_right_blocked = s.step_right_blocked or sides[1]
+					_accumulate_blockage(s, hp)
 					if s.step_left_blocked and s.step_right_blocked:
 						var orig_surf_zl: Surface = s.norm_to_surface.get(hp.segment)
 						if orig_surf_zl and orig_surf_zl.is_target and hp.on_segment:
@@ -189,11 +169,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				if has_wrapped:
 					s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, null, s.shared_ray, s.frame, vis_via, step_is_arc))
 				elif not _start_inf:
-					var p_dir2 := s.ray.direction.to_vector().normalized()
-					var vis_shifted := s.frame.apply(step_origin_pos + p_dir2)
-					if not (is_inf(vis_shifted.x) or is_inf(vis_shifted.y)):
-						var vis_dir2 := (vis_shifted - vis_start).normalized()
-						_add_escape_steps(s.path, vis_start, vis_dir2, s.frame, s.shared_ray, step_origin_pos, p_dir2)
+					_try_escape(s, vis_start, step_origin_pos)
 				trace_done = true
 				break
 
@@ -202,12 +178,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 			# --- Cursor check ---
 			if is_cursor:
-				var was_planned := s.current_mode != TraceMode.PHYSICAL
-				s.path.cursor_index = s.path.steps.size()
-				s.cursor_injected = true
-				s.current_mode = post_cursor_mode
-				if was_planned:
-					s.cursor_injected_at_zero_length = true
+				_inject_cursor(s, post_cursor_mode)
 				walk_t = hp.t
 				step_origin_pos = hp.point.coords
 				continue
@@ -218,20 +189,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				s.path.targets_hit[orig_surf.id] = true
 
 			# --- Blockage ---
-			s.step_left_blocked = s.step_left_blocked or hp.blocked_left
-			s.step_right_blocked = s.step_right_blocked or hp.blocked_right
-
-			if hp.at_endpoint > 0 and not (s.step_left_blocked and s.step_right_blocked):
-				for ns in s.norm_surfaces:
-					var ns_surf: Surface = ns
-					if ns_surf.segment == hp.segment:
-						continue
-					var ep := Intersection.at_which_endpoint(hp.point.coords, ns_surf.segment)
-					if ep > 0:
-						var sides := Intersection.endpoint_blocked_sides(hp.point.coords, ns_surf.segment, s.ray, ep)
-						s.step_left_blocked = s.step_left_blocked or sides[0]
-						s.step_right_blocked = s.step_right_blocked or sides[1]
-
+			_accumulate_blockage(s, hp)
 			var fully_blocked := s.step_left_blocked and s.step_right_blocked
 
 			var result = _apply_effect(s, hp, fully_blocked, orig_surf, plan_entries)
@@ -254,6 +212,35 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 	s.path.hit_count = s.hit_count
 	return s.path
+
+static func _inject_cursor(s: TraceState, post_cursor_mode: int) -> void:
+	var was_planned := s.current_mode != TraceMode.PHYSICAL
+	s.path.cursor_index = s.path.steps.size()
+	s.cursor_injected = true
+	s.current_mode = post_cursor_mode
+	if was_planned:
+		s.cursor_injected_at_zero_length = true
+
+static func _try_escape(s: TraceState, vis_start: Vector2, step_origin_pos: Vector2) -> void:
+	var p_dir := s.ray.direction.to_vector().normalized()
+	var vis_shifted := s.frame.apply(step_origin_pos + p_dir)
+	if not (is_inf(vis_shifted.x) or is_inf(vis_shifted.y)):
+		var vis_dir := (vis_shifted - vis_start).normalized()
+		_add_escape_steps(s.path, vis_start, vis_dir, s.frame, s.shared_ray, step_origin_pos, p_dir)
+
+static func _accumulate_blockage(s: TraceState, hp: Intersection.HitRecord) -> void:
+	s.step_left_blocked = s.step_left_blocked or hp.blocked_left
+	s.step_right_blocked = s.step_right_blocked or hp.blocked_right
+	if hp.at_endpoint > 0 and not (s.step_left_blocked and s.step_right_blocked):
+		for ns in s.norm_surfaces:
+			if ns.segment == hp.segment:
+				continue
+			var ep := Intersection.at_which_endpoint(hp.point.coords, ns.segment)
+			if ep > 0:
+				var sides := Intersection.endpoint_blocked_sides(
+					hp.point.coords, ns.segment, s.ray, ep)
+				s.step_left_blocked = s.step_left_blocked or sides[0]
+				s.step_right_blocked = s.step_right_blocked or sides[1]
 
 static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_blocked: bool, orig_surf: Surface, plan_entries: Array) -> int:
 	var norm_surf: Surface = null
@@ -345,12 +332,7 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 		var vis_origin := s.frame.apply(s.ray.origin.coords)
 		if is_inf(vis_origin.x) or is_inf(vis_origin.y):
 			return []
-		var p_dir := s.ray.direction.to_vector().normalized()
-		var vis_shifted := s.frame.apply(s.ray.origin.coords + p_dir)
-		if is_inf(vis_shifted.x) or is_inf(vis_shifted.y):
-			return []
-		var vis_dir := (vis_shifted - vis_origin).normalized()
-		_add_escape_steps(s.path, vis_origin, vis_dir, s.frame, s.shared_ray, s.ray.origin.coords, p_dir)
+		_try_escape(s, vis_origin, s.ray.origin.coords)
 		return []
 
 	var hitpoints: Array = carrier_hits.duplicate()

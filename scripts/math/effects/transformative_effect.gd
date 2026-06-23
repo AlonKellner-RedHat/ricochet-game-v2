@@ -16,3 +16,11 @@ func get_inverse_mobius() -> MobiusTransform:
 
 func get_tracked_transform() -> TrackedTransform:
 	return _tracked
+
+func _create_normalized(_carrier_arg: GeneralizedCircle) -> Effect:
+	return null
+
+func normalized(carrier: GeneralizedCircle) -> Effect:
+	if carrier == _carrier:
+		return self
+	return _create_normalized(carrier)
