@@ -164,64 +164,6 @@ func test_A3_endpoint_blocked_sides_at_corner() -> void:
 		"Combined blockage should be fully blocked")
 
 
-func test_A4_trace_divergence_at_corner() -> void:
-	var d := _build_three_mirrors_surfaces()
-	var surfaces: Array = d.surfaces
-	var mirror4: Surface = d.mirror4
-	var mirror5: Surface = d.mirror5
-
-	var player := Vector2(570, 250)
-	var cursor := Vector2(1360, 240)
-	var plan := [
-		PlanManager.PlanEntry.new(mirror4.id, Side.Value.LEFT),
-		PlanManager.PlanEntry.new(mirror5.id, Side.Value.LEFT)]
-
-	var cache := TransformCache.new()
-	var aim_dir := Planner.compute_aim_direction(
-		player, cursor, plan, surfaces, GameState.new(), cache)
-	var aim_point = Planner._compute_image(
-		cursor, plan, surfaces, GameState.new())
-	gut.p("A4 aim_dir zero_length=%s aim_point=%s" % [
-		str(aim_dir.is_zero_length()), str(aim_point)])
-
-	var trace_wp := Tracer.trace(player, aim_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
-		plan, null, cursor)
-	var trace_np := Tracer.trace(player, aim_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
-		[], null, aim_point)
-
-	gut.p("A4 with_plan: %d steps, cursor_index=%d" % [
-		trace_wp.steps.size(), trace_wp.cursor_index])
-	for i in mini(trace_wp.steps.size(), 10):
-		var s: Tracer.Step = trace_wp.steps[i]
-		gut.p("  wp[%d]: start=%s end=%s fid=%d zero=%s" % [
-			i, s.start, s.end, s.frame_id, str(s.start == s.end)])
-
-	gut.p("A4 no_plan: %d steps, cursor_index=%d" % [
-		trace_np.steps.size(), trace_np.cursor_index])
-	for i in mini(trace_np.steps.size(), 10):
-		var s: Tracer.Step = trace_np.steps[i]
-		gut.p("  np[%d]: start=%s end=%s fid=%d zero=%s" % [
-			i, s.start, s.end, s.frame_id, str(s.start == s.end)])
-
-	var geo_wp := InvariantChecker._extract_trace_geometry(trace_wp)
-	var geo_np := InvariantChecker._extract_trace_geometry(trace_np)
-
-	gut.p("A4 geometry: with_plan=%d segments, no_plan=%d segments" % [
-		geo_wp.size(), geo_np.size()])
-	for i in mini(geo_wp.size(), 5):
-		gut.p("  wp_geo[%d]: start=%s end=%s" % [i, geo_wp[i].start, geo_wp[i].end])
-	for i in mini(geo_np.size(), 5):
-		gut.p("  np_geo[%d]: start=%s end=%s" % [i, geo_np[i].start, geo_np[i].end])
-
-	if geo_wp.size() > 0 and geo_np.size() > 0:
-		var end_match: float = geo_wp[0].end.distance_to(geo_np[0].end)
-		gut.p("A4 segment 0 end distance: %.2f" % end_match)
-		if end_match > 1.0:
-			gut.p("A4 CONFIRMED: segment 0 ends diverge — with_plan ends at %s, no_plan ends at %s" % [
-				geo_wp[0].end, geo_np[0].end])
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PART B — Cursor reachability investigation (segment count mismatches)
@@ -320,67 +262,6 @@ func test_B2_cursor_index_divergence() -> void:
 	if trace_np.cursor_index == -1:
 		gut.p("B2 CONFIRMED: no_plan has cursor_index=-1 (cursor was never injected)")
 
-
-func test_B3_segment_count_divergence() -> void:
-	# Reproduce the simplest segment count violation from violations.json:
-	# player=(570, 540), cursor=(765, 540), plan=[surface4 LEFT]
-	# scene: three_mirrors.tscn
-	var d := _build_three_mirrors_surfaces()
-	var surfaces: Array = d.surfaces
-	var mirror4: Surface = d.mirror4
-
-	var player := Vector2(570, 540)
-	var cursor := Vector2(765, 540)
-	var plan := [PlanManager.PlanEntry.new(mirror4.id, Side.Value.LEFT)]
-
-	var cache := TransformCache.new()
-	var aim_point = Planner._compute_image(cursor, plan, surfaces, GameState.new())
-	var aim_dir := Planner.compute_aim_direction(
-		player, cursor, plan, surfaces, GameState.new(), cache)
-	gut.p("B3 aim_point=%s aim_dir_zero=%s" % [str(aim_point), str(aim_dir.is_zero_length())])
-
-	var trace_wp := Tracer.trace(player, aim_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
-		plan, null, cursor)
-	var trace_np := Tracer.trace(player, aim_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
-		[], null, aim_point)
-
-	var geo_wp := InvariantChecker._extract_trace_geometry(trace_wp)
-	var geo_np := InvariantChecker._extract_trace_geometry(trace_np)
-
-	gut.p("B3 with_plan: steps=%d segments=%d cursor_index=%d" % [
-		trace_wp.steps.size(), geo_wp.size(), trace_wp.cursor_index])
-	gut.p("B3 no_plan: steps=%d segments=%d cursor_index=%d" % [
-		trace_np.steps.size(), geo_np.size(), trace_np.cursor_index])
-
-	# Dump last 15 steps of each trace to see where they diverge
-	gut.p("B3 with_plan last steps:")
-	var wp_start := maxi(0, trace_wp.steps.size() - 15)
-	for i in range(wp_start, trace_wp.steps.size()):
-		var s: Tracer.Step = trace_wp.steps[i]
-		gut.p("  wp[%d]: start=%s end=%s fid=%d" % [i, s.start, s.end, s.frame_id])
-
-	gut.p("B3 no_plan last steps:")
-	var np_start := maxi(0, trace_np.steps.size() - 15)
-	for i in range(np_start, trace_np.steps.size()):
-		var s: Tracer.Step = trace_np.steps[i]
-		gut.p("  np[%d]: start=%s end=%s fid=%d" % [i, s.start, s.end, s.frame_id])
-
-	# Dump last few geometry segments to see where they diverge
-	gut.p("B3 with_plan last 5 geo segments:")
-	for i in range(maxi(0, geo_wp.size() - 5), geo_wp.size()):
-		gut.p("  wp_geo[%d]: start=%s end=%s" % [i, geo_wp[i].start, geo_wp[i].end])
-	gut.p("B3 no_plan last 5 geo segments:")
-	for i in range(maxi(0, geo_np.size() - 5), geo_np.size()):
-		gut.p("  np_geo[%d]: start=%s end=%s" % [i, geo_np[i].start, geo_np[i].end])
-
-	# Report
-	if geo_wp.size() != geo_np.size():
-		gut.p("B3 CONFIRMED: segment count mismatch with_plan=%d no_plan=%d (diff=%d)" % [
-			geo_wp.size(), geo_np.size(), geo_wp.size() - geo_np.size()])
-	else:
-		gut.p("B3 segment counts match — no divergence in this geometry")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

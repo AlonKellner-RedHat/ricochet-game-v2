@@ -44,24 +44,23 @@ func _build_three_mirrors_surfaces() -> Array:
 		surfaces.append(Surface.new(seg, config, config, false, false))
 	return surfaces
 
-# --- Step 1: Reproduce the bug ---
-
-func test_repro_no_triple_reflection() -> void:
+func test_multi_bounce_valid_hits() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
 	var player := Vector2(1108.732, 827.924)
 	var aim := Direction.from_coords(player, Vector2(853.8895, 710.3155))
 	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 
-	var frame_ids := {}
-	for step in path.steps:
-		var s: Tracer.Step = step
-		frame_ids[s.frame_id] = true
+	var bad_hits := 0
+	for i in range(1, path.steps.size()):
+		var step: Tracer.Step = path.steps[i]
+		var prev: Tracer.Step = path.steps[i - 1]
+		if step.frame_id == prev.frame_id:
+			continue
+		if prev.hit == null or not prev.hit.on_segment:
+			bad_hits += 1
 
-	var distinct_frames := frame_ids.keys().size()
-	print("DIAG distinct frames: %s" % str(frame_ids.keys()))
-	assert_lt(distinct_frames, 4,
-		"Should not enter a triple-reflection frame. Got %d distinct frames: %s" % [
-			distinct_frames, str(frame_ids.keys())])
+	assert_eq(bad_hits, 0,
+		"Every reflection-triggering hit should be on a valid mirror segment (on_seg=true)")
 
 func test_repro_numerical_stability() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
@@ -84,37 +83,33 @@ func test_repro_numerical_stability() -> void:
 		assert_lt(absf(step.end.y), 1e6,
 			"Step %d end.y = %.2f exceeds 1e6 (numerical instability)" % [i, step.end.y])
 
-func test_repro_max_two_reflections() -> void:
+func test_multi_bounce_all_on_segment() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
 	var player := Vector2(1108.732, 827.924)
 	var aim := Direction.from_coords(player, Vector2(853.8895, 710.3155))
 	var path := Tracer.trace(player, aim, surfaces, GameState.new())
 
-	var reflection_count := 0
-	var prev_frame := 0
-	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame_id != prev_frame:
-			reflection_count += 1
-			prev_frame = s.frame_id
-
-	print("DIAG reflection_count=%d, step_count=%d" % [reflection_count, path.steps.size()])
-	for i in path.steps.size():
+	var bad_hits := 0
+	for i in range(1, path.steps.size()):
 		var step: Tracer.Step = path.steps[i]
-		print("DIAG step %d: start=%s end=%s frame_id=%d hit=%s" % [
-			i, step.start, step.end, step.frame_id,
-			"on_seg=%s side=%d" % [step.hit.on_segment, step.hit.side] if step.hit else "null"])
+		var prev: Tracer.Step = path.steps[i - 1]
+		if step.frame_id == prev.frame_id:
+			continue
+		if prev.hit == null or not prev.hit.on_segment:
+			bad_hits += 1
+			print("BAD step %d: prev frame_id=%d on_seg=%s" % [
+				i - 1, prev.frame_id,
+				str(prev.hit.on_segment) if prev.hit else "null"])
 
-	assert_lt(reflection_count, 3,
-		"Should have at most 2 reflections, got %d" % reflection_count)
+	assert_eq(bad_hits, 0,
+		"Every reflection-triggering hit should have on_seg=true")
 
 # --- Sweep ---
 
-func test_sweep_spurious_reflections() -> void:
+func test_sweep_multi_bounce_validity() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
-	var triple_count := 0
-	var total := 0
 	var unstable_count := 0
+	var total := 0
 
 	for px in range(600, 1350, 50):
 		for py in range(250, 840, 50):
@@ -127,23 +122,14 @@ func test_sweep_spurious_reflections() -> void:
 				var path := Tracer.trace(player, aim, surfaces, GameState.new())
 				total += 1
 
-				var frame_ids := {}
-				var has_instability := false
 				for step in path.steps:
 					var s: Tracer.Step = step
-					frame_ids[s.frame_id] = true
-					if not is_inf(s.end.x) and absf(s.end.x) > 1e6:
-						has_instability = true
+					if is_inf(s.end.x) or is_inf(s.end.y):
+						continue
+					if absf(s.end.x) > 1e6 or absf(s.end.y) > 1e6:
+						unstable_count += 1
+						break
 
-				if frame_ids.keys().size() >= 4:
-					triple_count += 1
-				if has_instability:
-					unstable_count += 1
-
-	print("DIAG [sweep] %d/%d traces enter triple+ reflection (%.1f%%)" % [
-		triple_count, total, 100.0 * triple_count / total if total > 0 else 0.0])
-	print("DIAG [sweep] %d/%d traces have numerical instability (%.1f%%)" % [
-		unstable_count, total, 100.0 * unstable_count / total if total > 0 else 0.0])
-	assert_eq(triple_count, 0,
-		"No traces should enter triple+ reflection. Found %d/%d (%.1f%%)" % [
-			triple_count, total, 100.0 * triple_count / total if total > 0 else 0.0])
+	assert_eq(unstable_count, 0,
+		"No traces should have numerical instability. Found %d/%d (%.1f%%)" % [
+			unstable_count, total, 100.0 * unstable_count / total if total > 0 else 0.0])

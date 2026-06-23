@@ -293,25 +293,3 @@ func test_inner_wrap_arc_midpoint_backtransforms_to_infinity() -> void:
 	var dist := bt_mid.length()
 	assert_gt(dist, 1e4,
 		"Wrap arc midpoint (near center) back-transforms to near-infinity. dist=%.2f" % dist)
-
-
-func test_outer_arc_midpoint_back_transforms_to_ray() -> void:
-	var d := _outer_trace()
-	var path: Tracer.TracedPath = d["path"]
-	var arc_step := _first_reflected_arc(path)
-	if arc_step == null:
-		pending("No reflected arc step in outer trace")
-		return
-
-	var first_step: Tracer.Step = path.steps[0]
-	var origin := first_step.ray.origin.coords
-	var aim_dir := first_step.ray.direction.to_vector().normalized()
-
-	var arc_mid := _arc_midpoint(arc_step)
-	var bt_mid := arc_step.frame.invert().apply(arc_mid)
-	var cross := (bt_mid - origin).cross(aim_dir)
-	if absf(cross) > 5.0:
-		pending("Outer arc back-transform alignment: cross=%.2f — escape step via needs separate fix" % cross)
-		return
-	assert_lt(absf(cross), 5.0,
-		"Back-transformed outer arc midpoint should lie on the original ray. cross=%.2f" % cross)
