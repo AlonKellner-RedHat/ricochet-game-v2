@@ -26,6 +26,23 @@ func _make_passthrough(x: float) -> Surface:
 func _make_wall(x: float) -> Surface:
 	return RoomBuilder.create_block_surface(Vector2(x, 0), Vector2(x, 600), Vector2(x, 300))
 
+func _make_arc_mirror(center: Vector2, radius: float, start_angle: float, end_angle: float) -> Surface:
+	var s := center + Vector2(cos(start_angle), sin(start_angle)) * radius
+	var e := center + Vector2(cos(end_angle), sin(end_angle)) * radius
+	var mid_angle := (start_angle + end_angle) / 2.0
+	var v := center + Vector2(cos(mid_angle), sin(mid_angle)) * radius
+	var seg := Segment.from_coords(s, e, v)
+	var refl := ReflectionEffect.new(seg.get_carrier())
+	var config := SideConfig.new(refl, true)
+	return Surface.new(seg, config, config, false, false)
+
+func _make_full_circle_mirror(center: Vector2, radius: float) -> Surface:
+	var carrier := GeneralizedCircle.from_circle(center, radius)
+	var seg := Segment.full_from_carrier(carrier)
+	var refl := ReflectionEffect.new(carrier)
+	var config := SideConfig.new(refl, true)
+	return Surface.new(seg, config, config, false, false)
+
 func test_stage22_plan_add_entry() -> void:
 	var plan := PlanManager.new()
 	plan.add_entry(5, Side.Value.LEFT)
@@ -117,3 +134,50 @@ func test_stage22_plan_blocked_during_flight() -> void:
 	var plan_before: int = game_mgr.plan.entries.size()
 	game_mgr._handle_plan_click(false)
 	assert_eq(game_mgr.plan.entries.size(), plan_before, "Plan should not change during flight")
+
+# --- Arc click detection tests ---
+
+func test_stage22_arc_click_on_arc_accepted() -> void:
+	# Arc from angle 0→PI is the bottom semicircle (Y-down). Bottom = (300, 400).
+	var arc := _make_arc_mirror(Vector2(300, 300), 100.0, 0.0, PI)
+	var detector := ClickDetector.new()
+	var on_arc := Vector2(300, 400)
+	var result := detector.detect_click(on_arc, [arc])
+	assert_false(result.is_empty(), "Click on arc curve should be detected")
+
+func test_stage22_arc_click_near_arc_within_tolerance() -> void:
+	var arc := _make_arc_mirror(Vector2(300, 300), 100.0, 0.0, PI)
+	var detector := ClickDetector.new()
+	var near_arc := Vector2(300, 405)
+	var result := detector.detect_click(near_arc, [arc])
+	assert_false(result.is_empty(), "Click 5px from arc should be within tolerance")
+
+func test_stage22_arc_click_on_chord_far_from_arc_rejected() -> void:
+	var arc := _make_arc_mirror(Vector2(300, 300), 100.0, 0.0, PI)
+	var detector := ClickDetector.new()
+	var chord_mid := Vector2(300, 300)
+	var result := detector.detect_click(chord_mid, [arc])
+	assert_true(result.is_empty(), "Click at chord midpoint (100px from arc) should be rejected")
+
+func test_stage22_arc_click_outside_span_rejected() -> void:
+	# Top of circle (300, 200) is outside the bottom arc span.
+	var arc := _make_arc_mirror(Vector2(300, 300), 100.0, 0.0, PI)
+	var detector := ClickDetector.new()
+	var top := Vector2(300, 200)
+	var result := detector.detect_click(top, [arc])
+	assert_true(result.is_empty(), "Click at correct radius but outside arc span should be rejected")
+
+func test_stage22_arc_click_near_endpoint_accepted() -> void:
+	# End at (200, 300), cursor 5px away at (205, 300).
+	var arc := _make_arc_mirror(Vector2(300, 300), 100.0, 0.0, PI)
+	var detector := ClickDetector.new()
+	var near_end := Vector2(205, 300)
+	var result := detector.detect_click(near_end, [arc])
+	assert_false(result.is_empty(), "Click 5px from arc endpoint should be detected")
+
+func test_stage22_full_circle_click_accepted() -> void:
+	var circle := _make_full_circle_mirror(Vector2(300, 300), 100.0)
+	var detector := ClickDetector.new()
+	var on_circle := Vector2(300, 200)
+	var result := detector.detect_click(on_circle, [circle])
+	assert_false(result.is_empty(), "Click on full circle should be detected")
