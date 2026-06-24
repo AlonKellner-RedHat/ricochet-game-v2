@@ -1,5 +1,7 @@
 extends GutTest
 
+const SurfaceNodeScript = preload("res://scripts/game/surface_node.gd")
+
 func before_each() -> void:
 	Surface.reset_id_counter()
 
@@ -93,8 +95,8 @@ func test_stage22_interactive_accepted() -> void:
 func test_stage22_click_outside_tolerance() -> void:
 	var mirror := _make_double_mirror(400)
 	var detector := ClickDetector.new()
-	var result := detector.detect_click(Vector2(420, 300), [mirror])
-	assert_true(result.is_empty(), "Click 20px away should be outside tolerance")
+	var result := detector.detect_click(Vector2(430, 300), [mirror])
+	assert_true(result.is_empty(), "Click 30px away should be outside tolerance")
 
 func test_stage22_side_determination_by_cursor() -> void:
 	var mirror := _make_mirror(400)
@@ -181,3 +183,63 @@ func test_stage22_full_circle_click_accepted() -> void:
 	var on_circle := Vector2(300, 200)
 	var result := detector.detect_click(on_circle, [circle])
 	assert_false(result.is_empty(), "Click on full circle should be detected")
+
+# --- Hover geometry helper tests ---
+
+func test_stage22_chevron_vertices_count() -> void:
+	var verts := SurfaceNodeScript.chevron_vertices(Vector2(100, 100), Vector2(1, 0), 8.0)
+	assert_eq(verts.size(), 3, "Chevron should have 3 vertices")
+
+func test_stage22_chevron_vertices_tip_at_position() -> void:
+	var tip := Vector2(100, 200)
+	var verts := SurfaceNodeScript.chevron_vertices(tip, Vector2(0, -1), 8.0)
+	assert_almost_eq(verts[0], tip, Vector2(0.01, 0.01), "First vertex should be the tip")
+
+func test_stage22_chevron_vertices_points_in_direction() -> void:
+	var tip := Vector2(100, 100)
+	var dir := Vector2(1, 0)
+	var verts := SurfaceNodeScript.chevron_vertices(tip, dir, 10.0)
+	var base_center := (verts[1] + verts[2]) / 2.0
+	var tip_to_base := base_center - tip
+	assert_true(tip_to_base.dot(dir) < 0, "Base should be behind tip in the given direction")
+
+func test_stage22_line_sample_endpoints() -> void:
+	var s := Vector2(0, 0)
+	var e := Vector2(100, 0)
+	var r0 := SurfaceNodeScript.line_sample(s, e, 0.0)
+	var r1 := SurfaceNodeScript.line_sample(s, e, 1.0)
+	assert_almost_eq(r0.position, s, Vector2(0.01, 0.01), "t=0 should give start")
+	assert_almost_eq(r1.position, e, Vector2(0.01, 0.01), "t=1 should give end")
+
+func test_stage22_line_sample_midpoint() -> void:
+	var s := Vector2(0, 0)
+	var e := Vector2(200, 100)
+	var r := SurfaceNodeScript.line_sample(s, e, 0.5)
+	assert_almost_eq(r.position, Vector2(100, 50), Vector2(0.01, 0.01), "t=0.5 should give midpoint")
+
+func test_stage22_line_sample_normal_perpendicular() -> void:
+	var s := Vector2(0, 0)
+	var e := Vector2(100, 0)
+	var r := SurfaceNodeScript.line_sample(s, e, 0.5)
+	var normal: Vector2 = r.normal
+	var dot := normal.dot((e - s).normalized())
+	assert_almost_eq(dot, 0.0, 0.01, "Normal should be perpendicular to segment")
+
+func test_stage22_arc_sample_start() -> void:
+	var center := Vector2(300, 300)
+	var radius := 100.0
+	var sa := 0.0
+	var span := PI
+	var r := SurfaceNodeScript.arc_sample(center, radius, sa, span, false, 0.0)
+	var expected := center + Vector2(cos(sa), sin(sa)) * radius
+	assert_almost_eq(r.position, expected, Vector2(0.1, 0.1), "t=0 should give start of arc")
+
+func test_stage22_arc_sample_midpoint() -> void:
+	var center := Vector2(300, 300)
+	var radius := 100.0
+	var sa := 0.0
+	var span := PI
+	var r := SurfaceNodeScript.arc_sample(center, radius, sa, span, false, 0.5)
+	var mid_angle := sa + span * 0.5
+	var expected := center + Vector2(cos(mid_angle), sin(mid_angle)) * radius
+	assert_almost_eq(r.position, expected, Vector2(0.1, 0.1), "t=0.5 should give midpoint of arc")

@@ -1,3 +1,4 @@
+class_name SurfaceNode
 extends Node2D
 
 const LINE_WIDTH := 3.0
@@ -8,10 +9,14 @@ const INVERSION_COLOR := Color.PURPLE
 const PASSTHROUGH_COLOR := Color.GRAY
 
 const HOVER_COLOR := Color(1.0, 1.0, 1.0, 0.3)
-const HOVER_WIDTH := 8.0
+const HOVER_WIDTH := ClickDetector.CLICK_TOLERANCE
+const PLAN_VALID_COLOR := Color(1.0, 1.0, 1.0, 0.15)
+const PLAN_INVALID_COLOR := Color(1.0, 0.0, 0.0, 0.15)
 
 var surface: Surface
 var _plan_indices: Array[int] = []
+var _plan_sides: Array[int] = []
+var _plan_valid: Array[bool] = []
 var _hover_side: int = -1
 var _cached_left_outer: bool = true
 
@@ -33,12 +38,22 @@ func set_hover_side(side: int) -> void:
 func clear_hover() -> void:
 	set_hover_side(-1)
 
-func update_plan_overlay(plan: PlanManager) -> void:
+func update_plan_overlay(plan: PlanManager, physical_hits: Dictionary = {}) -> void:
 	_plan_indices.clear()
+	_plan_sides.clear()
+	_plan_valid.clear()
 	for i in plan.entries.size():
 		var entry: PlanManager.PlanEntry = plan.entries[i]
 		if entry.surface_id == surface.id:
 			_plan_indices.append(i + 1)
+			_plan_sides.append(entry.side)
+			var valid := false
+			var hits: Array = physical_hits.get(surface.id, [])
+			for h in hits:
+				if h.side == entry.side and h.on_segment:
+					valid = true
+					break
+			_plan_valid.append(valid)
 	queue_redraw()
 
 func _draw() -> void:
@@ -89,33 +104,16 @@ func _draw() -> void:
 			draw_line(surface.segment.start.coords + left_offset, surface.segment.end.coords + left_offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
 			draw_line(surface.segment.start.coords + right_offset, surface.segment.end.coords + right_offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
 
+	for i in _plan_sides.size():
+		if _plan_sides[i] == _hover_side:
+			continue
+		var plan_color := PLAN_VALID_COLOR if _plan_valid[i] else PLAN_INVALID_COLOR
+		_draw_gradient_for_side(_plan_sides[i], is_arc, plan_color)
+		_draw_chevrons_for_side(_plan_sides[i], is_arc, plan_color)
+
 	if _hover_side >= 0:
-		if is_arc:
-			var h_ctr: Vector2
-			var h_r: float
-			var h_sa: float
-			var h_ea: float
-			var h_pc: int
-			if surface.segment.full:
-				var carrier := surface.segment.get_carrier()
-				h_ctr = carrier.center()
-				h_r = carrier.radius()
-				h_sa = 0.0
-				h_ea = TAU
-				h_pc = VisualConverter.POINTS_PER_FULL_CIRCLE
-			else:
-				var p := _arc_params()
-				h_ctr = p["center"]
-				h_r = p["radius"]
-				h_sa = p["start_angle"]
-				h_ea = p["end_angle"]
-				h_pc = p["point_count"]
-			var is_outer := (_hover_side == Side.Value.LEFT) == _cached_left_outer
-			var hover_r: float = h_r + (SIDE_OFFSET + 2.0) * (1.0 if is_outer else -1.0)
-			draw_arc(h_ctr, hover_r, h_sa, h_ea, h_pc, HOVER_COLOR, HOVER_WIDTH)
-		else:
-			var hover_offset := _line_side_offset(_hover_side, SIDE_OFFSET + 2.0)
-			draw_line(surface.segment.start.coords + hover_offset, surface.segment.end.coords + hover_offset, HOVER_COLOR, HOVER_WIDTH)
+		_draw_gradient_for_side(_hover_side, is_arc, HOVER_COLOR)
+		_draw_chevrons_for_side(_hover_side, is_arc, HOVER_COLOR)
 
 	if _plan_indices.size() > 0:
 		var mid := surface.segment.via.coords
@@ -133,6 +131,99 @@ func _draw_surface_arc(color: Color, width: float) -> void:
 		return
 	var p := _arc_params()
 	draw_arc(p["center"], p["radius"], p["start_angle"], p["end_angle"], p["point_count"], color, width)
+
+const GRADIENT_STRIPS := 6
+const CHEVRON_SIZE := 8.0
+const CHEVRON_T_VALUES: Array[float] = [1.0 / 6.0, 0.5, 5.0 / 6.0]
+
+func _draw_gradient_for_side(side: int, is_arc: bool, base_color: Color) -> void:
+	var strip_width := HOVER_WIDTH / GRADIENT_STRIPS
+	var is_outer := (side == Side.Value.LEFT) == _cached_left_outer
+	var sign_val := 1.0 if is_outer else -1.0
+
+	if is_arc:
+		var h_ctr: Vector2
+		var h_r: float
+		var h_sa: float
+		var h_ea: float
+		var h_pc: int
+		if surface.segment.full:
+			var carrier := surface.segment.get_carrier()
+			h_ctr = carrier.center()
+			h_r = carrier.radius()
+			h_sa = 0.0
+			h_ea = TAU
+			h_pc = VisualConverter.POINTS_PER_FULL_CIRCLE
+		else:
+			var p := _arc_params()
+			h_ctr = p["center"]
+			h_r = p["radius"]
+			h_sa = p["start_angle"]
+			h_ea = p["end_angle"]
+			h_pc = p["point_count"]
+		for i in GRADIENT_STRIPS:
+			var frac := (float(i) + 0.5) / GRADIENT_STRIPS
+			var alpha := base_color.a * (1.0 - frac)
+			var offset := frac * HOVER_WIDTH * sign_val
+			draw_arc(h_ctr, h_r + offset, h_sa, h_ea, h_pc, Color(base_color, alpha), strip_width)
+	else:
+		var s := surface.segment.start.coords
+		var e := surface.segment.end.coords
+		for i in GRADIENT_STRIPS:
+			var frac := (float(i) + 0.5) / GRADIENT_STRIPS
+			var alpha := base_color.a * (1.0 - frac)
+			var offset := _line_side_offset(side, frac * HOVER_WIDTH)
+			draw_line(s + offset, e + offset, Color(base_color, alpha), strip_width)
+
+func _draw_chevrons_for_side(side: int, is_arc: bool, base_color: Color) -> void:
+	var is_outer := (side == Side.Value.LEFT) == _cached_left_outer
+	var chevron_color := Color(base_color, base_color.a)
+	var colors := PackedColorArray([chevron_color, chevron_color, chevron_color])
+
+	if is_arc:
+		var h_ctr: Vector2
+		var h_r: float
+		var h_sa: float
+		var h_span: float
+		var h_cw: bool
+		if surface.segment.full:
+			var carrier := surface.segment.get_carrier()
+			h_ctr = carrier.center()
+			h_r = carrier.radius()
+			h_sa = 0.0
+			h_span = TAU
+			h_cw = false
+		else:
+			var p := _arc_params()
+			h_ctr = p["center"]
+			h_r = p["radius"]
+			h_sa = p["start_angle"]
+			h_span = p["span"]
+			h_cw = p["clockwise"]
+		for t in CHEVRON_T_VALUES:
+			var sample := arc_sample(h_ctr, h_r, h_sa, h_span, h_cw, t)
+			var pos: Vector2 = sample.position
+			var outward: Vector2 = sample.outward
+			var dir := outward if is_outer else -outward
+			var tip := pos + dir * HOVER_WIDTH * 0.5
+			draw_polygon(chevron_vertices(tip, dir, CHEVRON_SIZE), colors)
+	else:
+		var s := surface.segment.start.coords
+		var e := surface.segment.end.coords
+		for t in CHEVRON_T_VALUES:
+			var sample := line_sample(s, e, t)
+			var pos: Vector2 = sample.position
+			var normal: Vector2 = sample.normal
+			var side_at_normal: Side.Value = surface.segment.determine_side(pos + normal * SIDE_OFFSET)
+			var dir := normal if side_at_normal == side else -normal
+			var tip := pos + dir * HOVER_WIDTH * 0.5
+			draw_polygon(chevron_vertices(tip, dir, CHEVRON_SIZE), colors)
+
+func _should_draw_plan_highlight(index: int) -> bool:
+	return index < _plan_sides.size() and _plan_sides[index] != _hover_side
+
+func _plan_highlight_color(index: int) -> Color:
+	return PLAN_VALID_COLOR if _plan_valid[index] else PLAN_INVALID_COLOR
 
 func _arc_params() -> Dictionary:
 	return VisualConverter.arc_params(surface.segment.start.coords, surface.segment.via.coords, surface.segment.end.coords)
@@ -152,6 +243,24 @@ func _line_side_offset(side: Side.Value, dist: float) -> Vector2:
 	var side_at_normal: Side.Value = surface.segment.determine_side(mid + normal * SIDE_OFFSET)
 	var sign_val := 1.0 if side_at_normal == side else -1.0
 	return normal * dist * sign_val
+
+static func chevron_vertices(tip: Vector2, direction: Vector2, size: float) -> PackedVector2Array:
+	var dir := direction.normalized()
+	var base_left := tip - dir.rotated(0.5) * size
+	var base_right := tip - dir.rotated(-0.5) * size
+	return PackedVector2Array([tip, base_left, base_right])
+
+static func line_sample(start: Vector2, end: Vector2, t: float) -> Dictionary:
+	var pos := start.lerp(end, t)
+	var seg_dir := (end - start).normalized()
+	var normal := Vector2(-seg_dir.y, seg_dir.x)
+	return {"position": pos, "normal": normal}
+
+static func arc_sample(center: Vector2, radius: float, start_angle: float, span: float, clockwise: bool, t: float) -> Dictionary:
+	var angle := start_angle + t * span * (-1.0 if clockwise else 1.0)
+	var pos := center + Vector2(cos(angle), sin(angle)) * radius
+	var outward := (pos - center).normalized()
+	return {"position": pos, "outward": outward}
 
 func _effect_color(config: SideConfig) -> Color:
 	if config == null or config.effect == null:

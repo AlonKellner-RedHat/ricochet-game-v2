@@ -1,3 +1,4 @@
+class_name PathRenderer
 extends Node2D
 
 const LINE_WIDTH := 2.0
@@ -15,6 +16,7 @@ var _cursor: Node2D
 var _traced_path: Tracer.TracedPath = null
 var _planned_path: Tracer.TracedPath = null
 var _merged_steps: Array = []
+var _physical_hits: Dictionary = {}
 
 func _ready() -> void:
 	_player = get_node_or_null("../Player")
@@ -66,6 +68,21 @@ func _compute_trace() -> void:
 	if ci < 0:
 		ci = _planned_path.steps.size()
 	_merged_steps = StepTreeMerge.merge(_planned_path.steps, _traced_path.steps, ci)
+	_physical_hits = build_physical_hits(_traced_path)
+
+func get_physical_hits() -> Dictionary:
+	return _physical_hits
+
+static func build_physical_hits(path: Tracer.TracedPath) -> Dictionary:
+	var result := {}
+	for step in path.steps:
+		var s: Tracer.Step = step
+		if s.surface_id < 0:
+			continue
+		if not result.has(s.surface_id):
+			result[s.surface_id] = []
+		result[s.surface_id].append({"side": s.hit_side, "on_segment": s.hit_on_segment})
+	return result
 
 func _get_plan() -> PlanManager:
 	var game_mgr := get_node_or_null("../GameManager")

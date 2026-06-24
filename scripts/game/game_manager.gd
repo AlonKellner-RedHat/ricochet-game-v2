@@ -41,6 +41,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_update_camera()
 	_update_hover()
+	if not plan.is_empty():
+		_update_surface_overlays()
 
 func _update_camera() -> void:
 	if not _camera:
@@ -231,9 +233,12 @@ func _update_hud() -> void:
 func _update_surface_overlays() -> void:
 	if not _level_settings:
 		return
+	var physical_hits := {}
+	if _path_renderer and _path_renderer.has_method("get_physical_hits"):
+		physical_hits = _path_renderer.get_physical_hits()
 	for child in _level_settings.get_children():
 		if child.has_method("update_plan_overlay"):
-			child.update_plan_overlay(plan)
+			child.update_plan_overlay(plan, physical_hits)
 
 func _dump_debug_state() -> void:
 	_DebugDumper.dump(self)

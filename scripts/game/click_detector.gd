@@ -1,7 +1,7 @@
 class_name ClickDetector
 extends RefCounted
 
-const CLICK_TOLERANCE := 8.0
+const CLICK_TOLERANCE := 24.0
 
 var _last_cycle_position := Vector2.ZERO
 var _last_cycle_index := -1

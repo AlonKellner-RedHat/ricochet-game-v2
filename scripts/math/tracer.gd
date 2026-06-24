@@ -11,6 +11,9 @@ class Step extends RefCounted:
 	var frame: MobiusTransform
 	var is_arc_step: bool
 	var type: int = StepTypes.Type.ALIGNED
+	var surface_id: int = -1
+	var hit_side: int = -1
+	var hit_on_segment: bool = false
 
 	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: Intersection.HitRecord = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 		start = p_start
@@ -25,6 +28,9 @@ class Step extends RefCounted:
 	func with_type(new_type: int) -> Step:
 		var copy := Step.new(start, end, frame_id, hit, ray, frame, via, is_arc_step)
 		copy.type = new_type
+		copy.surface_id = surface_id
+		copy.hit_side = hit_side
+		copy.hit_on_segment = hit_on_segment
 		return copy
 
 class TracedPath extends RefCounted:
@@ -185,8 +191,16 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 			# --- Target tracking ---
 			var orig_surf: Surface = s.norm_to_surface.get(hp.segment)
-			if orig_surf and orig_surf.is_target and hp.on_segment:
-				s.path.targets_hit[orig_surf.id] = true
+			if orig_surf:
+				var last_step: Step = s.path.steps.back()
+				last_step.surface_id = orig_surf.id
+				last_step.hit_on_segment = hp.on_segment
+				var ls: Side.Value = hp.side
+				if s.frame.conjugating:
+					ls = Side.Value.RIGHT if hp.side == Side.Value.LEFT else Side.Value.LEFT
+				last_step.hit_side = ls
+				if orig_surf.is_target and hp.on_segment:
+					s.path.targets_hit[orig_surf.id] = true
 
 			# --- Blockage ---
 			_accumulate_blockage(s, hp)
