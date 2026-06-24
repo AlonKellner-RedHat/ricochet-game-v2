@@ -59,6 +59,7 @@ class TraceState:
 	var step_right_blocked: bool = false
 	var hit_count: int = 0
 	var cursor_hp: Intersection.HitRecord
+	var origin_hp: Intersection.HitRecord
 	var origin_on_surface: Surface = null
 	var transform_sources: Array = []
 	var cursor_injected_at_zero_length: bool = false
@@ -119,7 +120,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			var is_wrap := hp.t < walk_t
 			var is_null_seg := hp.segment == null
 			var is_cursor := hp == s.cursor_hp
-			var is_origin := is_null_seg and not is_cursor
+			var is_origin := hp == s.origin_hp
 			var step_hit: Intersection.HitRecord = null if is_null_seg else hp
 
 			var _start_inf := is_inf(vis_start.x) or is_inf(vis_start.y)
@@ -170,10 +171,29 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if is_wrap and not is_null_seg:
 				has_wrapped = true
 
-			# --- Origin: escape to bounds or block ---
+			# --- Origin: apply effect if wrapped, otherwise escape ---
 			if is_origin:
 				if has_wrapped:
-					s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, null, s.shared_ray, s.frame, vis_via, step_is_arc))
+					s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, step_hit, s.shared_ray, s.frame, vis_via, step_is_arc))
+					if hp.segment != null:
+						var origin_surf: Surface = s.norm_to_surface.get(hp.segment)
+						if origin_surf:
+							var last_step: Step = s.path.steps.back()
+							last_step.surface_id = origin_surf.id
+							last_step.hit_on_segment = hp.on_segment
+							var ls: Side.Value = hp.side
+							if s.frame.conjugating:
+								ls = Side.Value.RIGHT if hp.side == Side.Value.LEFT else Side.Value.LEFT
+							last_step.hit_side = ls
+						var origin_result = _apply_effect(s, hp, true, origin_surf, plan_entries)
+						if origin_result == 1:
+							stage_ended = true
+							break
+						elif origin_result == 2:
+							trace_done = true
+							break
+					trace_done = true
+					break
 				elif not _start_inf:
 					_try_escape(s, vis_start, step_origin_pos)
 				trace_done = true
@@ -288,7 +308,7 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 	elif s.current_mode == TraceMode.PLANNED:
 		if orig_surf and s.plan_index < plan_entries.size():
 			var entry: PlanManager.PlanEntry = plan_entries[s.plan_index]
-			if orig_surf.id == entry.surface_id:
+			if orig_surf.id == entry.surface_id and lookup_side == entry.side:
 				effect_config = norm_surf.active_side_config(entry.side, s.state_copy) if norm_surf else null
 				if effect_config != null and effect_config.effect != null and effect_config.effect.kind() == Effect.Kind.TRANSFORMATIVE:
 					do_apply = true
@@ -336,10 +356,19 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 		s.origin_on_surface = null
 
 	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, origin_on_seg, origin_carrier)
+	var origin_hit_seg: Segment = null
+	var origin_hit_side: Side.Value = Side.Value.LEFT
+	var origin_hit_on_seg: bool = false
 	if origin_on_seg != null:
+		for h in carrier_hits:
+			if h.segment == origin_on_seg and h.t == 0.0:
+				origin_hit_seg = h.segment
+				origin_hit_side = h.side
+				origin_hit_on_seg = h.on_segment
+				break
 		carrier_hits = carrier_hits.filter(func(h: Intersection.HitRecord) -> bool:
 			return h.segment != origin_on_seg or h.t != 0.0)
-	var origin_hp := Intersection.HitRecord.new(0.0, s.ray.origin.coords, null, Side.Value.LEFT, false)
+	s.origin_hp = Intersection.HitRecord.new(0.0, s.ray.origin.coords, origin_hit_seg, origin_hit_side, origin_hit_on_seg)
 
 	var cursor_reachable := not s.cursor_injected and s.plan_index >= plan_entries.size() and s.plan_matched
 	if carrier_hits.size() == 0 and not cursor_reachable:
@@ -350,7 +379,7 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 		return []
 
 	var hitpoints: Array = carrier_hits.duplicate()
-	hitpoints.append(origin_hp)
+	hitpoints.append(s.origin_hp)
 	s.cursor_hp = null
 	if cursor_reachable:
 		var cursor_t := Intersection.project_point_on_ray(s.ray, s.aim_in_frame)

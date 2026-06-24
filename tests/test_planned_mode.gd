@@ -104,8 +104,8 @@ func test_plan_entries_order() -> void:
 	var m1 := H.mirror(300)
 	var m2 := H.mirror(600)
 	var plan: Array = [
-		PlanManager.PlanEntry.new(m1.id, Side.Value.RIGHT),
-		PlanManager.PlanEntry.new(m2.id, Side.Value.LEFT),
+		PlanManager.PlanEntry.new(m1.id, Side.Value.LEFT),
+		PlanManager.PlanEntry.new(m2.id, Side.Value.RIGHT),
 	]
 	var player := Vector2(450, 300)
 	var cursor := Vector2(200, 300)

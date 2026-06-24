@@ -28,7 +28,7 @@ func test_stage31_aligned_plan_matches_physical() -> void:
 	var player := Vector2(200, 300)
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
-	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
+	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.RIGHT)]
 	var cache := TransformCache.new()
 	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
