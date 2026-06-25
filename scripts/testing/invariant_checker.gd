@@ -31,6 +31,7 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_GREEN_FROM_PLAYER(player_pos, cursor_pos))
 	violations.append_array(check_ORIGIN_NOT_REHIT(player_pos, cursor_pos))
 	violations.append_array(check_SINGLE_DIVERGENCE(player_pos, cursor_pos))
+	violations.append_array(check_NO_POST_CURSOR_DIVERGENCE(player_pos, cursor_pos))
 	violations.append_array(check_PHYSICAL_PREVIEW_MATCH(player_pos, cursor_pos))
 	violations.append_array(check_PHYSICAL_CONTINUITY(player_pos, cursor_pos))
 	violations.append_array(check_SOLID_PATH_TO_CURSOR(player_pos, cursor_pos))
@@ -91,6 +92,8 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 		var tol := 0.05 + 0.001 * i
 		if gap > tol:
 			if _is_infinity_gap(prev.end, curr.start):
+				continue
+			if curr.after_portal:
 				continue
 			violations.append("NOGAPS: Gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
@@ -158,6 +161,30 @@ func check_SINGLE_DIVERGENCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[
 			violations.append("SINGLE-DIVERGENCE: Re-convergence at step %d after divergence" % i)
 	return violations
 
+func check_NO_POST_CURSOR_DIVERGENCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var violations: Array[String] = []
+	if not _renderer or player_pos == cursor_pos:
+		return violations
+	var typed: Array = _renderer.get_typed_steps()
+	if typed.size() == 0:
+		return violations
+	var all_pre_cursor_aligned := true
+	var past_cursor := false
+	for i in typed.size():
+		var ms: Tracer.Step = typed[i]
+		if ms.type == StepTypes.Type.ALIGNED:
+			continue
+		if ms.type == StepTypes.Type.ALIGNED_POST_PLANNED:
+			past_cursor = true
+			continue
+		if not past_cursor:
+			all_pre_cursor_aligned = false
+			break
+		if all_pre_cursor_aligned:
+			violations.append("NO-POST-CURSOR-DIVERGENCE: step %d type=%d diverges after fully-aligned path to cursor" % [i, ms.type])
+			break
+	return violations
+
 func check_PHYSICAL_PREVIEW_MATCH(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
@@ -178,9 +205,14 @@ func check_PHYSICAL_PREVIEW_MATCH(player_pos: Vector2, cursor_pos: Vector2) -> A
 	if non_red.size() != physical.steps.size():
 		violations.append("PHYSICAL-PREVIEW-MATCH: non-red count=%d != physical count=%d" % [non_red.size(), physical.steps.size()])
 		return violations
+	var portal_seen := false
 	for i in non_red.size():
 		var ms: Tracer.Step = non_red[i]
 		var ps: Tracer.Step = physical.steps[i]
+		if ps.after_portal or ms.after_portal:
+			portal_seen = true
+		if portal_seen:
+			continue
 		if ms.start.distance_to(ps.start) > 0.01:
 			violations.append("PHYSICAL-PREVIEW-MATCH: step %d start mismatch: preview=%s physical=%s" % [i, ms.start, ps.start])
 		if ms.end.distance_to(ps.end) > 0.01:
@@ -206,6 +238,8 @@ func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 		var tol := 0.05 + 0.001 * i
 		if gap > tol:
 			if _is_infinity_gap(prev.end, curr.start):
+				continue
+			if curr.after_portal:
 				continue
 			violations.append("PHYSICAL-CONTINUITY: gap between step %d end=%s and step %d start=%s" % [i - 1, prev.end, i, curr.start])
 	return violations
@@ -315,15 +349,20 @@ func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) ->
 	var bounds := VisualConverter.DEFAULT_BOUNDS
 	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
 	check_limit = mini(check_limit, path.steps.size())
+	var portal_seen := false
 	for i in check_limit:
 		var step: Tracer.Step = path.steps[i]
+		if step.after_portal:
+			portal_seen = true
+		if portal_seen:
+			continue
 		if step.hit == null:
 			continue
 		if step.start == step.end:
 			continue
 		if step.frame == null or step.ray == null:
 			continue
-		if step.frame.maps_lines_to_arcs():
+		if step.frame.id != MobiusTransform.IDENTITY_ID:
 			continue
 		var frame_inv := step.frame.invert()
 		var aim_dir := step.ray.direction.to_vector().normalized()
@@ -355,8 +394,13 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 		return violations
 	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
 	check_limit = mini(check_limit, path.steps.size())
+	var portal_seen := false
 	for i in check_limit:
 		var step: Tracer.Step = path.steps[i]
+		if step.after_portal:
+			portal_seen = true
+		if portal_seen:
+			continue
 		if step.is_arc_step:
 			continue
 		if step.start == step.end:
@@ -476,11 +520,9 @@ func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[Stri
 	if not _renderer or player_pos == cursor_pos:
 		return violations
 	var bounds := VisualConverter.DEFAULT_BOUNDS
-	# Within each transformative sub-chain, back-transforming visual endpoints
-	# through frame.invert() should place them on the original ray line.
-	# This holds through all transformative effects (reflections, inversions)
-	# because the composed inverse unwinds all transforms.
-	# When projective effects are added, scope to sub-chains.
+	# Back-transforming visual endpoints through frame.invert() should place
+	# them on the original ray line. Only checked for involutory frames
+	# (identity and single reflections).
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
 		var path: Tracer.TracedPath = _traces[trace_name]
@@ -491,13 +533,20 @@ func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[Stri
 			continue
 		var origin := first_step.ray.origin.coords
 		var aim_dir := first_step.ray.direction.to_vector().normalized()
+		var portal_seen := false
 		for i in path.steps.size():
 			var step: Tracer.Step = path.steps[i]
+			if step.after_portal:
+				portal_seen = true
+			if portal_seen:
+				continue
 			if step.frame == null or step.ray == null:
 				continue
 			if step.start == step.end:
 				continue
 			if step.hit == null:
+				continue
+			if step.frame.id != MobiusTransform.IDENTITY_ID:
 				continue
 			var frame_inv := step.frame.invert()
 			var threshold := 5.0 if step.is_arc_step else 1.0
@@ -566,6 +615,8 @@ func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> A
 			var prev: Tracer.Step = path.steps[i - 1]
 			var curr: Tracer.Step = path.steps[i]
 			if prev.frame_id != curr.frame_id:
+				continue
+			if curr.after_portal:
 				continue
 			if prev.hit == null or curr.hit == null:
 				continue

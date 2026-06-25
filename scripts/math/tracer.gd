@@ -14,6 +14,7 @@ class Step extends RefCounted:
 	var surface_id: int = -1
 	var hit_side: int = -1
 	var hit_on_segment: bool = false
+	var after_portal: bool = false
 
 	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: Intersection.HitRecord = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 		start = p_start
@@ -31,6 +32,7 @@ class Step extends RefCounted:
 		copy.surface_id = surface_id
 		copy.hit_side = hit_side
 		copy.hit_on_segment = hit_on_segment
+		copy.after_portal = after_portal
 		return copy
 
 class TracedPath extends RefCounted:
@@ -63,6 +65,7 @@ class TraceState:
 	var origin_on_surface: Surface = null
 	var transform_sources: Array = []
 	var cursor_injected_at_zero_length: bool = false
+	var portal_gap_pending: bool = false
 
 enum TraceMode { PHYSICAL = 0, PLANNED = 1 }
 
@@ -100,7 +103,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 		if hitpoints.is_empty():
 			break
 
-		# --- Walk stage hitpoints ---
+
+# --- Walk stage hitpoints ---
 		var _arc: bool = s.frame.maps_lines_to_arcs()
 		var step_origin_pos := s.ray.origin.coords
 		var walk_t := 0.0
@@ -175,6 +179,9 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if is_origin:
 				if has_wrapped:
 					s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, step_hit, s.shared_ray, s.frame, vis_via, step_is_arc))
+					if s.portal_gap_pending:
+						s.path.steps.back().after_portal = true
+						s.portal_gap_pending = false
 					if hp.segment != null:
 						var origin_surf: Surface = s.norm_to_surface.get(hp.segment)
 						if origin_surf:
@@ -201,6 +208,9 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 
 			# --- Generate visual step ---
 			s.path.steps.append(Step.new(vis_start, vis_end, s.frame.id, step_hit, s.shared_ray, s.frame, vis_via, step_is_arc))
+			if s.portal_gap_pending:
+				s.path.steps.back().after_portal = true
+				s.portal_gap_pending = false
 
 			# --- Cursor check ---
 			if is_cursor:
@@ -332,9 +342,32 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 		else:
 			s.transform_stack.append(tracked)
 			s.transform_sources.append(orig_surf)
-		var new_origin := tracked.inverse.mobius.apply(hp.point.coords)
+		var new_origin: Vector2
+		if should_pop or tracked.inverse == tracked:
+			new_origin = tracked.inverse.mobius.apply(hp.point.coords)
+		else:
+			new_origin = hp.point.coords
+		if tracked.inverse != tracked:
+			s.portal_gap_pending = true
 		s.ray = Ray.from_coords(new_origin, s.ray.direction)
-		s.origin_on_surface = orig_surf
+		if not should_pop and tracked.inverse != tracked:
+			var found_target := false
+			for ns in s.norm_surfaces:
+				var ns_orig: Surface = s.norm_to_surface.get(ns.segment)
+				if ns_orig != null and ns_orig != orig_surf:
+					for side_val in [Side.Value.LEFT, Side.Value.RIGHT]:
+						var cfg := ns_orig.active_side_config(side_val, s.state_copy)
+						if cfg != null and cfg.effect != null and cfg.effect.kind() == Effect.Kind.TRANSFORMATIVE:
+							if cfg.effect.get_tracked_transform() == tracked.inverse:
+								s.origin_on_surface = ns_orig
+								found_target = true
+								break
+					if found_target:
+						break
+			if not found_target:
+				s.origin_on_surface = orig_surf
+		else:
+			s.origin_on_surface = orig_surf
 		s.frame_dirty = true
 		return 1
 

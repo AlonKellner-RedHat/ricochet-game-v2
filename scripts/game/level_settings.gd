@@ -13,6 +13,8 @@ extends Node2D
 @export var inversion_left_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var full_reflective_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var portal_lines: PackedFloat64Array = PackedFloat64Array()
+@export var portal_arcs: PackedFloat64Array = PackedFloat64Array()
 
 var surfaces: Array[Surface] = []
 
@@ -64,6 +66,23 @@ func _ready() -> void:
 		var reflection := ReflectionEffect.new(carrier)
 		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
 		_add_surface(surf, "FullReflArc")
+	for i in range(0, portal_lines.size(), 7):
+		var seg := Segment.from_coords(
+			Vector2(portal_lines[i], portal_lines[i + 1]),
+			Vector2(portal_lines[i + 2], portal_lines[i + 3]),
+			Vector2((portal_lines[i] + portal_lines[i + 2]) / 2.0,
+				(portal_lines[i + 1] + portal_lines[i + 3]) / 2.0))
+		var result := RigidMotionEffect.create_portal_pair(seg, portal_lines[i + 4],
+			Vector2(portal_lines[i + 5], portal_lines[i + 6]))
+		_add_portal_pair(seg, result)
+	for i in range(0, portal_arcs.size(), 9):
+		var seg := Segment.from_coords(
+			Vector2(portal_arcs[i], portal_arcs[i + 1]),
+			Vector2(portal_arcs[i + 2], portal_arcs[i + 3]),
+			Vector2(portal_arcs[i + 4], portal_arcs[i + 5]))
+		var result := RigidMotionEffect.create_portal_pair(seg, portal_arcs[i + 6],
+			Vector2(portal_arcs[i + 7], portal_arcs[i + 8]))
+		_add_portal_pair(seg, result)
 	var screen_bounds: Array[Vector4] = [
 		Vector4(0, 0, 1920, 0),
 		Vector4(1920, 0, 1920, 1080),
@@ -86,6 +105,14 @@ func _add_surface(surf: Surface, prefix: String) -> void:
 	node.name = "%s_%d" % [prefix, surf.id]
 	add_child(node)
 	node.setup(surf)
+
+func _add_portal_pair(source_seg: Segment, result: Dictionary) -> void:
+	var src_cfg := SideConfig.new(result.source_effect, true)
+	var src_surf := Surface.new(source_seg, src_cfg, src_cfg, false, false)
+	_add_surface(src_surf, "PortalSrc")
+	var tgt_cfg := SideConfig.new(result.target_effect, true)
+	var tgt_surf := Surface.new(result.target_segment, tgt_cfg, tgt_cfg, false, false)
+	_add_surface(tgt_surf, "PortalTgt")
 
 static func _seg_from_v4(v: Vector4) -> Segment:
 	return Segment.from_coords(

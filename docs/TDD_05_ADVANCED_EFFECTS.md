@@ -20,7 +20,7 @@
 | 50 | Spurious reflection fix | Done |
 | 51 | Conjugation side fix | Done |
 | 70 | Visibility with Circles | Planned |
-| 71 | Rigid Motion Effect (Portals) | Planned |
+| 71 | Rigid Motion Effect (Portals) | Done |
 | 72 | Rigid Motion in Trace/Planner/Visibility | Planned |
 | 73 | Line Normal Projection Effect | Planned |
 | 74 | Circle Normal Projection Effect | Planned |
@@ -28,6 +28,8 @@
 | 76 | Parallel-Source Visibility Mode | Planned |
 | 77 | Mixed Planning Chain | Planned |
 | 78 | Compound Transformative Effect | Planned |
+
+**Visibility deferral:** Stages 70 (Visibility with Circles) and 76 (Parallel-Source Visibility) are deferred until after all effect stages (71–78) are complete, because the visibility system does not exist yet. Visibility-related tests within stages 72–78 are also deferred accordingly.
 
 **Effect hierarchy note:** The effect hierarchy uses an `Effect` base class with an `Effect.Kind` enum (`TERMINAL`, `TRANSFORMATIVE`) for dispatch. `TransformativeEffect` is a base class providing `get_mobius()`, `get_inverse_mobius()`, and `normalized()` methods. All effects extend `Effect`. Dispatch uses `kind` enum comparison, not type checks.
 
@@ -780,13 +782,15 @@ Reference standard protocol (top of document).
 
 ---
 
-## Stage 72: Rigid Motion in Trace/Planner/Visibility
+## Stage 72: Rigid Motion in Trace/Planner
 
 ### Overview
-Wire RigidMotionEffect to surfaces and integrate it into the physical trace, planner, and visibility systems. Rigid motion acts as a portal: the arrow enters one surface and exits at a rotated and translated position. Unlike reflection and inversion (anti-conformal), rigid motion is conformal, so the Mobius composition follows the conformal-conformal case. Surfaces render in cyan.
+Verify that RigidMotionEffect integrates end-to-end with the tracer and planner via the generic TransformativeEffect handling. Rigid motion acts as a portal: the arrow enters one surface and exits at a rotated and translated position. Unlike reflection and inversion (anti-conformal), rigid motion is conformal, so the Mobius composition follows the conformal-conformal case. Surfaces render in cyan.
+
+**Note:** No source file modifications are needed — the tracer and planner already handle `TransformativeEffect` generically. This stage is pure integration testing. Visibility tests (tests 6, 10, 11, 13 in the original spec) are deferred until Stage 70 (Visibility with Circles) is implemented.
 
 ### Prerequisites
-Stage 45 (RigidMotionEffect class).
+Stage 71 (RigidMotionEffect class).
 
 ### What Is Introduced
 
@@ -874,7 +878,7 @@ Reference standard protocol (top of document).
 | `scripts/math/planner.gd` | Modify | Handle rigid motion in image chain (already handles TransformativeEffect generically) |
 | `scripts/math/visibility.gd` | Modify | Handle rigid motion propagation (already handles TransformativeEffect generically) |
 | `scripts/visual/path_renderer.gd` | Modify | Add cyan rendering for rigid motion surfaces |
-| `tests/test_stage46_rigid_motion_integration.gd` | Create | Rigid motion trace/planner/visibility integration tests |
+| `tests/test_stage72_rigid_motion_integration.gd` | Create | Rigid motion trace/planner integration tests (12 tests) |
 
 ---
 
