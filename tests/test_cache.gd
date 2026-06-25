@@ -112,3 +112,32 @@ func test_shared_cache_same_frame_ids() -> void:
 	assert_ne(phys_step1.frame_id, 0, "Physical trace should have non-identity frame after reflection")
 	assert_eq(phys_step1.frame_id, plan_step1.frame_id,
 		"Shared cache: same composition = same frame ID")
+
+# --- Stage 72: apply_point bidirectional caching fix ---
+
+func test_apply_point_non_self_inverse_corruption() -> void:
+	var seg := Segment.from_coords(Vector2(200, 100), Vector2(200, 500), Vector2(200, 300))
+	var result := RigidMotionEffect.create_portal_pair(seg, 0.0, Vector2(300, 0))
+	var fwd: MobiusTransform = result.source_effect.get_mobius()
+	var p := Vector2(100, 300)
+	var expected_q := fwd.apply(p)
+	var expected_qq := fwd.apply(expected_q)
+	var cache := TransformCache.new()
+	var q := cache.apply_point(fwd, p)
+	assert_almost_eq(q, expected_q, Vector2(0.01, 0.01),
+		"First apply_point must match direct fwd.apply")
+	var qq := cache.apply_point(fwd, q)
+	assert_almost_eq(qq, expected_qq, Vector2(0.01, 0.01),
+		"Second apply_point(fwd, fwd(p)) must return fwd(fwd(p)), not p")
+
+func test_apply_point_cross_direction_caching() -> void:
+	var seg := Segment.from_coords(Vector2(200, 100), Vector2(200, 500), Vector2(200, 300))
+	var pair := RigidMotionEffect.create_portal_pair(seg, 0.0, Vector2(300, 0))
+	var fwd: MobiusTransform = pair.source_effect.get_mobius()
+	var inv: MobiusTransform = pair.source_effect.get_inverse_mobius()
+	var p := Vector2(100, 300)
+	var cache := TransformCache.new()
+	var q := cache.apply_point(fwd, p, inv)
+	var roundtrip := cache.apply_point(inv, q)
+	assert_eq(roundtrip, p,
+		"inv(fwd(p)) must return exact p from cache (no FP recomputation)")

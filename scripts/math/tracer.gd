@@ -155,7 +155,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 						var orig_surf_zl: Surface = s.norm_to_surface.get(hp.segment)
 						if orig_surf_zl and orig_surf_zl.is_target and hp.on_segment:
 							s.path.targets_hit[orig_surf_zl.id] = true
-						var result_zl = _apply_effect(s, hp, true, orig_surf_zl, plan_entries)
+						var result_zl = _apply_effect(s, hp, true, orig_surf_zl, plan_entries, cache)
 						if result_zl == 2:
 							if s.cursor_injected_at_zero_length:
 								s.step_left_blocked = false
@@ -192,7 +192,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 							if s.frame.conjugating:
 								ls = Side.Value.RIGHT if hp.side == Side.Value.LEFT else Side.Value.LEFT
 							last_step.hit_side = ls
-						var origin_result = _apply_effect(s, hp, true, origin_surf, plan_entries)
+						var origin_result = _apply_effect(s, hp, true, origin_surf, plan_entries, cache)
 						if origin_result == 1:
 							stage_ended = true
 							break
@@ -236,7 +236,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			_accumulate_blockage(s, hp)
 			var fully_blocked := s.step_left_blocked and s.step_right_blocked
 
-			var result = _apply_effect(s, hp, fully_blocked, orig_surf, plan_entries)
+			var result = _apply_effect(s, hp, fully_blocked, orig_surf, plan_entries, cache)
 			if result == 2:
 				trace_done = true
 				break
@@ -286,7 +286,7 @@ static func _accumulate_blockage(s: TraceState, hp: Intersection.HitRecord) -> v
 				s.step_left_blocked = s.step_left_blocked or sides[0]
 				s.step_right_blocked = s.step_right_blocked or sides[1]
 
-static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_blocked: bool, orig_surf: Surface, plan_entries: Array) -> int:
+static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_blocked: bool, orig_surf: Surface, plan_entries: Array, cache: TransformCache = null) -> int:
 	var norm_surf: Surface = null
 	for ns in s.norm_surfaces:
 		if ns.segment == hp.segment:
@@ -345,8 +345,14 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 		var new_origin: Vector2
 		if should_pop or tracked.inverse == tracked:
 			new_origin = tracked.inverse.mobius.apply(hp.point.coords)
-		else:
+		elif s.frame.id == MobiusTransform.IDENTITY_ID:
 			new_origin = hp.point.coords
+		else:
+			var new_frame := cache.compose_cached(s.frame, tracked.mobius)
+			var new_frame_inv := cache.invert_cached(new_frame)
+			var TF := cache.compose_cached(tracked.mobius, s.frame)
+			var M := cache.compose_cached(new_frame_inv, TF)
+			new_origin = M.apply(hp.point.coords)
 		if tracked.inverse != tracked:
 			s.portal_gap_pending = true
 		s.ray = Ray.from_coords(new_origin, s.ray.direction)
@@ -427,7 +433,7 @@ static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCac
 	var cached_norm = cache.get_normalized(s.frame.id)
 	if cached_norm != null:
 		s.norm_surfaces = cached_norm.surfaces
-		s.norm_to_surface = cached_norm.mapping
+		s.norm_to_surface = cached_norm.mapping.duplicate()
 	else:
 		s.norm_surfaces = _build_normalized(surfaces, s.frame, s.norm_to_surface, cache, s.transform_stack)
 		cache.set_normalized(s.frame.id, s.norm_surfaces, s.norm_to_surface.duplicate())
