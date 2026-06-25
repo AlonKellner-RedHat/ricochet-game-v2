@@ -17,6 +17,8 @@ func _init(carrier: GeneralizedCircle) -> void:
 	_tracked = TrackedTransform.from_self_inverse(_mobius, carrier)
 
 func _create_normalized(carrier: GeneralizedCircle) -> Effect:
+	if carrier.is_line():
+		return self
 	return CircleInversionEffect.new(carrier)
 
 func get_display_name() -> String:

@@ -187,9 +187,9 @@ func test_sweep_all_visual_hitpoints() -> void:
 						total_steps += 1
 				violation_count += violations.size()
 
-	print("DIAG [sweep] %d/%d hitpoints violate carrier invariant (%.1f%%)" % [
-		violation_count, total_steps, 100.0 * violation_count / total_steps if total_steps > 0 else 0.0])
+	print("DIAG [sweep] %d/%d hitpoints violate carrier invariant" % [
+		violation_count, total_steps])
 	assert_eq(violation_count, 0,
-		"All visual hitpoints should be on a physical carrier. Found %d/%d violations (%.1f%%)" % [
-			violation_count, total_steps, 100.0 * violation_count / total_steps if total_steps > 0 else 0.0])
+		"Zero carrier invariant violations allowed. Found %d/%d" % [
+			violation_count, total_steps])
 

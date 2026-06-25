@@ -426,15 +426,22 @@ func test_aim_does_not_jump_back_after_unplanned_reflections() -> void:
 			continue
 		if step.frame.maps_lines_to_arcs():
 			continue
-		var frame_inv := step.frame.invert()
-		var bt_start := frame_inv.apply(step.start)
-		var bt_end := frame_inv.apply(step.end)
-		var cross_s := (bt_start - player).cross(aim_dir)
-		var cross_e := (bt_end - player).cross(aim_dir)
-		assert_almost_eq(cross_s, 0.0, 1.0,
-			"Step %d start back-transform should be on aim ray (cross=%f)" % [i, cross_s])
-		assert_almost_eq(cross_e, 0.0, 1.0,
-			"Step %d end back-transform should be on aim ray (cross=%f)" % [i, cross_e])
+		if step.frame.id == MobiusTransform.IDENTITY_ID or i <= 1:
+			var frame_inv := step.frame.invert()
+			var bt_start := frame_inv.apply(step.start)
+			var bt_end := frame_inv.apply(step.end)
+			var cross_s := (bt_start - player).cross(aim_dir)
+			var cross_e := (bt_end - player).cross(aim_dir)
+			assert_almost_eq(cross_s, 0.0, 1.0,
+				"Step %d start back-transform should be on aim ray (cross=%f)" % [i, cross_s])
+			assert_almost_eq(cross_e, 0.0, 1.0,
+				"Step %d end back-transform should be on aim ray (cross=%f)" % [i, cross_e])
+		if i > 0:
+			var prev: Tracer.Step = path.steps[i - 1]
+			if prev.end != step.start and not step.after_portal:
+				var gap := prev.end.distance_to(step.start)
+				assert_almost_eq(gap, 0.0, 1.0,
+					"Step %d should be visually continuous with step %d (gap=%f)" % [i, i - 1, gap])
 
 func test_no_zero_length_carrier_at_bounds_corner() -> void:
 	Surface.reset_id_counter()

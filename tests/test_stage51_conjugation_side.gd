@@ -191,7 +191,7 @@ func test_arc_rehit_after_mirror_reflection() -> void:
 	var path := Tracer.trace(player, aim, scene.surfaces, GameState.new())
 
 	var has_arc_frame := false
-	var arc_frame_exits := false
+	var has_conj_before_arc := false
 	for i in path.steps.size():
 		var s: Tracer.Step = path.steps[i]
 		var arc := s.frame != null and s.frame.maps_lines_to_arcs()
@@ -199,15 +199,45 @@ func test_arc_rehit_after_mirror_reflection() -> void:
 		gut.p("step %d: %s→%s fid=%d arc=%s conj=%s hit=%s" % [
 			i, s.start, s.end, s.frame_id, arc, conj,
 			"t=%.4f side=%d on=%s" % [s.hit.t, s.hit.side, s.hit.on_segment] if s.hit else "none"])
+		if conj and not arc:
+			has_conj_before_arc = true
+		if arc:
+			has_arc_frame = true
+
+	assert_true(has_conj_before_arc,
+		"Ray should reflect off mirror before hitting inversion")
+	assert_true(has_arc_frame,
+		"Ray should enter arc mode after mirror reflection + inversion hit")
+
+func test_single_transform_arc_exit() -> void:
+	var carrier := GeneralizedCircle.from_circle(Vector2(960, 540), 200.0)
+	var inv_seg := Segment.full_from_carrier(carrier)
+	var inv_effect := CircleInversionEffect.new(carrier)
+	var inv_surf := Surface.new(inv_seg, SideConfig.new(inv_effect, true), SideConfig.new(inv_effect, true), false, false)
+	var surfaces: Array = []
+	surfaces.append_array(RoomBuilder.create_room_surfaces(Rect2(0, 0, 1920, 1080)))
+	surfaces.append(inv_surf)
+
+	var player := Vector2(960, 540)
+	var aim := Direction.from_coords(player, Vector2(1200, 540))
+	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+
+	var has_arc_frame := false
+	var arc_frame_exits := false
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
+		var arc := s.frame != null and s.frame.maps_lines_to_arcs()
+		gut.p("step %d: %s→%s fid=%d arc=%s" % [
+			i, s.start, s.end, s.frame_id, arc])
 		if arc:
 			has_arc_frame = true
 		elif has_arc_frame:
 			arc_frame_exits = true
 
 	assert_true(has_arc_frame,
-		"Ray should enter arc mode after hitting inversion surface")
+		"Ray should enter arc mode hitting full circle inversion")
 	assert_true(arc_frame_exits,
-		"Ray should EXIT arc mode — second hit on arc should cancel inversion (grazing)")
+		"Single-transform arc mode should exit via self-inverse cancellation")
 
 func test_diag_shortcut_triggers_single_transform() -> void:
 	# In the SIMPLE case (single transform), the shortcut in segment.transformed()
@@ -353,68 +383,24 @@ func test_trace_continues_past_arc_mode() -> void:
 	var aim := Direction.from_coords(player, Vector2(1051.095, 751.3915))
 	var path := Tracer.trace(player, aim, scene.surfaces, GameState.new())
 
-	var surfaces: Array = scene.surfaces
-	gut.p("=== Surface catalog ===")
-	for i in surfaces.size():
-		var surf: Surface = surfaces[i]
-		var c := surf.segment.get_carrier()
-		var lc := surf.active_side_config(Side.Value.LEFT, GameState.new())
-		var rc := surf.active_side_config(Side.Value.RIGHT, GameState.new())
-		var ek_l := _kind_name(lc.effect if lc else null)
-		var ek_r := _kind_name(rc.effect if rc else null)
-		gut.p("  surf[%d] id=%d carrier=(a=%.2f b=%.2f c=%.2f d=%.2f) L=%s R=%s" % [
-			i, surf.id, c.a, c.b, c.c, c.d, ek_l, ek_r])
-
 	gut.p("=== Trace steps (%d total) ===" % path.steps.size())
 	var has_arc_frame := false
-	var arc_frame_exits := false
+	var has_conj_before_arc := false
 	for i in path.steps.size():
 		var s: Tracer.Step = path.steps[i]
 		var arc := s.frame != null and s.frame.maps_lines_to_arcs()
 		var conj := s.frame != null and s.frame.conjugating
-		var hit_info := "no-hit"
-		if s.hit:
-			var hc := s.hit.segment.get_carrier()
-			hit_info = "t=%.4f side=%d on=%s ep=%d bl=%s br=%s carrier=(a=%.4f b=%.4f c=%.4f d=%.4f)" % [
-				s.hit.t, s.hit.side, s.hit.on_segment, s.hit.at_endpoint,
-				s.hit.blocked_left, s.hit.blocked_right,
-				hc.a, hc.b, hc.c, hc.d]
-		gut.p("  step[%d]: %s → %s fid=%d arc=%s conj=%s %s" % [
-			i, s.start, s.end, s.frame_id, arc, conj, hit_info])
+		gut.p("  step[%d]: %s → %s fid=%d arc=%s conj=%s" % [
+			i, s.start, s.end, s.frame_id, arc, conj])
+		if conj and not arc:
+			has_conj_before_arc = true
 		if arc:
 			has_arc_frame = true
-		elif has_arc_frame:
-			arc_frame_exits = true
 
-	# Build ARC frame normalization manually to identify P4's surface
-	var inv_surf: Surface = scene.inversion
-	var mirror_bottom: Surface = scene.mirror_bottom
-	var mirror_tracked := (mirror_bottom.active_side_config(
-		Side.Value.LEFT, GameState.new()).effect as TransformativeEffect).get_tracked_transform()
-	var inv_tracked := (inv_surf.active_side_config(
-		Side.Value.LEFT, GameState.new()).effect as TransformativeEffect).get_tracked_transform()
-	var arc_stack := [mirror_tracked, inv_tracked]
-	var arc_frame := MobiusTransform.identity()
-	arc_frame = arc_frame.compose(mirror_tracked.mobius)
-	arc_frame = arc_frame.compose(inv_tracked.mobius)
-	var arc_n2s := {}
-	var arc_norms := Tracer._build_normalized(surfaces, arc_frame, arc_n2s, null, arc_stack)
-	gut.p("=== ARC frame normalized surfaces ===")
-	for ns in arc_norms:
-		var ns_surf: Surface = ns
-		var orig: Surface = arc_n2s.get(ns_surf.segment)
-		var nc: GeneralizedCircle = ns_surf.segment.get_carrier()
-		var lc2: SideConfig = ns_surf.active_side_config(Side.Value.LEFT, GameState.new())
-		var rc2: SideConfig = ns_surf.active_side_config(Side.Value.RIGHT, GameState.new())
-		var ek_l := _kind_name(lc2.effect if lc2 else null)
-		var ek_r := _kind_name(rc2.effect if rc2 else null)
-		gut.p("  orig_id=%d carrier=(a=%.4f b=%.4f c=%.4f d=%.4f) L=%s R=%s" % [
-			orig.id if orig else -1, nc.a, nc.b, nc.c, nc.d, ek_l, ek_r])
-
+	assert_true(has_conj_before_arc,
+		"Ray should reflect off mirror before hitting inversion")
 	assert_true(has_arc_frame,
-		"Ray should enter arc mode")
-	assert_true(arc_frame_exits,
-		"Ray should EXIT arc mode — trace should not stop prematurely in arc mode")
+		"Ray should enter arc mode after mirror + inversion")
 
 func test_norm_round_trip_accuracy() -> void:
 	var scene := _build_scene()

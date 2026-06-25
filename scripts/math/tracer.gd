@@ -286,7 +286,7 @@ static func _accumulate_blockage(s: TraceState, hp: Intersection.HitRecord) -> v
 				s.step_left_blocked = s.step_left_blocked or sides[0]
 				s.step_right_blocked = s.step_right_blocked or sides[1]
 
-static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_blocked: bool, orig_surf: Surface, plan_entries: Array, cache: TransformCache = null) -> int:
+static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_blocked: bool, orig_surf: Surface, plan_entries: Array, _cache: TransformCache = null) -> int:
 	var norm_surf: Surface = null
 	for ns in s.norm_surfaces:
 		if ns.segment == hp.segment:
@@ -329,7 +329,8 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 		s.step_right_blocked = false
 
 	if do_apply:
-		var tracked: TrackedTransform = effect_config.effect.get_tracked_transform()
+		var phys_config := orig_surf.active_side_config(lookup_side, s.state_copy)
+		var tracked: TrackedTransform = phys_config.effect.get_tracked_transform()
 		var should_pop := false
 		if not s.transform_stack.is_empty():
 			if s.transform_stack.back().is_inverse_of(tracked):
@@ -342,17 +343,7 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 		else:
 			s.transform_stack.append(tracked)
 			s.transform_sources.append(orig_surf)
-		var new_origin: Vector2
-		if should_pop or tracked.inverse == tracked:
-			new_origin = tracked.inverse.mobius.apply(hp.point.coords)
-		elif s.frame.id == MobiusTransform.IDENTITY_ID:
-			new_origin = hp.point.coords
-		else:
-			var new_frame := cache.compose_cached(s.frame, tracked.mobius)
-			var new_frame_inv := cache.invert_cached(new_frame)
-			var TF := cache.compose_cached(tracked.mobius, s.frame)
-			var M := cache.compose_cached(new_frame_inv, TF)
-			new_origin = M.apply(hp.point.coords)
+		var new_origin: Vector2 = hp.point.coords
 		if tracked.inverse != tracked:
 			s.portal_gap_pending = true
 		s.ray = Ray.from_coords(new_origin, s.ray.direction)
@@ -429,7 +420,7 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 static func _recompute_frame(s: TraceState, surfaces: Array, cache: TransformCache) -> void:
 	s.frame = MobiusTransform.identity()
 	for t in s.transform_stack:
-		s.frame = cache.compose_cached(s.frame, t.mobius)
+		s.frame = cache.compose_cached(t.mobius, s.frame)
 	var cached_norm = cache.get_normalized(s.frame.id)
 	if cached_norm != null:
 		s.norm_surfaces = cached_norm.surfaces
@@ -472,7 +463,7 @@ static func _build_normalized(surfaces: Array, frame: MobiusTransform, out_mappi
 				var direct: GeneralizedCircle = orig_carrier.transformed_by(frame_inv)
 				if orig_carrier.is_line():
 					direct = GeneralizedCircle.from_line(direct.b, direct.c, direct.d)
-				else:
+				elif not direct.is_line():
 					direct = GeneralizedCircle.from_circle(direct.center(), orig_carrier.radius())
 				new_seg._carrier = direct
 		var state := GameState.new()

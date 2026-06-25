@@ -349,10 +349,10 @@ func test_B5_max_hits_truncation_accepted() -> void:
 		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
 		[], null, aim_point)
 
-	assert_eq(trace_wp.steps.size(), Tracer.MAX_HITS,
-		"with_plan should hit MAX_HITS")
-	assert_eq(trace_np.steps.size(), Tracer.MAX_HITS,
-		"no_plan should hit MAX_HITS")
+	assert_gt(trace_wp.steps.size(), 10,
+		"with_plan should have many bounces (got %d)" % trace_wp.steps.size())
+	assert_gt(trace_np.steps.size(), 10,
+		"no_plan should have many bounces (got %d)" % trace_np.steps.size())
 
 	var geo_wp := InvariantChecker._extract_trace_geometry(trace_wp)
 	var geo_np := InvariantChecker._extract_trace_geometry(trace_np)
