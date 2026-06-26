@@ -17,6 +17,10 @@ extends Node2D
 @export var normal_projection_back_lines: Array[Vector4] = []
 @export var normal_projection_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var normal_projection_back_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var circle_directional_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var circle_directional_back_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var directional_projection_lines: PackedFloat64Array = PackedFloat64Array()
+@export var directional_projection_back_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_arcs: PackedFloat64Array = PackedFloat64Array()
 
@@ -96,6 +100,44 @@ func _ready() -> void:
 		var projection := CircleNormalProjection.new(true)
 		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
 		_add_surface(surf, "CircleProjectionBack")
+	for i in range(0, circle_directional_arcs.size(), 8):
+		var seg := Segment.from_coords(
+			Vector2(circle_directional_arcs[i], circle_directional_arcs[i + 1]),
+			Vector2(circle_directional_arcs[i + 2], circle_directional_arcs[i + 3]),
+			Vector2(circle_directional_arcs[i + 4], circle_directional_arcs[i + 5]))
+		var normal := Vector2(circle_directional_arcs[i + 6], circle_directional_arcs[i + 7])
+		var projection := CircleDirectionalProjection.new(normal)
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "CircleDir")
+	for i in range(0, circle_directional_back_arcs.size(), 8):
+		var seg := Segment.from_coords(
+			Vector2(circle_directional_back_arcs[i], circle_directional_back_arcs[i + 1]),
+			Vector2(circle_directional_back_arcs[i + 2], circle_directional_back_arcs[i + 3]),
+			Vector2(circle_directional_back_arcs[i + 4], circle_directional_back_arcs[i + 5]))
+		var normal := Vector2(circle_directional_back_arcs[i + 6], circle_directional_back_arcs[i + 7])
+		var projection := CircleDirectionalProjection.new(normal, true)
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "CircleDirBack")
+	for i in range(0, directional_projection_lines.size(), 6):
+		var seg := Segment.from_coords(
+			Vector2(directional_projection_lines[i], directional_projection_lines[i + 1]),
+			Vector2(directional_projection_lines[i + 2], directional_projection_lines[i + 3]),
+			Vector2((directional_projection_lines[i] + directional_projection_lines[i + 2]) / 2.0,
+				(directional_projection_lines[i + 1] + directional_projection_lines[i + 3]) / 2.0))
+		var normal := Vector2(directional_projection_lines[i + 4], directional_projection_lines[i + 5])
+		var projection := LineDirectionalProjection.new(normal)
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "LineDir")
+	for i in range(0, directional_projection_back_lines.size(), 6):
+		var seg := Segment.from_coords(
+			Vector2(directional_projection_back_lines[i], directional_projection_back_lines[i + 1]),
+			Vector2(directional_projection_back_lines[i + 2], directional_projection_back_lines[i + 3]),
+			Vector2((directional_projection_back_lines[i] + directional_projection_back_lines[i + 2]) / 2.0,
+				(directional_projection_back_lines[i + 1] + directional_projection_back_lines[i + 3]) / 2.0))
+		var normal := Vector2(directional_projection_back_lines[i + 4], directional_projection_back_lines[i + 5])
+		var projection := LineDirectionalProjection.new(normal, true)
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "LineDirBack")
 	for i in range(0, portal_lines.size(), 7):
 		var seg := Segment.from_coords(
 			Vector2(portal_lines[i], portal_lines[i + 1]),
