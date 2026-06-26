@@ -132,97 +132,105 @@ func test_physical_hits_skips_negative_surface_id() -> void:
 	assert_true(hits.has(3), "Should contain surface_id 3")
 
 # ============================================================
-# Phase 3: Plan validity on SurfaceNode
+# Phase 3: Plan validity via ChevronOverlayBuilder
 # ============================================================
 
-func _make_surface_node(surf: Surface) -> Node2D:
-	var node := SurfaceNodeScript.new()
-	node.setup(surf)
-	return node
+func _lookup(surfaces: Array) -> Callable:
+	return func(id: int) -> Surface:
+		for s in surfaces:
+			if s.id == id:
+				return s
+		return null
 
-func test_overlay_stores_plan_sides() -> void:
+func test_plan_overlay_created_for_planned_surface() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
-	add_child_autofree(node)
 	var plan := PlanManager.new()
 	plan.add_entry(m.id, Side.Value.LEFT)
-	node.update_plan_overlay(plan, {})
-	assert_eq(node._plan_sides.size(), 1, "Should store 1 plan side")
-	assert_eq(node._plan_sides[0], Side.Value.LEFT, "Should store LEFT side")
+	var phits := {m.id: [{"side": Side.Value.LEFT, "on_segment": true, "has_continuation": true}]}
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, phits, _lookup([m]))
+	assert_true(overlays.has(m.id), "Should create overlay for planned surface")
+	var ovs: Array = overlays[m.id]
+	assert_eq(ovs.size(), 1, "Should have 1 overlay")
+	assert_eq(ovs[0].side, Side.Value.LEFT, "Overlay should be on LEFT side")
 
 func test_plan_valid_when_hit_correct_side_on_segment() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
-	add_child_autofree(node)
 	var plan := PlanManager.new()
 	plan.add_entry(m.id, Side.Value.LEFT)
-	var phits := {m.id: [{"side": Side.Value.LEFT, "on_segment": true}]}
-	node.update_plan_overlay(plan, phits)
-	assert_true(node._plan_valid[0], "Should be valid when hit correct side on-segment")
+	var phits := {m.id: [{"side": Side.Value.LEFT, "on_segment": true, "has_continuation": true}]}
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, phits, _lookup([m]))
+	var ov: ChevronOverlay = overlays[m.id][0]
+	assert_eq(ov.incoming_color, ChevronOverlayBuilder.PLAN_VALID_COLOR,
+		"Should be valid when hit correct side on-segment")
 
 func test_plan_invalid_when_surface_not_hit() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
-	add_child_autofree(node)
 	var plan := PlanManager.new()
 	plan.add_entry(m.id, Side.Value.LEFT)
-	node.update_plan_overlay(plan, {})
-	assert_false(node._plan_valid[0], "Should be invalid when surface not hit at all")
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, {}, _lookup([m]))
+	var ov: ChevronOverlay = overlays[m.id][0]
+	assert_eq(ov.incoming_color, ChevronOverlayBuilder.PLAN_INVALID_COLOR,
+		"Should be invalid when surface not hit at all")
 
 func test_plan_invalid_when_wrong_side() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
-	add_child_autofree(node)
 	var plan := PlanManager.new()
 	plan.add_entry(m.id, Side.Value.LEFT)
-	var phits := {m.id: [{"side": Side.Value.RIGHT, "on_segment": true}]}
-	node.update_plan_overlay(plan, phits)
-	assert_false(node._plan_valid[0], "Should be invalid when hit wrong side")
+	var phits := {m.id: [{"side": Side.Value.RIGHT, "on_segment": true, "has_continuation": true}]}
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, phits, _lookup([m]))
+	var ov: ChevronOverlay = overlays[m.id][0]
+	assert_eq(ov.incoming_color, ChevronOverlayBuilder.PLAN_INVALID_COLOR,
+		"Should be invalid when hit wrong side")
 
 func test_plan_invalid_when_off_segment() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
-	add_child_autofree(node)
 	var plan := PlanManager.new()
 	plan.add_entry(m.id, Side.Value.LEFT)
-	var phits := {m.id: [{"side": Side.Value.LEFT, "on_segment": false}]}
-	node.update_plan_overlay(plan, phits)
-	assert_false(node._plan_valid[0], "Should be invalid when off-segment")
+	var phits := {m.id: [{"side": Side.Value.LEFT, "on_segment": false, "has_continuation": true}]}
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, phits, _lookup([m]))
+	var ov: ChevronOverlay = overlays[m.id][0]
+	assert_eq(ov.incoming_color, ChevronOverlayBuilder.PLAN_INVALID_COLOR,
+		"Should be invalid when off-segment")
 
 func test_plan_valid_if_any_hit_matches() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
-	add_child_autofree(node)
 	var plan := PlanManager.new()
 	plan.add_entry(m.id, Side.Value.LEFT)
 	var phits := {m.id: [
-		{"side": Side.Value.RIGHT, "on_segment": true},
-		{"side": Side.Value.LEFT, "on_segment": true},
+		{"side": Side.Value.RIGHT, "on_segment": true, "has_continuation": true},
+		{"side": Side.Value.LEFT, "on_segment": true, "has_continuation": true},
 	]}
-	node.update_plan_overlay(plan, phits)
-	assert_true(node._plan_valid[0], "Should be valid if any hit matches")
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, phits, _lookup([m]))
+	var ov: ChevronOverlay = overlays[m.id][0]
+	assert_eq(ov.incoming_color, ChevronOverlayBuilder.PLAN_VALID_COLOR,
+		"Should be valid if any hit matches")
 
 func test_plan_highlight_suppressed_on_hover_side() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
+	var node := SurfaceNodeScript.new()
+	node.setup(m)
 	add_child_autofree(node)
-	var plan := PlanManager.new()
-	plan.add_entry(m.id, Side.Value.LEFT)
-	node.update_plan_overlay(plan, {})
-	node.set_hover_side(Side.Value.LEFT)
-	assert_eq(node._should_draw_plan_highlight(0), false,
-		"Plan highlight suppressed when hover matches plan side")
+	var plan_ov := ChevronOverlay.plan(Side.Value.LEFT, true, Side.Value.LEFT,
+		ChevronOverlayBuilder.PLAN_VALID_COLOR, ChevronOverlayBuilder.PLAN_VALID_COLOR,
+		ChevronOverlayBuilder.PLAN_VALID_COLOR)
+	node.set_plan_overlays([plan_ov], [1])
+	var hover_ov := ChevronOverlay.hover(Side.Value.LEFT, true, Side.Value.LEFT,
+		ChevronOverlayBuilder.HOVER_COLOR)
+	node.set_hover_overlays([hover_ov])
+	assert_eq(node._plan_overlays.size(), 1, "Plan overlay stored")
+	assert_eq(node._hover_overlays.size(), 1, "Hover overlay stored")
+	assert_eq(node._hover_overlays[0].side, node._plan_overlays[0].side,
+		"Plan suppressed when hover covers same side")
 
 func test_plan_highlight_color_selection() -> void:
 	var m := _mirror(400)
-	var node := _make_surface_node(m)
-	add_child_autofree(node)
 	var plan := PlanManager.new()
 	plan.add_entry(m.id, Side.Value.LEFT)
 	plan.add_entry(m.id, Side.Value.RIGHT)
-	var phits := {m.id: [{"side": Side.Value.LEFT, "on_segment": true}]}
-	node.update_plan_overlay(plan, phits)
-	assert_eq(node._plan_highlight_color(0), SurfaceNodeScript.PLAN_VALID_COLOR,
+	var phits := {m.id: [{"side": Side.Value.LEFT, "on_segment": true, "has_continuation": true}]}
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, phits, _lookup([m]))
+	var ovs: Array = overlays[m.id]
+	assert_eq(ovs[0].incoming_color, ChevronOverlayBuilder.PLAN_VALID_COLOR,
 		"Valid entry should use PLAN_VALID_COLOR")
-	assert_eq(node._plan_highlight_color(1), SurfaceNodeScript.PLAN_INVALID_COLOR,
+	assert_eq(ovs[1].incoming_color, ChevronOverlayBuilder.PLAN_INVALID_COLOR,
 		"Invalid entry should use PLAN_INVALID_COLOR")

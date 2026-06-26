@@ -17,6 +17,7 @@ var game_state := GameState.new()
 var targets_hit: Dictionary = {}
 var _checkpoints := CheckpointStack.new()
 var _hovered_node: Node2D = null
+var _hover_partner_node: Node2D = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -67,16 +68,24 @@ func _update_hover() -> void:
 	if not result.is_empty():
 		var surf: Surface = result.surface
 		var side: Side.Value = result.side
+		var overlays := ChevronOverlayBuilder.build_hover_overlays(surf, side)
 		for child in _level_settings.get_children():
-			if child.has_method("set_hover_side") and "surface" in child and child.surface == surf:
-				child.set_hover_side(side)
-				_hovered_node = child
-				break
+			if child.has_method("set_hover_overlays") and "surface" in child:
+				var child_overlays: Array = overlays.get(child.surface.id, [])
+				if not child_overlays.is_empty():
+					child.set_hover_overlays(child_overlays)
+					if child.surface == surf:
+						_hovered_node = child
+					else:
+						_hover_partner_node = child
 
 func _clear_all_hover() -> void:
 	if _hovered_node and is_instance_valid(_hovered_node):
 		_hovered_node.clear_hover()
+	if _hover_partner_node and is_instance_valid(_hover_partner_node):
+		_hover_partner_node.clear_hover()
 	_hovered_node = null
+	_hover_partner_node = null
 
 func _input(event: InputEvent) -> void:
 	if _arrow_animator and _arrow_animator.is_flying():
@@ -236,9 +245,20 @@ func _update_surface_overlays() -> void:
 	var physical_hits := {}
 	if _path_renderer and _path_renderer.has_method("get_physical_hits"):
 		physical_hits = _path_renderer.get_physical_hits()
+	var surfaces := _get_surfaces()
+	var lookup := func(id: int) -> Surface:
+		for s in surfaces:
+			if s.id == id:
+				return s
+		return null
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, physical_hits, lookup)
 	for child in _level_settings.get_children():
-		if child.has_method("update_plan_overlay"):
-			child.update_plan_overlay(plan, physical_hits)
+		if child.has_method("set_plan_overlays") and "surface" in child:
+			var plan_indices: Array[int] = []
+			for i in plan.entries.size():
+				if plan.entries[i].surface_id == child.surface.id:
+					plan_indices.append(i + 1)
+			child.set_plan_overlays(overlays.get(child.surface.id, []), plan_indices)
 
 func _dump_debug_state() -> void:
 	_DebugDumper.dump(self)

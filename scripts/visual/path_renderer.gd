@@ -75,13 +75,14 @@ func get_physical_hits() -> Dictionary:
 
 static func build_physical_hits(path: Tracer.TracedPath) -> Dictionary:
 	var result := {}
-	for step in path.steps:
-		var s: Tracer.Step = step
+	for i in path.steps.size():
+		var s: Tracer.Step = path.steps[i]
 		if s.surface_id < 0:
 			continue
 		if not result.has(s.surface_id):
 			result[s.surface_id] = []
-		result[s.surface_id].append({"side": s.hit_side, "on_segment": s.hit_on_segment})
+		var has_continuation := i < path.steps.size() - 1
+		result[s.surface_id].append({"side": s.hit_side, "on_segment": s.hit_on_segment, "has_continuation": has_continuation})
 	return result
 
 func _get_plan() -> PlanManager:

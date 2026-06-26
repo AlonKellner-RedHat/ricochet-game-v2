@@ -113,6 +113,12 @@ func _add_portal_pair(source_seg: Segment, result: Dictionary) -> void:
 	var tgt_cfg := SideConfig.new(result.target_effect, true)
 	var tgt_surf := Surface.new(result.target_segment, tgt_cfg, tgt_cfg, false, false)
 	_add_surface(tgt_surf, "PortalTgt")
+	var link_l := SideLink.from_pair(src_surf, Side.Value.LEFT, tgt_surf, Side.Value.RIGHT)
+	src_surf.set_side_link(Side.Value.LEFT, link_l)
+	tgt_surf.set_side_link(Side.Value.RIGHT, link_l.outgoing)
+	var link_r := SideLink.from_pair(src_surf, Side.Value.RIGHT, tgt_surf, Side.Value.LEFT)
+	src_surf.set_side_link(Side.Value.RIGHT, link_r)
+	tgt_surf.set_side_link(Side.Value.LEFT, link_r.outgoing)
 
 static func _seg_from_v4(v: Vector4) -> Segment:
 	return Segment.from_coords(

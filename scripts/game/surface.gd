@@ -9,6 +9,8 @@ var _left_config: SideConfig
 var _right_config: SideConfig
 var is_target: bool
 var player_solid: bool
+var _left_link: SideLink = null
+var _right_link: SideLink = null
 
 func _init(p_segment: Segment, p_left: SideConfig, p_right: SideConfig, p_is_target: bool = false, p_player_solid: bool = true) -> void:
 	id = _next_id
@@ -18,9 +20,29 @@ func _init(p_segment: Segment, p_left: SideConfig, p_right: SideConfig, p_is_tar
 	_right_config = p_right
 	is_target = p_is_target
 	player_solid = p_player_solid
+	_auto_link(Side.Value.LEFT, _left_config)
+	_auto_link(Side.Value.RIGHT, _right_config)
 
 func active_side_config(side: Side.Value, _game_state: GameState) -> SideConfig:
 	return _left_config if side == Side.Value.LEFT else _right_config
+
+func get_side_link(side: Side.Value) -> SideLink:
+	return _left_link if side == Side.Value.LEFT else _right_link
+
+func set_side_link(side: Side.Value, link: SideLink) -> void:
+	if side == Side.Value.LEFT:
+		_left_link = link
+	else:
+		_right_link = link
+
+func _auto_link(side: Side.Value, config: SideConfig) -> void:
+	if config == null or not config.interactive:
+		return
+	if config.effect == null or not config.effect.is_transformative():
+		return
+	var tracked := config.effect.get_tracked_transform()
+	if tracked.inverse == tracked:
+		set_side_link(side, SideLink.from_self(self, side))
 
 static func reset_id_counter() -> void:
 	_next_id = 1
