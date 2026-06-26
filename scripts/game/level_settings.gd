@@ -15,6 +15,8 @@ extends Node2D
 @export var full_reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var normal_projection_lines: Array[Vector4] = []
 @export var normal_projection_back_lines: Array[Vector4] = []
+@export var normal_projection_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var normal_projection_back_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var portal_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_arcs: PackedFloat64Array = PackedFloat64Array()
 
@@ -78,6 +80,22 @@ func _ready() -> void:
 		var projection := LineNormalProjection.new(true)
 		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
 		_add_surface(surf, "ProjectionBack")
+	for i in range(0, normal_projection_arcs.size(), 6):
+		var seg := Segment.from_coords(
+			Vector2(normal_projection_arcs[i], normal_projection_arcs[i + 1]),
+			Vector2(normal_projection_arcs[i + 2], normal_projection_arcs[i + 3]),
+			Vector2(normal_projection_arcs[i + 4], normal_projection_arcs[i + 5]))
+		var projection := CircleNormalProjection.new()
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "CircleProjection")
+	for i in range(0, normal_projection_back_arcs.size(), 6):
+		var seg := Segment.from_coords(
+			Vector2(normal_projection_back_arcs[i], normal_projection_back_arcs[i + 1]),
+			Vector2(normal_projection_back_arcs[i + 2], normal_projection_back_arcs[i + 3]),
+			Vector2(normal_projection_back_arcs[i + 4], normal_projection_back_arcs[i + 5]))
+		var projection := CircleNormalProjection.new(true)
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "CircleProjectionBack")
 	for i in range(0, portal_lines.size(), 7):
 		var seg := Segment.from_coords(
 			Vector2(portal_lines[i], portal_lines[i + 1]),

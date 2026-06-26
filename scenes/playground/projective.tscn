@@ -15,6 +15,7 @@ room_rect = Rect2(100, 80, 1720, 920)
 build_room = true
 normal_projection_lines = Array[Vector4]([Vector4(700, 200, 700, 800), Vector4(1050, 250, 1350, 550)])
 normal_projection_back_lines = Array[Vector4]([Vector4(1200, 200, 1200, 800)])
+normal_projection_arcs = PackedFloat64Array(850, 300, 850, 700, 950, 500)
 mirror_lines = [Vector4(1500, 200, 1500, 800)]
 portal_lines = PackedFloat64Array(400, 300, 400, 700, 0, 350, 0)
 
