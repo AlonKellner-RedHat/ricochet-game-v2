@@ -13,6 +13,8 @@ extends Node2D
 @export var inversion_left_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var full_reflective_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var normal_projection_lines: Array[Vector4] = []
+@export var normal_projection_back_lines: Array[Vector4] = []
 @export var portal_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_arcs: PackedFloat64Array = PackedFloat64Array()
 
@@ -66,6 +68,16 @@ func _ready() -> void:
 		var reflection := ReflectionEffect.new(carrier)
 		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
 		_add_surface(surf, "FullReflArc")
+	for line_def in normal_projection_lines:
+		var seg := _seg_from_v4(line_def)
+		var projection := LineNormalProjection.new()
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "Projection")
+	for line_def in normal_projection_back_lines:
+		var seg := _seg_from_v4(line_def)
+		var projection := LineNormalProjection.new(true)
+		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
+		_add_surface(surf, "ProjectionBack")
 	for i in range(0, portal_lines.size(), 7):
 		var seg := Segment.from_coords(
 			Vector2(portal_lines[i], portal_lines[i + 1]),

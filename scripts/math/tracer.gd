@@ -315,6 +315,27 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 								s.plan_matched = false
 						else:
 							s.plan_matched = false
+					Effect.Kind.PROJECTIVE:
+						var visual_hit := s.frame.apply(hp.point.coords)
+						var phys_cfg := orig_surf.active_side_config(lookup_side, s.state_copy)
+						var out_ray: Ray = phys_cfg.effect.apply_forward(visual_hit, orig_surf.segment, lookup_side)
+						s.transform_stack.clear()
+						s.transform_sources.clear()
+						s.ray = out_ray
+						s.origin_on_surface = orig_surf
+						s.portal_gap_pending = false
+						s.frame_dirty = true
+						if fully_blocked:
+							s.step_left_blocked = false
+							s.step_right_blocked = false
+						if s.plan_index < plan_entries.size():
+							if orig_surf.id == plan_entries[s.plan_index].surface_id:
+								s.plan_index += 1
+							else:
+								s.plan_matched = false
+						else:
+							s.plan_matched = false
+						return 1
 	elif s.current_mode == TraceMode.PLANNED:
 		if orig_surf and s.plan_index < plan_entries.size():
 			var entry: PlanManager.PlanEntry = plan_entries[s.plan_index]
