@@ -65,24 +65,6 @@ func test_stage75_hit_position_independent() -> void:
 		assert_almost_eq(dir, first_dir, Vector2(0.01, 0.01),
 			"Hit at position %d should produce same direction as position 0" % i)
 
-# --- Test 4: back_propagate on arc ---
-
-func test_stage75_back_propagate_on_arc() -> void:
-	var seg := _standard_arc()
-	var effect := CircleDirectionalProjection.new(Vector2(1, 0))
-	var result = effect.back_propagate(Vector2(500, 300), seg)
-	assert_not_null(result, "Should return point on arc")
-	assert_almost_eq(result, Vector2(400, 300), TOL,
-		"Line from (500,300) in normal dir should hit arc at (400,300)")
-
-# --- Test 5: back_propagate null ---
-
-func test_stage75_back_propagate_null() -> void:
-	var seg := _standard_arc()
-	var effect := CircleDirectionalProjection.new(Vector2(1, 0))
-	var result = effect.back_propagate(Vector2(300, 500), seg)
-	assert_null(result, "Line at y=500 in normal dir misses circle entirely")
-
 # --- Test 6: S10 - frame resets ---
 
 func test_stage75_S10_frame_resets() -> void:
@@ -151,10 +133,6 @@ func test_stage75_S16_no_nan_inf() -> void:
 	var dir := ray.direction.to_normalized()
 	assert_false(is_nan(dir.x), "direction.x not NaN")
 	assert_false(is_nan(dir.y), "direction.y not NaN")
-	var proj = effect.back_propagate(Vector2(500, 300), seg)
-	if proj != null:
-		assert_false(is_nan(proj.x), "back_propagate x not NaN")
-		assert_false(is_nan(proj.y), "back_propagate y not NaN")
 
 # --- Test 9: kind is projective ---
 

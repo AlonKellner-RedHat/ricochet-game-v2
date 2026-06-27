@@ -20,18 +20,6 @@ func apply_forward(hit_point: Vector2, segment: Segment, side: int) -> Ray:
 	var direction := Direction.from_coords(hit_point, hit_point + exit_dir)
 	return Ray.from_coords(hit_point, direction)
 
-func back_propagate(target: Vector2, segment: Segment) -> Variant:
-	var carrier := segment.get_carrier()
-	var carrier_normal := Vector2(carrier.b, carrier.c)
-	var denom := carrier_normal.dot(_normal)
-	if absf(denom) < 1e-12:
-		return null
-	var t := -carrier.evaluate(target) / denom
-	var projected := target + t * _normal
-	if Intersection.is_on_segment(projected, segment):
-		return projected
-	return null
-
 func get_display_name() -> String:
 	return "line_directional_back" if _project_back else "line_directional"
 

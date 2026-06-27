@@ -43,7 +43,7 @@ func _trace_via_renderer(scene: Node) -> Tracer.TracedPath:
 	renderer._compute_trace()
 	return renderer.get_traced_path()
 
-func test_reproduce_gaps() -> void:
+func test_no_non_portal_large_gaps() -> void:
 	var scene := _build_scene()
 	add_child_autofree(scene)
 	await get_tree().process_frame
@@ -52,24 +52,16 @@ func test_reproduce_gaps() -> void:
 	var raw_path := _trace_raw(scene)
 	var rendered_path := _trace_via_renderer(scene)
 
-	gut.p("=== RAW TRACE (before VisualConverter) ===")
-	gut.p("Steps: %d" % raw_path.steps.size())
-	_dump_steps(raw_path, "RAW")
+	var raw_gaps := _find_large_gaps(raw_path, 5.0)
+	var rendered_gaps := _find_large_gaps(rendered_path, 5.0)
 
-	gut.p("")
-	gut.p("=== RENDERED TRACE (after VisualConverter) ===")
-	gut.p("Steps: %d" % rendered_path.steps.size())
-	_dump_steps(rendered_path, "RENDERED")
+	var non_portal_raw := raw_gaps.filter(func(g): return not g["after_portal"])
+	var non_portal_rendered := rendered_gaps.filter(func(g): return not g["after_portal"])
 
-	var raw_gaps := _find_large_gaps(raw_path, 100.0)
-	var rendered_gaps := _find_large_gaps(rendered_path, 100.0)
-
-	gut.p("")
-	gut.p("=== LARGE GAPS (>100px) ===")
-	gut.p("Raw: %d, Rendered: %d" % [raw_gaps.size(), rendered_gaps.size()])
-
-	assert_gt(raw_gaps.size() + rendered_gaps.size(), 0,
-		"Should reproduce at least one large gap")
+	assert_eq(non_portal_raw.size(), 0,
+		"Raw trace should have no non-portal gaps > 5px")
+	assert_eq(non_portal_rendered.size(), 0,
+		"Rendered trace should have no non-portal gaps > 5px")
 
 func test_frame_transitions_at_gaps() -> void:
 	var scene := _build_scene()
@@ -97,41 +89,24 @@ func test_frame_transitions_at_gaps() -> void:
 
 	pass_test("Frame transition analysis complete")
 
-func test_hitpoint_on_carrier() -> void:
+func test_hitpoint_visual_end_consistency() -> void:
 	var scene := _build_scene()
 	add_child_autofree(scene)
 	await get_tree().process_frame
 	await get_tree().process_frame
 
 	var raw_path := _trace_raw(scene)
-	var surfaces: Array[Surface] = scene.surfaces
-
-	gut.p("=== SURFACES ===")
-	for surf in surfaces:
-		var seg := surf.segment
-		var carrier := seg.get_carrier()
-		var kind := "line" if carrier.is_line() else "circle(r=%.1f)" % carrier.radius()
-		gut.p("  Surface %d: %s start=%s end=%s" % [surf.id, kind, seg.start.coords, seg.end.coords])
-
-	gut.p("")
-	gut.p("=== HITPOINT-ON-CARRIER CHECK ===")
+	var max_diff := 0.0
 	for i in raw_path.steps.size():
 		var step: Tracer.Step = raw_path.steps[i]
 		if step.hit == null:
 			continue
 		var hp_coords := step.hit.point.coords
-		var frame := step.frame
-		var visual_end := step.end
-		var recomputed_end := frame.apply(hp_coords)
-		var end_diff := visual_end.distance_to(recomputed_end)
-
-		var msg := "Step %d: hit=(%s) frame_id=%d visual_end=%s recomputed=%s diff=%.6f" % [
-			i, hp_coords, frame.id, visual_end, recomputed_end, end_diff]
-		if end_diff > 0.01:
-			msg += " *** MISMATCH ***"
-		gut.p("  " + msg)
-
-	pass_test("Hitpoint-on-carrier analysis complete")
+		var recomputed_end := step.frame.apply(hp_coords)
+		var end_diff := step.end.distance_to(recomputed_end)
+		if end_diff > max_diff:
+			max_diff = end_diff
+	assert_lt(max_diff, 1.0, "Visual end should match frame.apply(hitpoint) within 1px")
 
 func _dump_steps(path: Tracer.TracedPath, label: String) -> void:
 	for i in path.steps.size():
@@ -171,80 +146,6 @@ func _find_large_gaps(path: Tracer.TracedPath, threshold: float) -> Array[Dictio
 			})
 	return gaps
 
-func test_normalized_carrier_size() -> void:
-	var scene := _build_scene()
-	add_child_autofree(scene)
-	await get_tree().process_frame
-	await get_tree().process_frame
-
-	var raw_path := _trace_raw(scene)
-	var surfaces: Array[Surface] = scene.surfaces
-
-	gut.p("=== NORMALIZED CARRIER SIZE ANALYSIS ===")
-	gut.p("")
-
-	for i in range(1, raw_path.steps.size()):
-		var prev: Tracer.Step = raw_path.steps[i - 1]
-		var curr: Tracer.Step = raw_path.steps[i]
-		var gap := prev.end.distance_to(curr.start)
-		if gap < 10.0:
-			continue
-
-		if prev.hit == null:
-			continue
-
-		var hp := prev.hit.point.coords
-		var surf_id := prev.surface_id
-		var orig_surf: Surface = null
-		for s in surfaces:
-			if s.id == surf_id:
-				orig_surf = s
-				break
-		if orig_surf == null:
-			continue
-
-		var orig_carrier := orig_surf.segment.get_carrier()
-		var orig_kind := "line" if orig_carrier.is_line() else "circle(r=%.4f)" % orig_carrier.radius()
-
-		var frame := prev.frame
-		var cache := TransformCache.new()
-		var frame_inv := cache.invert_cached(frame)
-
-		var norm_start := frame_inv.apply(orig_surf.segment.start.coords)
-		var norm_end := frame_inv.apply(orig_surf.segment.end.coords)
-		var norm_via := frame_inv.apply(orig_surf.segment.via.coords)
-
-		var span_se := norm_start.distance_to(norm_end)
-		var span_sv := norm_start.distance_to(norm_via)
-
-		var norm_seg := Segment.from_coords(norm_start, norm_end, norm_via)
-		var norm_carrier := norm_seg.get_carrier()
-		var norm_kind := "line" if norm_carrier.is_line() else "circle(r=%.6f)" % norm_carrier.radius()
-
-		var direct_carrier := orig_carrier.transformed_by(frame_inv)
-		var direct_kind := "line" if direct_carrier.is_line() else "circle(r=%.6f)" % direct_carrier.radius()
-
-		var hp_dist_from_norm_carrier := absf(norm_carrier.evaluate(hp))
-		var hp_dist_from_direct_carrier := absf(direct_carrier.evaluate(hp))
-
-		gut.p("Gap %d->%d (%.0fpx): hit surf=%d (%s)" % [i - 1, i, gap, surf_id, orig_kind])
-		gut.p("  Norm points: start=%s end=%s via=%s" % [norm_start, norm_end, norm_via])
-		gut.p("  Norm point spread: start-end=%.8f start-via=%.8f" % [span_se, span_sv])
-		gut.p("  Carrier from 3 points: %s" % norm_kind)
-		gut.p("  Carrier via transformed_by: %s" % direct_kind)
-		gut.p("  hp=%s" % hp)
-		gut.p("  hp distance from 3pt carrier: %.10f" % hp_dist_from_norm_carrier)
-		gut.p("  hp distance from direct carrier: %.10f" % hp_dist_from_direct_carrier)
-
-		if not norm_carrier.is_line() and not direct_carrier.is_line():
-			gut.p("  3pt center=%s  direct center=%s" % [norm_carrier.center(), direct_carrier.center()])
-			gut.p("  3pt radius=%.8f  direct radius=%.8f" % [norm_carrier.radius(), direct_carrier.radius()])
-			gut.p("  Center offset=%.8f  Radius ratio=%.8f" % [
-				norm_carrier.center().distance_to(direct_carrier.center()),
-				norm_carrier.radius() / direct_carrier.radius() if direct_carrier.radius() > 0 else INF])
-		gut.p("")
-
-	pass_test("Normalized carrier analysis complete")
 
 func test_root_cause_frame_discontinuity() -> void:
 	var scene := _build_scene()

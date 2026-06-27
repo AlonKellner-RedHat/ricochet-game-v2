@@ -21,22 +21,6 @@ func apply_forward(hit_point: Vector2, segment: Segment, side: int) -> Ray:
 	var direction := Direction.from_coords(hit_point, hit_point + exit_dir)
 	return Ray.from_coords(hit_point, direction)
 
-func back_propagate(target: Vector2, segment: Segment) -> Variant:
-	var carrier := segment.get_carrier()
-	var center := carrier.center()
-	var dir_to_target := target - center
-	if dir_to_target.length_squared() == 0.0:
-		return null
-	var dir_normalized := dir_to_target.normalized()
-	var r := carrier.radius()
-	var candidate_near := center + dir_normalized * r
-	var candidate_far := center - dir_normalized * r
-	if Intersection.is_on_segment(candidate_near, segment):
-		return candidate_near
-	if Intersection.is_on_segment(candidate_far, segment):
-		return candidate_far
-	return null
-
 func get_display_name() -> String:
 	return "circle_normal_back" if _project_back else "circle_normal"
 

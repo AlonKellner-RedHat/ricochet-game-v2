@@ -67,24 +67,6 @@ func test_stage73_apply_forward_direction_is_perpendicular() -> void:
 	assert_almost_eq(absf(h_dir.dot(h_line_dir)), 0.0, 0.01,
 		"Horizontal line: output should be perpendicular to line direction")
 
-# --- Test 3: back_propagate within segment ---
-
-func test_stage73_back_propagate_within_segment() -> void:
-	var seg := _vertical_seg(250.0)
-	var effect := LineNormalProjection.new()
-	var result = effect.back_propagate(Vector2(400, 300), seg)
-	assert_not_null(result, "Should return projected point within segment")
-	assert_almost_eq(result, Vector2(250, 300), TOL,
-		"Projection of (400,300) onto x=250 should be (250,300)")
-
-# --- Test 4: back_propagate outside segment ---
-
-func test_stage73_back_propagate_outside_segment() -> void:
-	var seg := _vertical_seg(250.0)
-	var effect := LineNormalProjection.new()
-	var result = effect.back_propagate(Vector2(400, 600), seg)
-	assert_null(result, "Should return null when projection falls outside segment")
-
 # --- Test 5: S10 - frame resets to identity after projective hit ---
 
 func test_stage73_S10_frame_resets_to_identity() -> void:
@@ -180,10 +162,6 @@ func test_stage73_S16_no_nan_inf() -> void:
 	var dir := ray.direction.to_normalized()
 	assert_false(is_nan(dir.x), "direction.x should not be NaN")
 	assert_false(is_nan(dir.y), "direction.y should not be NaN")
-	var proj = effect.back_propagate(Vector2(400, 300), seg)
-	if proj != null:
-		assert_false(is_nan(proj.x), "back_propagate x should not be NaN")
-		assert_false(is_nan(proj.y), "back_propagate y should not be NaN")
 
 # --- Test 10: project_back exits on same side ---
 

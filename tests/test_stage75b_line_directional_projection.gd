@@ -70,32 +70,6 @@ func test_stage75b_diagonal_normal() -> void:
 	assert_almost_eq(absf(dir.y), absf(expected.y), 0.01,
 		"Diagonal normal: |y| should be ~0.707")
 
-# --- Test 5: back_propagate on segment ---
-
-func test_stage75b_back_propagate_on_segment() -> void:
-	var seg := _standard_line()
-	var effect := LineDirectionalProjection.new(Vector2(1, 0))
-	var result = effect.back_propagate(Vector2(500, 250), seg)
-	assert_not_null(result, "Should return point on segment")
-	assert_almost_eq(result, Vector2(300, 250), TOL,
-		"Projecting (500,250) along normal (1,0) should hit line at (300,250)")
-
-# --- Test 6: back_propagate outside segment ---
-
-func test_stage75b_back_propagate_outside_segment() -> void:
-	var seg := _standard_line()
-	var effect := LineDirectionalProjection.new(Vector2(1, 0))
-	var result = effect.back_propagate(Vector2(500, 600), seg)
-	assert_null(result, "Point at y=600 projects to (300,600) which is outside segment")
-
-# --- Test 7: back_propagate parallel ---
-
-func test_stage75b_back_propagate_parallel() -> void:
-	var seg := _standard_line()
-	var effect := LineDirectionalProjection.new(Vector2(0, 1))
-	var result = effect.back_propagate(Vector2(500, 300), seg)
-	assert_null(result, "Normal parallel to line should return null")
-
 # --- Test 8: S16 - no NaN/Inf ---
 
 func test_stage75b_S16_no_nan_inf() -> void:
@@ -110,10 +84,6 @@ func test_stage75b_S16_no_nan_inf() -> void:
 	var dir := ray.direction.to_normalized()
 	assert_false(is_nan(dir.x), "direction.x not NaN")
 	assert_false(is_nan(dir.y), "direction.y not NaN")
-	var proj = effect.back_propagate(Vector2(500, 300), seg)
-	if proj != null:
-		assert_false(is_nan(proj.x), "back_propagate x not NaN")
-		assert_false(is_nan(proj.y), "back_propagate y not NaN")
 
 # --- Test 9: kind is projective ---
 

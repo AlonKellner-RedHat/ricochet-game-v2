@@ -24,13 +24,14 @@ class HitRecord extends RefCounted:
 	func is_fully_blocked() -> bool:
 		return blocked_left and blocked_right
 
-static func find_all_hits(ray: Ray, segments: Array, origin_on_seg: Segment = null, origin_carrier: GeneralizedCircle = null) -> Array:
+static func find_all_hits(ray: Ray, segments: Array, origin_on_seg: Segment = null, origin_carrier: GeneralizedCircle = null, frame: MobiusTransform = null, visual_carriers: Dictionary = {}) -> Array:
 	var results: Array = []
 	for seg in segments:
 		var carrier_override: GeneralizedCircle = null
 		if seg == origin_on_seg and origin_carrier != null:
 			carrier_override = origin_carrier
-		results.append_array(_find_segment_hits(ray, seg, seg == origin_on_seg, carrier_override))
+		var vis_carrier: GeneralizedCircle = visual_carriers.get(seg) as GeneralizedCircle
+		results.append_array(_find_segment_hits(ray, seg, seg == origin_on_seg, carrier_override, vis_carrier, frame))
 	return results
 
 static func _detect_endpoints_on_ray(ray: Ray, segment: Segment) -> Dictionary:
@@ -55,10 +56,18 @@ static func _detect_endpoints_on_ray(ray: Ray, segment: Segment) -> Dictionary:
 			result[ep_idx] = project_point_on_ray(ray, ep_coords)
 	return result
 
-static func _find_segment_hits(ray: Ray, segment: Segment, origin_on_carrier: bool = false, carrier_override: GeneralizedCircle = null) -> Array:
+static func _find_segment_hits(ray: Ray, segment: Segment, origin_on_carrier: bool = false, carrier_override: GeneralizedCircle = null, visual_carrier: GeneralizedCircle = null, frame: MobiusTransform = null) -> Array:
 	var ep_on_ray := _detect_endpoints_on_ray(ray, segment)
 	var carrier: GeneralizedCircle = carrier_override if carrier_override != null else segment.get_carrier()
-	var quad_hits := _intersect_ray_carrier(ray, carrier)
+	var quad_hits: Array
+	var use_pullback := false
+	if visual_carrier != null and frame != null and frame.id != MobiusTransform.IDENTITY_ID and not visual_carrier.is_line() and not carrier.is_line():
+		var norm_r := carrier.radius()
+		use_pullback = is_nan(norm_r) or norm_r < 1.0
+	if use_pullback:
+		quad_hits = inversive_pullback_intersect(ray, visual_carrier, frame)
+	else:
+		quad_hits = _intersect_ray_carrier(ray, carrier)
 
 	if quad_hits.is_empty() and ep_on_ray.is_empty() and not origin_on_carrier:
 		return []
@@ -220,6 +229,85 @@ static func _intersect_ray_carrier(ray: Ray, carrier: GeneralizedCircle) -> Arra
 		results.append({"t": t, "point": point})
 	return results
 
+static func ray_to_line(ray: Ray) -> GeneralizedCircle:
+	var dir := ray.direction.to_vector()
+	var ox := ray.origin.coords.x
+	var oy := ray.origin.coords.y
+	return GeneralizedCircle.from_line(dir.y, -dir.x, dir.x * oy - dir.y * ox)
+
+static func inversive_pullback_intersect(ray: Ray, visual_carrier: GeneralizedCircle, frame: MobiusTransform) -> Array:
+	var ray_line := ray_to_line(ray)
+	var visual_ray := _hermitian_transform_f64(ray_line, frame)
+	var visual_hits := intersect_circles(visual_ray, visual_carrier)
+	if visual_hits.is_empty():
+		return []
+
+	var frame_inv := frame.invert()
+	var dir := ray.direction.to_vector()
+	var results: Array = []
+	for vh in visual_hits:
+		var norm_point := frame_inv.apply(vh)
+		var t := project_point_on_ray(ray, norm_point)
+		var on_ray_point := ray.origin.coords + t * dir
+		results.append({"t": t, "point": on_ray_point})
+	return results
+
+# Float64 Hermitian congruence H' = N† H N, avoiding Vector2 float32 truncation.
+static func _hermitian_transform_f64(circle: GeneralizedCircle, mobius: MobiusTransform) -> GeneralizedCircle:
+	var h_w_re: float = circle.b / 2.0
+	var h_w_im: float = -circle.c / 2.0
+
+	var ax: float = mobius.a.x; var ay: float = mobius.a.y
+	var bx: float = mobius.b.x; var by: float = mobius.b.y
+	var cx: float = mobius.c.x; var cy: float = mobius.c.y
+	var dx: float = mobius.d.x; var dy: float = mobius.d.y
+
+	var n00_x: float; var n00_y: float
+	var n01_x: float; var n01_y: float
+	var n10_x: float; var n10_y: float
+	var n11_x: float; var n11_y: float
+	var h01_x: float; var h01_y: float
+	var h10_x: float; var h10_y: float
+
+	if mobius.conjugating:
+		n00_x = dx; n00_y = -dy
+		n01_x = -bx; n01_y = by
+		n10_x = -cx; n10_y = cy
+		n11_x = ax; n11_y = -ay
+		h01_x = h_w_re; h01_y = -h_w_im
+		h10_x = h_w_re; h10_y = h_w_im
+	else:
+		n00_x = dx; n00_y = dy
+		n01_x = -bx; n01_y = -by
+		n10_x = -cx; n10_y = -cy
+		n11_x = ax; n11_y = ay
+		h01_x = h_w_re; h01_y = h_w_im
+		h10_x = h_w_re; h10_y = -h_w_im
+
+	var nh00_x := n00_x; var nh00_y := -n00_y
+	var nh01_x := n10_x; var nh01_y := -n10_y
+	var nh10_x := n01_x; var nh10_y := -n01_y
+	var nh11_x := n11_x; var nh11_y := -n11_y
+
+	var h_a: float = circle.a
+	var h_d: float = circle.d
+
+	var t00_x := nh00_x * h_a + (nh01_x * h10_x - nh01_y * h10_y)
+	var t00_y := nh00_y * h_a + (nh01_x * h10_y + nh01_y * h10_x)
+	var t01_x := (nh00_x * h01_x - nh00_y * h01_y) + nh01_x * h_d
+	var t01_y := (nh00_x * h01_y + nh00_y * h01_x) + nh01_y * h_d
+	var t10_x := nh10_x * h_a + (nh11_x * h10_x - nh11_y * h10_y)
+	var t10_y := nh10_y * h_a + (nh11_x * h10_y + nh11_y * h10_x)
+	var t11_x := (nh10_x * h01_x - nh10_y * h01_y) + nh11_x * h_d
+	var t11_y := (nh10_x * h01_y + nh10_y * h01_x) + nh11_y * h_d
+
+	var r00 := (t00_x * n00_x - t00_y * n00_y) + (t01_x * n10_x - t01_y * n10_y)
+	var r01_x := (t00_x * n01_x - t00_y * n01_y) + (t01_x * n11_x - t01_y * n11_y)
+	var r01_y := (t00_x * n01_y + t00_y * n01_x) + (t01_x * n11_y + t01_y * n11_x)
+	var r11 := (t10_x * n01_x - t10_y * n01_y) + (t11_x * n11_x - t11_y * n11_y)
+
+	return GeneralizedCircle.new(r00, 2.0 * r01_x, -2.0 * r01_y, r11)
+
 static func project_point_on_ray(ray: Ray, point: Vector2) -> float:
 	var dir := ray.direction.to_vector()
 	var dir_len_sq := dir.length_squared()
@@ -280,3 +368,90 @@ static func endpoint_blocked_sides(point: Vector2, segment: Segment, ray: Ray, w
 	if cross > 0:
 		return [false, true]
 	return [true, false]
+
+static func intersect_circles(c1: GeneralizedCircle, c2: GeneralizedCircle) -> Array[Vector2]:
+	var is_line1 := c1.is_line()
+	var is_line2 := c2.is_line()
+
+	if is_line1 and is_line2:
+		return _intersect_line_line(c1, c2)
+	if is_line1:
+		return _intersect_line_circle(c1, c2)
+	if is_line2:
+		return _intersect_line_circle(c2, c1)
+
+	var cx1 := -c1.b / (2.0 * c1.a)
+	var cy1 := -c1.c / (2.0 * c1.a)
+	var r1 := c1.radius()
+	var cx2 := -c2.b / (2.0 * c2.a)
+	var cy2 := -c2.c / (2.0 * c2.a)
+	var r2 := c2.radius()
+
+	var dx := cx2 - cx1
+	var dy := cy2 - cy1
+	var d_sq := dx * dx + dy * dy
+	var d := sqrt(d_sq)
+
+	if d < 1e-12:
+		return []
+	if d > r1 + r2 + 1e-10:
+		return []
+	if d < absf(r1 - r2) - 1e-10:
+		return []
+
+	var a_param := (r1 * r1 - r2 * r2 + d_sq) / (2.0 * d)
+	var h_sq := r1 * r1 - a_param * a_param
+	if h_sq < 0.0:
+		h_sq = 0.0
+	var h := sqrt(h_sq)
+
+	var mx := cx1 + a_param * dx / d
+	var my := cy1 + a_param * dy / d
+
+	if h < 1e-12:
+		return [Vector2(mx, my)] as Array[Vector2]
+
+	var px := -dy / d * h
+	var py := dx / d * h
+	return [Vector2(mx + px, my + py), Vector2(mx - px, my - py)] as Array[Vector2]
+
+static func _intersect_line_line(l1: GeneralizedCircle, l2: GeneralizedCircle) -> Array[Vector2]:
+	var det := l1.b * l2.c - l1.c * l2.b
+	if absf(det) < 1e-12:
+		return []
+	var x := (l1.c * l2.d - l2.c * l1.d) / det
+	var y := (l2.b * l1.d - l1.b * l2.d) / det
+	var result: Array[Vector2] = [Vector2(x, y)]
+	return result
+
+static func _intersect_line_circle(line: GeneralizedCircle, circ: GeneralizedCircle) -> Array[Vector2]:
+	var cx := -circ.b / (2.0 * circ.a)
+	var cy := -circ.c / (2.0 * circ.a)
+	var r := circ.radius()
+
+	var lb := line.b
+	var lc := line.c
+	var ld := line.d
+	var len_sq := lb * lb + lc * lc
+	if len_sq < 1e-24:
+		return []
+	var dist := (lb * cx + lc * cy + ld) / sqrt(len_sq)
+	if absf(dist) > r + 1e-10:
+		return []
+
+	var foot_x := cx - lb * dist / sqrt(len_sq)
+	var foot_y := cy - lc * dist / sqrt(len_sq)
+
+	var h_sq := r * r - dist * dist
+	if h_sq < 0.0:
+		h_sq = 0.0
+	var h := sqrt(h_sq)
+
+	if h < 1e-12:
+		return [Vector2(foot_x, foot_y)] as Array[Vector2]
+
+	var dir_x := -lc / sqrt(len_sq)
+	var dir_y := lb / sqrt(len_sq)
+	return [
+		Vector2(foot_x + dir_x * h, foot_y + dir_y * h),
+		Vector2(foot_x - dir_x * h, foot_y - dir_y * h)] as Array[Vector2]

@@ -57,23 +57,6 @@ func test_stage74_apply_forward_angled() -> void:
 	assert_almost_eq(dir.x, 0.0, 0.01, "Bottom hit: x should be 0")
 	assert_almost_eq(dir.y, 1.0, 0.01, "Bottom hit: y should be 1 (radially outward)")
 
-# --- Test 3: back_propagate on arc ---
-
-func test_stage74_back_propagate_on_arc() -> void:
-	var seg := _standard_arc()
-	var effect := CircleNormalProjection.new()
-	var result = effect.back_propagate(Vector2(400, 200), seg)
-	assert_not_null(result, "Should return projected point on arc")
-	assert_almost_eq(result, Vector2(300, 200), TOL, "Should project to (300,200)")
-
-# --- Test 4: back_propagate outside arc ---
-
-func test_stage74_back_propagate_outside_arc() -> void:
-	var seg := _small_arc()
-	var effect := CircleNormalProjection.new()
-	var result = effect.back_propagate(Vector2(200, 0), seg)
-	assert_null(result, "Should return null when line(center,target) misses the arc")
-
 # --- Test 5: S10 - frame resets to identity ---
 
 func test_stage74_S10_frame_resets() -> void:
@@ -137,18 +120,6 @@ func test_stage74_S16_no_nan_inf() -> void:
 	var dir := ray.direction.to_normalized()
 	assert_false(is_nan(dir.x), "direction.x not NaN")
 	assert_false(is_nan(dir.y), "direction.y not NaN")
-	var proj = effect.back_propagate(Vector2(400, 200), seg)
-	if proj != null:
-		assert_false(is_nan(proj.x), "back_propagate x not NaN")
-		assert_false(is_nan(proj.y), "back_propagate y not NaN")
-
-# --- Test 8: back_propagate target at center ---
-
-func test_stage74_back_propagate_target_at_center() -> void:
-	var seg := _standard_arc()
-	var effect := CircleNormalProjection.new()
-	var result = effect.back_propagate(Vector2(200, 200), seg)
-	assert_null(result, "Target at center should return null (degenerate)")
 
 # --- Test 9: project_back exits same side ---
 

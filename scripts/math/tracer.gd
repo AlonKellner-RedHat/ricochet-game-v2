@@ -406,7 +406,16 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 				break
 		s.origin_on_surface = null
 
-	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, origin_on_seg, origin_carrier)
+	var visual_carriers: Dictionary = {}
+	var pullback_frame: MobiusTransform = null
+	if s.frame.id != MobiusTransform.IDENTITY_ID:
+		pullback_frame = s.frame
+		for ns in s.norm_surfaces:
+			var orig_surf = s.norm_to_surface.get(ns.segment)
+			if orig_surf != null:
+				visual_carriers[ns.segment] = orig_surf.segment.get_carrier()
+
+	var carrier_hits := Intersection.find_all_hits(s.ray, norm_segments, origin_on_seg, origin_carrier, pullback_frame, visual_carriers)
 	var origin_hit_seg: Segment = null
 	var origin_hit_side: Side.Value = Side.Value.LEFT
 	var origin_hit_on_seg: bool = false

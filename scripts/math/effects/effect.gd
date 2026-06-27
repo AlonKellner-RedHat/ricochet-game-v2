@@ -24,9 +24,6 @@ func get_tracked_transform() -> TrackedTransform:
 func apply_forward(_hit_point: Vector2, _segment: Segment, _side: int) -> Ray:
 	return null
 
-func back_propagate(_target: Vector2, _segment: Segment) -> Variant:
-	return null
-
 func normalized(_carrier: GeneralizedCircle) -> Effect:
 	return self
 
