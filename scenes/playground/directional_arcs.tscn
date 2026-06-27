@@ -10,9 +10,8 @@ script = ExtResource("2")
 gravity = Vector2(0, 0)
 room_rect = Rect2(560, 240, 800, 600)
 build_room = true
-mirror_both_lines = Array[Vector4]([Vector4(960, 280, 960, 380)])
-portal_lines = PackedFloat64Array(830, 340, 830, 740, 0, 300, 0)
-portal_arcs = PackedFloat64Array(700, 350, 700, 530, 640, 440, 0, 550, 0)
+circle_directional_arcs = PackedFloat64Array(850, 390, 850, 690, 1000, 540, 1, 0)
+circle_directional_back_arcs = PackedFloat64Array(1100, 390, 1100, 690, 1250, 540, 1, 0)
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0
@@ -20,7 +19,7 @@ offset_bottom = 1080.0
 color = Color(0.1, 0.1, 0.1, 1)
 
 [node name="Player" parent="." instance=ExtResource("1")]
-position = Vector2(650, 540)
+position = Vector2(960, 540)
 
 [node name="Cursor" type="Node2D" parent="."]
 script = ExtResource("3")

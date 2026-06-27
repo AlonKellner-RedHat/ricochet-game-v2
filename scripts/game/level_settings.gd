@@ -11,6 +11,7 @@ extends Node2D
 @export var mirror_right_lines: Array[Vector4] = []
 @export var mirror_both_lines: Array[Vector4] = []
 @export var inversion_left_arcs: PackedFloat64Array = PackedFloat64Array()
+@export var semi_reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var full_reflective_arcs: PackedFloat64Array = PackedFloat64Array()
 @export var normal_projection_lines: Array[Vector4] = []
@@ -58,6 +59,14 @@ func _ready() -> void:
 		var inversion := CircleInversionEffect.new(seg.get_carrier())
 		var surf := Surface.new(seg, SideConfig.new(inversion, true), SideConfig.new(null, false), false, true)
 		_add_surface(surf, "Inversion")
+	for i in range(0, semi_reflective_arcs.size(), 6):
+		var seg := Segment.from_coords(
+			Vector2(semi_reflective_arcs[i], semi_reflective_arcs[i + 1]),
+			Vector2(semi_reflective_arcs[i + 2], semi_reflective_arcs[i + 3]),
+			Vector2(semi_reflective_arcs[i + 4], semi_reflective_arcs[i + 5]))
+		var reflection := ReflectionEffect.new(seg.get_carrier())
+		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(null, false), false, false)
+		_add_surface(surf, "SemiReflArc")
 	for i in range(0, reflective_arcs.size(), 6):
 		var seg := Segment.from_coords(
 			Vector2(reflective_arcs[i], reflective_arcs[i + 1]),

@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Ricochet Game v2"
-run/main_scene="res://scenes/playground/projective.tscn"
+run/main_scene="res://scenes/violation_viewer.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 
 [display]

@@ -18,7 +18,7 @@ mirror_both_lines = Array[Vector4]([Vector4(1400, 200, 1400, 500)])
 mirror_right_lines = Array[Vector4]([Vector4(960, 150, 960, 400)])
 inversion_left_arcs = PackedFloat64Array(700, 300, 700, 600, 820, 450)
 reflective_arcs = PackedFloat64Array(1100, 700, 1300, 700, 1200, 580)
-portal_lines = PackedFloat64Array(550, 600, 550, 900, 0, 900, 0)
+portal_lines = PackedFloat64Array(550, 600, 550, 900, 0, 800, 0)
 portal_arcs = PackedFloat64Array(1500, 550, 1500, 800, 1430, 675, 0, -1100, 0)
 
 [node name="Background" type="ColorRect" parent="."]
