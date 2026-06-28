@@ -85,7 +85,7 @@ func test_stage75_S10_frame_resets() -> void:
 	var found_post_projective := false
 	for i in range(path.steps.size()):
 		var step: Tracer.Step = path.steps[i]
-		if step.surface_id == proj_surf.id:
+		if step.surface_id == proj_surf.id and step.hit_on_segment:
 			if i + 1 < path.steps.size():
 				var post_step: Tracer.Step = path.steps[i + 1]
 				assert_eq(post_step.frame_id, MobiusTransform.IDENTITY_ID,

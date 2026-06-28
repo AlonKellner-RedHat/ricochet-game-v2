@@ -1,13 +1,11 @@
 extends GutTest
 
 const TEST_LEVELS_DIR := "res://scenes/test_levels/"
-const VIOLATIONS_PATH := "user://violations.json"
+const VIOLATIONS_PATH := "res://violations.json"
 const MAX_VIOLATIONS_PER_GROUP := 5
 const MAX_TOTAL_VIOLATIONS := 200
 
 func test_sweep_all_scenes() -> void:
-	if FileAccess.file_exists(VIOLATIONS_PATH):
-		DirAccess.remove_absolute(VIOLATIONS_PATH)
 	var scene_paths := _discover_scenes()
 	assert_gt(scene_paths.size(), 0, "Should find test scenes in %s" % TEST_LEVELS_DIR)
 
@@ -37,8 +35,8 @@ func test_sweep_all_scenes() -> void:
 					"violation": violation,
 				})
 
+	_save_violations(total_failures)
 	if total_failures.size() > 0:
-		_save_violations(total_failures)
 		var report := "Invariant violations found (%d):\n" % total_failures.size()
 		for f in total_failures.slice(0, 10):
 			report += "  [%s] player=%s cursor=%s: %s\n" % [
@@ -111,8 +109,8 @@ func test_sweep_with_plans() -> void:
 					else:
 						total_combos += 1
 
+	_save_violations(total_failures)
 	if total_failures.size() > 0:
-		_save_violations(total_failures)
 		var report := "Plan sweep violations (%d):\n" % total_failures.size()
 		for f in total_failures.slice(0, 10):
 			report += "  [%s] plan=%s player=%s cursor=%s: %s\n" % [
@@ -236,26 +234,11 @@ func _save_violations(failures: Array) -> void:
 
 	var all_entries: Array = existing + new_entries
 
-	var grouped: Dictionary = {}
-	for entry in all_entries:
-		var vtype: String = entry.violation.split(":")[0] if ":" in entry.violation else entry.violation
-		var plan_str := _plan_to_str_from_data(entry.plan) if entry.plan is Array and entry.plan.size() > 0 else "none"
-		var key := "%s|%s|%s" % [entry.scene, plan_str, vtype]
-		if not grouped.has(key):
-			grouped[key] = []
-		if grouped[key].size() < MAX_VIOLATIONS_PER_GROUP:
-			grouped[key].append(entry)
-
-	var sampled: Array = []
-	for key in grouped:
-		sampled.append_array(grouped[key])
-	sampled = sampled.slice(0, MAX_TOTAL_VIOLATIONS)
-
 	var file := FileAccess.open(VIOLATIONS_PATH, FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify(sampled, "  "))
+		file.store_string(JSON.stringify(all_entries, "  "))
 		file.close()
-		print("[Sweep] Saved %d violations to %s" % [sampled.size(), VIOLATIONS_PATH])
+		print("[Sweep] Saved %d violations to %s" % [all_entries.size(), VIOLATIONS_PATH])
 
 func _discover_scenes() -> Array[String]:
 	var scenes: Array[String] = []

@@ -58,11 +58,11 @@ func _compute_trace() -> void:
 	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		aim_ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
-	_traced_path = VisualConverter.prepare_for_display(_traced_path, bounds)
+	_traced_path = VisualConverter.prepare_for_display(_traced_path, bounds, surfaces)
 	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 		aim_ray, -1.0,
 		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
-	_planned_path = VisualConverter.prepare_for_display(_planned_path, bounds)
+	_planned_path = VisualConverter.prepare_for_display(_planned_path, bounds, surfaces)
 
 	var ci: int = _planned_path.cursor_index
 	if ci < 0:

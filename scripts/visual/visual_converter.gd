@@ -5,15 +5,20 @@ const POINTS_PER_FULL_CIRCLE := 256
 const MAX_ARC_RADIUS := 100000.0
 const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 
-static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2) -> Tracer.TracedPath:
-	var has_inf := false
-	for step: Tracer.Step in path.steps:
-		if (is_inf(step.via.x) and is_inf(step.via.y)) or is_inf(step.end.x) or is_inf(step.end.y) or is_inf(step.start.x) or is_inf(step.start.y):
-			has_inf = true
-			break
-	if not has_inf:
-		return path
+static func compute_display_end(step: Tracer.Step, surfaces: Array = []) -> Vector2:
+	if step.surface_id < 0:
+		return step.end
+	for surf in surfaces:
+		var s: Surface = surf
+		if s.id == step.surface_id:
+			var carrier: GeneralizedCircle = s.segment.get_carrier()
+			var projected := Intersection.project_onto_carrier(step.end, carrier)
+			if step.end.distance_to(projected) > 5.0:
+				return step.end
+			return projected
+	return step.end
 
+static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2, surfaces: Array = []) -> Tracer.TracedPath:
 	var grown := bounds.grow(1.0)
 	var result := Tracer.TracedPath.new()
 	result.targets_hit = path.targets_hit
@@ -33,7 +38,7 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2) -> Trace
 				step_via = step.end - dir
 			via_inf = is_inf(step_via.x) and is_inf(step_via.y)
 		if not via_inf and not end_inf and not start_inf:
-			result.steps.append(step)
+			result.steps.append(_snap_step(step, surfaces))
 			continue
 		if end_inf and not start_inf and not via_inf:
 			var clip := _clip_to_bounds(step.start, step_via.normalized(), bounds)
@@ -78,6 +83,18 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2) -> Trace
 			result.steps.append(Tracer.Step.new(step.start, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
 	if path.cursor_index >= 0:
 		result.cursor_index = path.cursor_index + cursor_shift
+	return result
+
+static func _snap_step(step: Tracer.Step, surfaces: Array = []) -> Tracer.Step:
+	var display_end := compute_display_end(step, surfaces)
+	if display_end == step.end or display_end == step.start:
+		return step
+	var result := Tracer.Step.new(step.start, display_end, step.frame_id, step.hit, step.ray, step.frame, step.via, step.is_arc_step)
+	result.type = step.type
+	result.surface_id = step.surface_id
+	result.hit_side = step.hit_side
+	result.hit_on_segment = step.hit_on_segment
+	result.after_portal = step.after_portal
 	return result
 
 static func _clip_to_bounds(origin: Vector2, dir: Vector2, bounds: Rect2) -> Vector2:

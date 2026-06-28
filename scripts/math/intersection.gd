@@ -257,10 +257,10 @@ static func _hermitian_transform_f64(circle: GeneralizedCircle, mobius: MobiusTr
 	var h_w_re: float = circle.b / 2.0
 	var h_w_im: float = -circle.c / 2.0
 
-	var ax: float = mobius.a.x; var ay: float = mobius.a.y
-	var bx: float = mobius.b.x; var by: float = mobius.b.y
-	var cx: float = mobius.c.x; var cy: float = mobius.c.y
-	var dx: float = mobius.d.x; var dy: float = mobius.d.y
+	var ax: float = mobius.a_re; var ay: float = mobius.a_im
+	var bx: float = mobius.b_re; var by: float = mobius.b_im
+	var cx: float = mobius.c_re; var cy: float = mobius.c_im
+	var dx: float = mobius.d_re; var dy: float = mobius.d_im
 
 	var n00_x: float; var n00_y: float
 	var n01_x: float; var n01_y: float
@@ -314,6 +314,23 @@ static func project_point_on_ray(ray: Ray, point: Vector2) -> float:
 	if dir_len_sq == 0.0:
 		return 0.0
 	return (point - ray.origin.coords).dot(dir) / dir_len_sq
+
+static func project_onto_carrier(point: Vector2, carrier: GeneralizedCircle) -> Vector2:
+	if carrier.is_line():
+		var b := carrier.b
+		var c := carrier.c
+		var d := carrier.d
+		var denom := b * b + c * c
+		var f := b * point.x + c * point.y + d
+		return Vector2(point.x - f * b / denom, point.y - f * c / denom)
+	else:
+		var center := carrier.center()
+		var r := carrier.radius()
+		var diff := point - center
+		var dist := diff.length()
+		if dist < 1e-12:
+			return center + Vector2(r, 0)
+		return center + r * diff / dist
 
 static func _determine_side(ray: Ray, point: Vector2, seg: Segment) -> Side.Value:
 	var carrier: GeneralizedCircle = seg.get_carrier()

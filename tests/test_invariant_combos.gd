@@ -3,7 +3,7 @@ extends GutTest
 const TEST_LEVELS_DIR := "res://scenes/test_levels/"
 const PLAYGROUND_DIR := "res://scenes/playground/"
 const COMBO_BASE := "res://scenes/test_levels/combo_base.tscn"
-const VIOLATIONS_PATH := "user://violations.json"
+const VIOLATIONS_PATH := "res://violations.json"
 
 const LINE1 := Vector4(600, 300, 600, 700)
 const LINE2 := Vector4(1300, 300, 1300, 700)
@@ -321,8 +321,8 @@ func test_sweep_surface_combos() -> void:
 								"violation": v,
 							})
 
+	_save_violations(total_failures)
 	if total_failures.size() > 0:
-		_save_violations(total_failures)
 		var report := "Combo sweep violations (%d):\n" % total_failures.size()
 		for f in total_failures.slice(0, 10):
 			var display_name: String = f.combo.label if "combo" in f else f.scene
@@ -336,7 +336,15 @@ func test_sweep_surface_combos() -> void:
 		pass_test("Combo sweep passed: %d combos across %d combinations (%d skipped: checker lacks proj/dir support)" % [total_combos, COMBOS.size(), skipped])
 
 func _save_violations(failures: Array) -> void:
-	var entries: Array = []
+	var existing: Array = []
+	if FileAccess.file_exists(VIOLATIONS_PATH):
+		var rf := FileAccess.open(VIOLATIONS_PATH, FileAccess.READ)
+		if rf:
+			var json := JSON.new()
+			if json.parse(rf.get_as_text()) == OK and json.data is Array:
+				existing = json.data
+			rf.close()
+	var new_entries: Array = []
 	for f in failures:
 		var entry := {
 			"scene": f.scene,
@@ -347,8 +355,10 @@ func _save_violations(failures: Array) -> void:
 		}
 		if "combo" in f:
 			entry["combo"] = f.combo
-		entries.append(entry)
+		new_entries.append(entry)
+	var all_entries: Array = existing + new_entries
 	var file := FileAccess.open(VIOLATIONS_PATH, FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify(entries, "  "))
+		file.store_string(JSON.stringify(all_entries, "  "))
 		file.close()
+		print("[Sweep] Saved %d violations to %s" % [all_entries.size(), VIOLATIONS_PATH])

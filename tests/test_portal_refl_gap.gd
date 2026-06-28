@@ -102,7 +102,7 @@ func test_hitpoint_visual_end_consistency() -> void:
 		if step.hit == null:
 			continue
 		var hp_coords := step.hit.point.coords
-		var recomputed_end := step.frame.apply(hp_coords)
+		var recomputed_end: Vector2 = step.frame.apply_f64(hp_coords)
 		var end_diff := step.end.distance_to(recomputed_end)
 		if end_diff > max_diff:
 			max_diff = end_diff
@@ -202,3 +202,224 @@ func _analyze_frame_transitions(path: Tracer.TracedPath, label: String) -> void:
 			if prev.frame.id != curr.frame.id:
 				gut.p("    prev_frame: a=%s b=%s c=%s d=%s" % [prev.frame.a, prev.frame.b, prev.frame.c, prev.frame.d])
 				gut.p("    curr_frame: a=%s b=%s c=%s d=%s" % [curr.frame.a, curr.frame.b, curr.frame.c, curr.frame.d])
+
+
+func test_trace_ends_on_wall_carrier() -> void:
+	var scene := _build_scene()
+	add_child_autofree(scene)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var surfaces: Array[Surface] = scene.surfaces
+	var rendered_path := _trace_via_renderer(scene)
+
+	var last: Tracer.Step = rendered_path.steps[rendered_path.steps.size() - 1]
+	assert_not_null(last.hit, "Last step should have a hit")
+
+	var hit_surf_id := last.surface_id
+	for surf in surfaces:
+		var s: Surface = surf
+		if s.id == hit_surf_id:
+			var phys_carrier := s.segment.get_carrier()
+			var dist := InvariantChecker._geometric_carrier_dist(last.end, phys_carrier)
+			gut.p("Last step end=%s, dist to wall carrier (surf %d)=%.4f" % [last.end, s.id, dist])
+			assert_lt(dist, 2.0, "Visual end should be within 2px of wall carrier")
+			break
+
+
+func test_investigate_violations() -> void:
+	var scene := _build_scene()
+	add_child_autofree(scene)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var surfaces: Array[Surface] = scene.surfaces
+	var renderer := scene.get_node("PathRenderer")
+	var player := scene.get_node("Player")
+	var cursor := scene.get_node("Cursor")
+	player.global_position = PLAYER
+	cursor.global_position = CURSOR
+	renderer._compute_trace()
+
+	var physical_path: Tracer.TracedPath = renderer.get_traced_path()
+	var planned_path: Tracer.TracedPath = renderer.get_planned_path()
+
+	var room_rect: Rect2 = scene.room_rect
+	var default_bounds := VisualConverter.DEFAULT_BOUNDS
+
+	gut.p("=== VIOLATION INVESTIGATION ===")
+	gut.p("Player: %s  Cursor: %s" % [PLAYER, CURSOR])
+	gut.p("Room rect: %s (end: %s)" % [room_rect, room_rect.end])
+	gut.p("Default bounds: %s (end: %s)" % [default_bounds, default_bounds.end])
+	gut.p("Surfaces: %d" % surfaces.size())
+	for surf in surfaces:
+		var s: Surface = surf
+		var c := s.segment.get_carrier()
+		var kind := "line" if c.is_line() else "circle(r=%.1f)" % c.radius()
+		gut.p("  Surface %d: %s  carrier=%s  start=%s end=%s" % [
+			s.id, kind, c, s.segment.start.coords, s.segment.end.coords])
+	gut.p("")
+
+	for trace_name in ["physical", "planned"]:
+		var path: Tracer.TracedPath = physical_path if trace_name == "physical" else planned_path
+		if path == null:
+			gut.p("  %s path is null" % trace_name)
+			continue
+		gut.p("=== %s trace: %d steps ===" % [trace_name.to_upper(), path.steps.size()])
+
+		for i in path.steps.size():
+			var step: Tracer.Step = path.steps[i]
+			var flag := ""
+			if i == 5 or i == 7:
+				flag = " <<<< VISUAL-ON-CARRIER VIOLATION"
+			if i == path.steps.size() - 1:
+				flag += " <<<< LAST STEP (TRACE-ENDS check)"
+
+			var hit_info := "no-hit"
+			if step.hit:
+				hit_info = "hit surf=%d at=%s side=%d" % [step.surface_id, step.hit.point.coords, step.hit_side]
+
+			gut.p("  [%02d] start=%s end=%s frame=%d conj=%s portal=%s %s%s" % [
+				i, step.start, step.end, step.frame.id, step.frame.conjugating,
+				step.after_portal, hit_info, flag])
+
+			if step.hit:
+				var mapped := step.frame.apply(step.hit.point.coords)
+				var map_diff := step.end.distance_to(mapped)
+				gut.p("       frame.apply(hit)=%s  diff_from_end=%.4f" % [mapped, map_diff])
+
+			# Distance to every physical carrier
+			var min_carrier_dist := INF
+			var closest_surf_id := -1
+			for surf in surfaces:
+				var s: Surface = surf
+				var carrier := s.segment.get_carrier()
+				var f := carrier.evaluate(step.end)
+				var gx := 2.0 * carrier.a * step.end.x + carrier.b
+				var gy := 2.0 * carrier.a * step.end.y + carrier.c
+				var grad := sqrt(gx * gx + gy * gy)
+				var dist := absf(f) / maxf(grad, 1e-10)
+				if dist < min_carrier_dist:
+					min_carrier_dist = dist
+					closest_surf_id = s.id
+			gut.p("       closest_carrier: surf=%d dist=%.4f (threshold=5.0)" % [closest_surf_id, min_carrier_dist])
+
+			if i == 5 or i == 7:
+				gut.p("       --- DETAILED CARRIER DISTANCES FOR STEP %d ---" % i)
+				for surf in surfaces:
+					var s: Surface = surf
+					var carrier := s.segment.get_carrier()
+					var f := carrier.evaluate(step.end)
+					var gx := 2.0 * carrier.a * step.end.x + carrier.b
+					var gy := 2.0 * carrier.a * step.end.y + carrier.c
+					var grad := sqrt(gx * gx + gy * gy)
+					var dist := absf(f) / maxf(grad, 1e-10)
+					var kind := "line" if carrier.is_line() else "circle"
+					gut.p("         surf=%d (%s): dist=%.4f  f=%.6f  grad=%.6f" % [s.id, kind, dist, f, grad])
+
+		# TRACE-ENDS analysis for last step
+		var last: Tracer.Step = path.steps[path.steps.size() - 1]
+		var end_pos := last.end
+		gut.p("")
+		gut.p("  TRACE-ENDS analysis: end=%s" % end_pos)
+		gut.p("    dist_to_player=%.4f (threshold=2.0)" % end_pos.distance_to(PLAYER))
+		gut.p("    bounds check (DEFAULT_BOUNDS): x_left=%.1f x_right=%.1f y_top=%.1f y_bottom=%.1f" % [
+			end_pos.x - default_bounds.position.x,
+			default_bounds.end.x - end_pos.x,
+			end_pos.y - default_bounds.position.y,
+			default_bounds.end.y - end_pos.y])
+		gut.p("    bounds check (room_rect): x_left=%.1f x_right=%.1f y_top=%.1f y_bottom=%.1f" % [
+			end_pos.x - room_rect.position.x,
+			room_rect.end.x - end_pos.x,
+			end_pos.y - room_rect.position.y,
+			room_rect.end.y - end_pos.y])
+		var at_default_bounds := (end_pos.x <= default_bounds.position.x + 2.0 or
+			end_pos.x >= default_bounds.end.x - 2.0 or
+			end_pos.y <= default_bounds.position.y + 2.0 or
+			end_pos.y >= default_bounds.end.y - 2.0)
+		var at_room_bounds := (end_pos.x <= room_rect.position.x + 2.0 or
+			end_pos.x >= room_rect.end.x - 2.0 or
+			end_pos.y <= room_rect.position.y + 2.0 or
+			end_pos.y >= room_rect.end.y - 2.0)
+		gut.p("    at_default_bounds=%s  at_room_bounds=%s" % [at_default_bounds, at_room_bounds])
+		gut.p("")
+
+	# Verify VISUAL-ON-CARRIER root cause
+	gut.p("=== VISUAL-ON-CARRIER ROOT CAUSE VERIFICATION ===")
+	for step_idx in [5, 7]:
+		if step_idx >= physical_path.steps.size():
+			continue
+		var step: Tracer.Step = physical_path.steps[step_idx]
+		if step.hit == null:
+			continue
+		var hit_surf_id := step.surface_id
+		var hp := step.hit.point.coords
+		gut.p("Step %d: hit surf=%d, hitpoint=%s, end=%s, frame=%d, conj=%s, portal=%s" % [
+			step_idx, hit_surf_id, hp, step.end, step.frame.id, step.frame.conjugating, step.after_portal])
+
+		# Check: hitpoint should be on the hit segment's carrier (the carrier used for intersection)
+		var hit_seg: Segment = step.hit.segment
+		if hit_seg:
+			var hit_carrier := hit_seg.get_carrier()
+			var hp_on_hit_carrier := InvariantChecker._geometric_carrier_dist(hp, hit_carrier)
+			gut.p("  hitpoint dist to HIT SEGMENT carrier: %.6f (should be ~0)" % hp_on_hit_carrier)
+			gut.p("  hit segment carrier: a=%.6f b=%.6f c=%.6f d=%.6f is_line=%s" % [
+				hit_carrier.a, hit_carrier.b, hit_carrier.c, hit_carrier.d, hit_carrier.is_line()])
+			gut.p("  hit segment: start=%s end=%s via=%s" % [
+				hit_seg.start.coords, hit_seg.end.coords, hit_seg.via.coords])
+
+		# Show the frame details
+		gut.p("  frame: a=%s b=%s c=%s d=%s" % [step.frame.a, step.frame.b, step.frame.c, step.frame.d])
+
+		# Check visual end against ALL physical carriers
+		gut.p("  visual end dist to each physical carrier:")
+		for surf in surfaces:
+			var s: Surface = surf
+			var d := InvariantChecker._geometric_carrier_dist(step.end, s.segment.get_carrier())
+			if d < 100.0:
+				gut.p("    surf=%d: %.4f" % [s.id, d])
+
+		# The KEY question: frame.apply maps hitpoint → visual end.
+		# If frame preserves carrier membership, visual end should be on physical carrier of hit surface.
+		# But portal frames DON'T preserve carrier membership for surfaces on the OTHER side.
+		for surf in surfaces:
+			var s: Surface = surf
+			if s.id != hit_surf_id:
+				continue
+			var phys_carrier := s.segment.get_carrier()
+			var end_on_phys := InvariantChecker._geometric_carrier_dist(step.end, phys_carrier)
+			gut.p("  visual end dist to HIT SURFACE's physical carrier (surf %d): %.4f" % [hit_surf_id, end_on_phys])
+			break
+		gut.p("")
+
+	# Verify TRACE-ENDS root cause
+	gut.p("=== TRACE-ENDS ROOT CAUSE VERIFICATION ===")
+	var last_phys: Tracer.Step = physical_path.steps[physical_path.steps.size() - 1]
+	if last_phys.hit:
+		var hit_surf_id := last_phys.surface_id
+		var hp := last_phys.hit.point.coords
+		gut.p("Last step: hit surf=%d, frame=%d, conj=%s, after_portal=%s" % [
+			hit_surf_id, last_phys.frame.id, last_phys.frame.conjugating, last_phys.after_portal])
+		gut.p("  frame: a=%s b=%s c=%s d=%s" % [
+			last_phys.frame.a, last_phys.frame.b, last_phys.frame.c, last_phys.frame.d])
+		gut.p("  Hit point (normalized): %s" % hp)
+		gut.p("  frame.apply(hit): %s" % last_phys.end)
+
+		if last_phys.hit.segment:
+			var hit_carrier := last_phys.hit.segment.get_carrier()
+			gut.p("  hitpoint dist to hit segment carrier: %.6f" % InvariantChecker._geometric_carrier_dist(hp, hit_carrier))
+			gut.p("  hit segment carrier: a=%.6f b=%.6f c=%.6f d=%.6f" % [
+				hit_carrier.a, hit_carrier.b, hit_carrier.c, hit_carrier.d])
+
+		for surf in surfaces:
+			var s: Surface = surf
+			if s.id == hit_surf_id:
+				var phys_carrier := s.segment.get_carrier()
+				var end_on_phys := InvariantChecker._geometric_carrier_dist(last_phys.end, phys_carrier)
+				gut.p("  visual end dist to physical carrier (surf %d): %.4f (threshold=2.0)" % [hit_surf_id, end_on_phys])
+				gut.p("  phys carrier: a=%.6f b=%.6f c=%.6f d=%.6f" % [
+					phys_carrier.a, phys_carrier.b, phys_carrier.c, phys_carrier.d])
+				break
+	gut.p("")
+
+	pass_test("Investigation diagnostic complete")
