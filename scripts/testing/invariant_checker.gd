@@ -587,19 +587,12 @@ func check_ARC_MIDPOINT_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> A
 				continue
 			if _is_at_bounds(step.start, bounds) or _is_at_bounds(step.end, bounds):
 				continue
-			var p := VisualConverter.arc_params(step.start, step.via, step.end)
-			var ctr: Vector2 = p["center"]
-			var r: float = p["radius"]
-			var sa: float = p["start_angle"]
-			var ea: float = p["end_angle"]
-			var mid_angle := sa + (ea - sa) * 0.5
-			var arc_mid := ctr + Vector2(cos(mid_angle), sin(mid_angle)) * r
-			var bt_mid := step.frame.invert().apply(arc_mid)
-			if bt_mid.length() > 1e5:
+			var bt_via := step.frame.invert().apply_f64(step.via)
+			if is_inf(bt_via.x) or is_inf(bt_via.y) or bt_via.length() > 1e5:
 				continue
-			var cross := (bt_mid - origin).cross(aim_dir)
+			var cross := (bt_via - origin).cross(aim_dir)
 			if absf(cross) > 10.0:
-				violations.append("ARC-MIDPOINT-ALIGNMENT: %s step %d cross=%.2f (arc_mid=%s bt=%s)" % [trace_name, i, cross, arc_mid, bt_mid])
+				violations.append("ARC-MIDPOINT-ALIGNMENT: %s step %d cross=%.2f (via=%s bt=%s)" % [trace_name, i, cross, step.via, bt_via])
 	return violations
 
 func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
