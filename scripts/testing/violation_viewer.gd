@@ -1,6 +1,6 @@
 extends Node2D
 
-const VIOLATIONS_PATH := "user://violations.json"
+const VIOLATIONS_PATH := "res://violations.json"
 
 const _LINE1 := Vector4(600, 300, 600, 700)
 const _LINE2 := Vector4(1300, 300, 1300, 700)
