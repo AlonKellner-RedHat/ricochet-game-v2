@@ -336,15 +336,7 @@ func test_sweep_surface_combos() -> void:
 		pass_test("Combo sweep passed: %d combos across %d combinations (%d skipped: checker lacks proj/dir support)" % [total_combos, COMBOS.size(), skipped])
 
 func _save_violations(failures: Array) -> void:
-	var existing: Array = []
-	if FileAccess.file_exists(VIOLATIONS_PATH):
-		var rf := FileAccess.open(VIOLATIONS_PATH, FileAccess.READ)
-		if rf:
-			var json := JSON.new()
-			if json.parse(rf.get_as_text()) == OK and json.data is Array:
-				existing = json.data
-			rf.close()
-	var new_entries: Array = []
+	var entries: Array = []
 	for f in failures:
 		var entry := {
 			"scene": f.scene,
@@ -355,10 +347,9 @@ func _save_violations(failures: Array) -> void:
 		}
 		if "combo" in f:
 			entry["combo"] = f.combo
-		new_entries.append(entry)
-	var all_entries: Array = existing + new_entries
+		entries.append(entry)
 	var file := FileAccess.open(VIOLATIONS_PATH, FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify(all_entries, "  "))
+		file.store_string(JSON.stringify(entries, "  "))
 		file.close()
-		print("[Sweep] Saved %d violations to %s" % [all_entries.size(), VIOLATIONS_PATH])
+		print("[Sweep] Saved %d violations to %s" % [entries.size(), VIOLATIONS_PATH])
