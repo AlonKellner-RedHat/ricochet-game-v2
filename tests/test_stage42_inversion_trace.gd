@@ -123,7 +123,7 @@ func test_stage42_visual_path_contains_arc() -> void:
 	var found_arc := false
 	for i in path.steps.size():
 		var s: Tracer.Step = path.steps[i]
-		gut.p("  step[%d] fid=%d is_arc=%s c=%s" % [i, s.frame_id, s.is_arc_step, s.frame.c])
+		gut.p("  step[%d] fid=%d is_arc=%s c=(%.4f,%.4f)" % [i, s.frame_id, s.is_arc_step, s.frame.c_re, s.frame.c_im])
 		if s.is_arc_step:
 			found_arc = true
 	assert_true(found_arc, "Post-inversion step should be marked as arc")

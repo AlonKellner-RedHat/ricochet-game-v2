@@ -158,18 +158,24 @@ func test_empty_sequence_exact_original() -> void:
 func test_aggregate_single_equals_mobius() -> void:
 	var t := _make_reflection_tracked()
 	var p := Point.at(Vector2(100, 200)).transformed(t)
-	assert_eq(p.frame.a, t.mobius.a, "Single-transform frame should match the mobius")
-	assert_eq(p.frame.b, t.mobius.b, "Single-transform frame b")
-	assert_eq(p.frame.c, t.mobius.c, "Single-transform frame c")
-	assert_eq(p.frame.d, t.mobius.d, "Single-transform frame d")
+	assert_eq(p.frame.a_re, t.mobius.a_re, "Single-transform frame a_re")
+	assert_eq(p.frame.a_im, t.mobius.a_im, "Single-transform frame a_im")
+	assert_eq(p.frame.b_re, t.mobius.b_re, "Single-transform frame b_re")
+	assert_eq(p.frame.b_im, t.mobius.b_im, "Single-transform frame b_im")
+	assert_eq(p.frame.c_re, t.mobius.c_re, "Single-transform frame c_re")
+	assert_eq(p.frame.c_im, t.mobius.c_im, "Single-transform frame c_im")
+	assert_eq(p.frame.d_re, t.mobius.d_re, "Single-transform frame d_re")
+	assert_eq(p.frame.d_im, t.mobius.d_im, "Single-transform frame d_im")
 
 func test_aggregate_two_equals_composition() -> void:
 	var t1 := _make_reflection_tracked()
 	var t2 := _make_inversion_tracked()
 	var p := Point.at(Vector2(100, 200)).transformed(t1).transformed(t2)
 	var expected := t1.mobius.compose(t2.mobius)
-	assert_eq(p.frame.a, expected.a, "Two-transform frame a should match compose")
-	assert_eq(p.frame.b, expected.b, "Two-transform frame b")
+	assert_eq(p.frame.a_re, expected.a_re, "Two-transform frame a_re should match compose")
+	assert_eq(p.frame.a_im, expected.a_im, "Two-transform frame a_im")
+	assert_eq(p.frame.b_re, expected.b_re, "Two-transform frame b_re")
+	assert_eq(p.frame.b_im, expected.b_im, "Two-transform frame b_im")
 
 # --- Equality ---
 

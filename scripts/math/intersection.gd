@@ -61,7 +61,7 @@ static func _find_segment_hits(ray: Ray, segment: Segment, origin_on_carrier: bo
 	var carrier: GeneralizedCircle = carrier_override if carrier_override != null else segment.get_carrier()
 	var quad_hits: Array
 	var use_pullback := false
-	if visual_carrier != null and frame != null and frame.id != MobiusTransform.IDENTITY_ID and not visual_carrier.is_line() and not carrier.is_line():
+	if visual_carrier != null and frame != null and frame.id != MobiusTransform.IDENTITY_ID and not visual_carrier.is_line() and not carrier.is_line() and carrier != visual_carrier:
 		var norm_r := carrier.radius()
 		use_pullback = is_nan(norm_r) or norm_r < 1.0
 	if use_pullback:
@@ -187,11 +187,11 @@ static func is_on_segment(point: Vector2, segment: Segment) -> bool:
 	var sp := _hdet(zS, wS, zP, wP)
 	var ev := _hdet(zE, wE, zV, wV)
 
-	var num := MobiusTransform.cmul(sv, ep)
-	var den := MobiusTransform.cmul(sp, ev)
-	var den_conj := MobiusTransform.cconj(den)
-	var product := MobiusTransform.cmul(num, den_conj)
-	return product.x >= 0.0
+	var num_re: float = sv.x * ep.x - sv.y * ep.y
+	var num_im: float = sv.x * ep.y + sv.y * ep.x
+	var den_re: float = sp.x * ev.x - sp.y * ev.y
+	var den_im: float = sp.x * ev.y + sp.y * ev.x
+	return (num_re * den_re + num_im * den_im) >= 0.0
 
 static func _intersect_ray_carrier(ray: Ray, carrier: GeneralizedCircle) -> Array:
 	var dir := ray.direction.to_vector()
@@ -306,7 +306,11 @@ static func _hermitian_transform_f64(circle: GeneralizedCircle, mobius: MobiusTr
 	var r01_y := (t00_x * n01_y + t00_y * n01_x) + (t01_x * n11_y + t01_y * n11_x)
 	var r11 := (t10_x * n01_x - t10_y * n01_y) + (t11_x * n11_x - t11_y * n11_y)
 
-	return GeneralizedCircle.new(r00, 2.0 * r01_x, -2.0 * r01_y, r11)
+	var new_b := 2.0 * r01_x
+	var new_c := -2.0 * r01_y
+	if r00 != 0.0 and absf(r00) < 1e-10 * maxf(absf(new_b), maxf(absf(new_c), absf(r11))):
+		r00 = 0.0
+	return GeneralizedCircle.new(r00, new_b, new_c, r11)
 
 static func project_point_on_ray(ray: Ray, point: Vector2) -> float:
 	var dir := ray.direction.to_vector()

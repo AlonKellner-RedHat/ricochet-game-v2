@@ -5,10 +5,6 @@ static var _next_id: int = 1
 static var IDENTITY_ID := 0
 
 var id: int
-var a: Vector2
-var b: Vector2
-var c: Vector2
-var d: Vector2
 var conjugating: bool
 var a_re: float
 var a_im: float
@@ -25,15 +21,19 @@ func _init(p_a: Vector2, p_b: Vector2, p_c: Vector2, p_d: Vector2, p_conjugating
 	else:
 		id = _next_id
 		_next_id += 1
-	a = p_a
-	b = p_b
-	c = p_c
-	d = p_d
 	conjugating = p_conjugating
 	a_re = p_a.x; a_im = p_a.y
 	b_re = p_b.x; b_im = p_b.y
 	c_re = p_c.x; c_im = p_c.y
 	d_re = p_d.x; d_im = p_d.y
+
+static func from_f64(ar: float, ai: float, br: float, bi: float,
+		cr: float, ci: float, dr: float, di: float, p_conj: bool) -> MobiusTransform:
+	var m := MobiusTransform.new(Vector2.ZERO, Vector2.ZERO,
+		Vector2.ZERO, Vector2.ZERO, p_conj)
+	m.a_re = ar; m.a_im = ai; m.b_re = br; m.b_im = bi
+	m.c_re = cr; m.c_im = ci; m.d_re = dr; m.d_im = di
+	return m
 
 static func identity() -> MobiusTransform:
 	return MobiusTransform.new(
@@ -43,26 +43,11 @@ static func identity() -> MobiusTransform:
 
 func apply(point: Vector2) -> Vector2:
 	if is_inf(point.x) or is_inf(point.y):
-		if c == Vector2.ZERO:
+		if c_re == 0.0 and c_im == 0.0:
 			return Vector2(INF, INF)
-		return cdiv(a, c)
-	var z := point
-	if conjugating:
-		z = cconj(z)
-	var num := cmul(a, z) + b
-	var den := cmul(c, z) + d
-	if den == Vector2.ZERO:
-		return Vector2(INF, INF)
-	var result := cdiv(num, den)
-	if is_nan(result.x) or is_nan(result.y):
-		return Vector2(INF, INF)
-	return result
-
-func apply_f64(point: Vector2) -> Vector2:
-	if is_inf(point.x) or is_inf(point.y):
-		if c == Vector2.ZERO:
-			return Vector2(INF, INF)
-		return cdiv(a, c)
+		var c_mag2: float = c_re * c_re + c_im * c_im
+		return Vector2((a_re * c_re + a_im * c_im) / c_mag2,
+					   (a_im * c_re - a_re * c_im) / c_mag2)
 	var zx: float = point.x
 	var zy: float = point.y
 	if conjugating:
@@ -81,38 +66,6 @@ func apply_f64(point: Vector2) -> Vector2:
 	return Vector2(res_re, res_im)
 
 func compose(other: MobiusTransform) -> MobiusTransform:
-	var m2_a := other.a
-	var m2_b := other.b
-	var m2_c := other.c
-	var m2_d := other.d
-
-	if conjugating:
-		m2_a = cconj(m2_a)
-		m2_b = cconj(m2_b)
-		m2_c = cconj(m2_c)
-		m2_d = cconj(m2_d)
-
-	var new_a := cmul(a, m2_a) + cmul(b, m2_c)
-	var new_b := cmul(a, m2_b) + cmul(b, m2_d)
-	var new_c := cmul(c, m2_a) + cmul(d, m2_c)
-	var new_d := cmul(c, m2_b) + cmul(d, m2_d)
-
-	var max_mag := maxf(maxf(new_a.length(), new_b.length()), maxf(new_c.length(), new_d.length()))
-	if max_mag > 0.0:
-		var inv := 1.0 / max_mag
-		new_a *= inv
-		new_b *= inv
-		new_c *= inv
-		new_d *= inv
-
-	var new_conj: bool
-	if conjugating:
-		new_conj = not other.conjugating
-	else:
-		new_conj = other.conjugating
-
-	var result := MobiusTransform.new(new_a, new_b, new_c, new_d, new_conj)
-
 	var o_ar: float = other.a_re; var o_ai: float = other.a_im
 	var o_br: float = other.b_re; var o_bi: float = other.b_im
 	var o_cr: float = other.c_re; var o_ci: float = other.c_im
@@ -138,42 +91,43 @@ func compose(other: MobiusTransform) -> MobiusTransform:
 		nc_re *= f64_inv; nc_im *= f64_inv
 		nd_re *= f64_inv; nd_im *= f64_inv
 
-	result.a_re = na_re; result.a_im = na_im
-	result.b_re = nb_re; result.b_im = nb_im
-	result.c_re = nc_re; result.c_im = nc_im
-	result.d_re = nd_re; result.d_im = nd_im
-	return result
+	var new_conj: bool
+	if conjugating:
+		new_conj = not other.conjugating
+	else:
+		new_conj = other.conjugating
+
+	return MobiusTransform.from_f64(
+		na_re, na_im, nb_re, nb_im,
+		nc_re, nc_im, nd_re, nd_im, new_conj)
 
 func invert() -> MobiusTransform:
 	var result: MobiusTransform
 	if conjugating:
-		result = MobiusTransform.new(
-			Vector2(-d.x, d.y), Vector2(b.x, -b.y),
-			Vector2(c.x, -c.y), Vector2(-a.x, a.y),
-			true)
-		result.a_re = -d_re; result.a_im = d_im
-		result.b_re = b_re; result.b_im = -b_im
-		result.c_re = c_re; result.c_im = -c_im
-		result.d_re = -a_re; result.d_im = a_im
+		var ra_re := -d_re; var ra_im := d_im
+		var rb_re := b_re; var rb_im := -b_im
+		var rc_re := c_re; var rc_im := -c_im
+		var rd_re := -a_re; var rd_im := a_im
+		result = MobiusTransform.from_f64(
+			ra_re, ra_im, rb_re, rb_im,
+			rc_re, rc_im, rd_re, rd_im, true)
 	else:
-		var det := cmul(a, d) - cmul(b, c)
-		result = MobiusTransform.new(
-			cdiv(d, det), cdiv(-b, det),
-			cdiv(-c, det), cdiv(a, det),
-			false)
 		var det_re: float = (a_re * d_re - a_im * d_im) - (b_re * c_re - b_im * c_im)
 		var det_im: float = (a_re * d_im + a_im * d_re) - (b_re * c_im + b_im * c_re)
 		var det_mag2: float = det_re * det_re + det_im * det_im
 		var inv_det_re: float = det_re / det_mag2
 		var inv_det_im: float = -det_im / det_mag2
-		result.a_re = d_re * inv_det_re - d_im * inv_det_im
-		result.a_im = d_re * inv_det_im + d_im * inv_det_re
-		result.b_re = -(b_re * inv_det_re - b_im * inv_det_im)
-		result.b_im = -(b_re * inv_det_im + b_im * inv_det_re)
-		result.c_re = -(c_re * inv_det_re - c_im * inv_det_im)
-		result.c_im = -(c_re * inv_det_im + c_im * inv_det_re)
-		result.d_re = a_re * inv_det_re - a_im * inv_det_im
-		result.d_im = a_re * inv_det_im + a_im * inv_det_re
+		var ra_re := d_re * inv_det_re - d_im * inv_det_im
+		var ra_im := d_re * inv_det_im + d_im * inv_det_re
+		var rb_re := -(b_re * inv_det_re - b_im * inv_det_im)
+		var rb_im := -(b_re * inv_det_im + b_im * inv_det_re)
+		var rc_re := -(c_re * inv_det_re - c_im * inv_det_im)
+		var rc_im := -(c_re * inv_det_im + c_im * inv_det_re)
+		var rd_re := a_re * inv_det_re - a_im * inv_det_im
+		var rd_im := a_re * inv_det_im + a_im * inv_det_re
+		result = MobiusTransform.from_f64(
+			ra_re, ra_im, rb_re, rb_im,
+			rc_re, rc_im, rd_re, rd_im, false)
 	return result
 
 static func cmul(v1: Vector2, v2: Vector2) -> Vector2:
@@ -192,13 +146,19 @@ static func cmod2(v: Vector2) -> float:
 	return v.x * v.x + v.y * v.y
 
 func maps_lines_to_arcs() -> bool:
-	return c != Vector2.ZERO
+	return c_re != 0.0 or c_im != 0.0
 
 func pole() -> Vector2:
-	var z := cdiv(-d, c)
+	var c_mag2: float = c_re * c_re + c_im * c_im
+	if c_mag2 == 0.0:
+		return Vector2(INF, INF)
+	var neg_d_re: float = -d_re
+	var neg_d_im: float = -d_im
+	var z_re: float = (neg_d_re * c_re + neg_d_im * c_im) / c_mag2
+	var z_im: float = (neg_d_im * c_re - neg_d_re * c_im) / c_mag2
 	if conjugating:
-		return cconj(z)
-	return z
+		return Vector2(z_re, -z_im)
+	return Vector2(z_re, z_im)
 
 static func reset_id_counter() -> void:
 	_next_id = 1

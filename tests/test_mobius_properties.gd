@@ -37,7 +37,11 @@ func _projective_mobius() -> MobiusTransform:
 		Vector2(0, 0.1), Vector2(1, 0), false)
 
 func _det(m: MobiusTransform) -> Vector2:
-	return MobiusTransform.cmul(m.a, m.d) - MobiusTransform.cmul(m.b, m.c)
+	var a := Vector2(m.a_re, m.a_im)
+	var b := Vector2(m.b_re, m.b_im)
+	var c := Vector2(m.c_re, m.c_im)
+	var d := Vector2(m.d_re, m.d_im)
+	return MobiusTransform.cmul(a, d) - MobiusTransform.cmul(b, c)
 
 # --- Composition associativity ---
 
@@ -58,7 +62,7 @@ func test_composition_associativity_with_projective() -> void:
 	var AB_C := A.compose(B).compose(C)
 	var A_BC := A.compose(B.compose(C))
 	for p in _test_points:
-		if MobiusTransform.cmod2(MobiusTransform.cmul(A.c, p) + A.d) < 0.01:
+		if MobiusTransform.cmod2(MobiusTransform.cmul(Vector2(A.c_re, A.c_im), p) + Vector2(A.d_re, A.d_im)) < 0.01:
 			continue
 		assert_almost_eq(AB_C.apply(p), A_BC.apply(p), TOL,
 			"(A∘B)∘C != A∘(B∘C) at %s (projective)" % p)
@@ -105,7 +109,7 @@ func test_double_inversion() -> void:
 	var M := _projective_mobius()
 	var M_inv_inv := M.invert().invert()
 	for p in _test_points:
-		if MobiusTransform.cmod2(MobiusTransform.cmul(M.c, p) + M.d) < 0.01:
+		if MobiusTransform.cmod2(MobiusTransform.cmul(Vector2(M.c_re, M.c_im), p) + Vector2(M.d_re, M.d_im)) < 0.01:
 			continue
 		assert_almost_eq(M_inv_inv.apply(p), M.apply(p), TOL,
 			"(M⁻¹)⁻¹ != M at %s" % p)

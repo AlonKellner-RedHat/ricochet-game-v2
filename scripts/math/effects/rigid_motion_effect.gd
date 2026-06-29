@@ -20,7 +20,9 @@ func _init(theta: float, d: Vector2, carrier: GeneralizedCircle = null, p_tracke
 		_tracked = p_tracked
 	else:
 		var e_neg_itheta := Vector2(cos(theta), -sin(theta))
-		var inv_beta := MobiusTransform.cmul(Vector2(-1.0, 0.0), MobiusTransform.cmul(e_neg_itheta, d))
+		var inv_beta := Vector2(
+			-(e_neg_itheta.x * _d.x - e_neg_itheta.y * _d.y),
+			-(e_neg_itheta.x * _d.y + e_neg_itheta.y * _d.x))
 		var inv_mobius := MobiusTransform.new(e_neg_itheta, inv_beta, Vector2.ZERO, Vector2(1.0, 0.0), false)
 		_tracked = TrackedTransform.from_pair(_mobius, inv_mobius)
 		if carrier != null:
@@ -45,7 +47,9 @@ static func create_portal_pair(source_seg: Segment, theta: float, d: Vector2) ->
 	var fwd_mobius := MobiusTransform.new(fwd_alpha, fwd_beta, Vector2.ZERO, Vector2(1.0, 0.0), false)
 
 	var e_neg_itheta := Vector2(cos(theta), -sin(theta))
-	var inv_beta := MobiusTransform.cmul(Vector2(-1.0, 0.0), MobiusTransform.cmul(e_neg_itheta, d))
+	var inv_beta := Vector2(
+		-(e_neg_itheta.x * d.x - e_neg_itheta.y * d.y),
+		-(e_neg_itheta.x * d.y + e_neg_itheta.y * d.x))
 	var inv_mobius := MobiusTransform.new(e_neg_itheta, inv_beta, Vector2.ZERO, Vector2(1.0, 0.0), false)
 
 	var tracked_ab := TrackedTransform.from_pair(fwd_mobius, inv_mobius)
@@ -64,7 +68,9 @@ static func create_portal_pair(source_seg: Segment, theta: float, d: Vector2) ->
 
 	var eff_a := RigidMotionEffect.new(theta, d, carrier_a, tracked_ab)
 	var inv_theta := -theta
-	var inv_d := MobiusTransform.cmul(Vector2(-1.0, 0.0), MobiusTransform.cmul(e_neg_itheta, d))
+	var inv_d := Vector2(
+		-(e_neg_itheta.x * d.x - e_neg_itheta.y * d.y),
+		-(e_neg_itheta.x * d.y + e_neg_itheta.y * d.x))
 	var eff_b := RigidMotionEffect.new(inv_theta, inv_d, carrier_b, tracked_ba)
 
 	return {

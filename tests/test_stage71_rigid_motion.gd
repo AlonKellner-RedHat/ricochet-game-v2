@@ -27,10 +27,10 @@ func test_stage71_rigid_motion_conformal() -> void:
 
 func test_stage71_rigid_motion_coefficients() -> void:
 	var m := _effect().get_mobius()
-	assert_almost_eq(m.a, Vector2(0, 1), TOL, "alpha = e^{i*PI/2} = (0,1)")
-	assert_almost_eq(m.b, Vector2(100, 50), TOL, "beta = d = (100,50)")
-	assert_almost_eq(m.c, Vector2(0, 0), TOL, "gamma = 0")
-	assert_almost_eq(m.d, Vector2(1, 0), TOL, "delta = 1")
+	assert_almost_eq(Vector2(m.a_re, m.a_im), Vector2(0, 1), TOL, "alpha = e^{i*PI/2} = (0,1)")
+	assert_almost_eq(Vector2(m.b_re, m.b_im), Vector2(100, 50), TOL, "beta = d = (100,50)")
+	assert_almost_eq(Vector2(m.c_re, m.c_im), Vector2(0, 0), TOL, "gamma = 0")
+	assert_almost_eq(Vector2(m.d_re, m.d_im), Vector2(1, 0), TOL, "delta = 1")
 
 # --- Application ---
 
@@ -59,11 +59,11 @@ func test_stage71_rigid_motion_identity_case() -> void:
 
 func test_stage71_rigid_motion_inverse_coefficients() -> void:
 	var inv := _effect().get_inverse_mobius()
-	assert_almost_eq(inv.a, Vector2(0, -1), TOL, "inverse alpha = e^{-iPI/2} = (0,-1)")
+	assert_almost_eq(Vector2(inv.a_re, inv.a_im), Vector2(0, -1), TOL, "inverse alpha = e^{-iPI/2} = (0,-1)")
 	# inv_beta = -e^{-iPI/2} * (100,50) = -(0,-1)*(100,50) = -(50,-100) = (-50,100)
-	assert_almost_eq(inv.b, Vector2(-50, 100), TOL, "inverse beta = -e^{-iPI/2}*d")
-	assert_almost_eq(inv.c, Vector2(0, 0), TOL, "inverse gamma = 0")
-	assert_almost_eq(inv.d, Vector2(1, 0), TOL, "inverse delta = 1")
+	assert_almost_eq(Vector2(inv.b_re, inv.b_im), Vector2(-50, 100), TOL, "inverse beta = -e^{-iPI/2}*d")
+	assert_almost_eq(Vector2(inv.c_re, inv.c_im), Vector2(0, 0), TOL, "inverse gamma = 0")
+	assert_almost_eq(Vector2(inv.d_re, inv.d_im), Vector2(1, 0), TOL, "inverse delta = 1")
 
 func test_stage71_rigid_motion_not_self_inverse() -> void:
 	var eff := _effect()
@@ -199,8 +199,8 @@ func test_stage71_S2_transform_round_trip() -> void:
 
 func test_stage71_S18_determinant_nonzero() -> void:
 	var m := _effect().get_mobius()
-	var ad := MobiusTransform.cmul(m.a, m.d)
-	var bc := MobiusTransform.cmul(m.b, m.c)
+	var ad := MobiusTransform.cmul(Vector2(m.a_re, m.a_im), Vector2(m.d_re, m.d_im))
+	var bc := MobiusTransform.cmul(Vector2(m.b_re, m.b_im), Vector2(m.c_re, m.c_im))
 	var det := ad - bc
 	var det_mod2 := MobiusTransform.cmod2(det)
 	assert_true(det_mod2 > 0.0, "S18: |ad - bc|^2 > 0 (got %f)" % det_mod2)

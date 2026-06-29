@@ -93,8 +93,10 @@ func test_always_normalize_small_entries() -> void:
 	var m := refl.get_mobius()
 	var composed := m.compose(m)
 	var max_mag := maxf(
-		maxf(composed.a.length(), composed.b.length()),
-		maxf(composed.c.length(), composed.d.length()))
+		maxf(sqrt(composed.a_re * composed.a_re + composed.a_im * composed.a_im),
+			 sqrt(composed.b_re * composed.b_re + composed.b_im * composed.b_im)),
+		maxf(sqrt(composed.c_re * composed.c_re + composed.c_im * composed.c_im),
+			 sqrt(composed.d_re * composed.d_re + composed.d_im * composed.d_im)))
 	assert_almost_eq(max_mag, 1.0, 0.01,
 		"After compose, max entry magnitude should be ~1.0 (always normalized). Got %.4f" % max_mag)
 

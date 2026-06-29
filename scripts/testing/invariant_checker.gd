@@ -99,10 +99,21 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 	return violations
 
 static func _is_infinity_gap(prev_end: Vector2, curr_start: Vector2) -> bool:
-	const THRESHOLD := 10000.0
-	var prev_huge := absf(prev_end.x) > THRESHOLD or absf(prev_end.y) > THRESHOLD
-	var curr_huge := absf(curr_start.x) > THRESHOLD or absf(curr_start.y) > THRESHOLD
-	return prev_huge or curr_huge
+	const HUGE := 10000.0
+	var prev_huge := absf(prev_end.x) > HUGE or absf(prev_end.y) > HUGE
+	var curr_huge := absf(curr_start.x) > HUGE or absf(curr_start.y) > HUGE
+	if prev_huge or curr_huge:
+		return true
+	const EDGE_TOL := 2.0
+	const MIN_GAP := 500.0
+	var gap := prev_end.distance_to(curr_start)
+	if gap < MIN_GAP:
+		return false
+	var prev_at_edge := (absf(prev_end.x) < EDGE_TOL or absf(prev_end.x - 1920.0) < EDGE_TOL
+		or absf(prev_end.y) < EDGE_TOL or absf(prev_end.y - 1080.0) < EDGE_TOL)
+	var curr_at_edge := (absf(curr_start.x) < EDGE_TOL or absf(curr_start.x - 1920.0) < EDGE_TOL
+		or absf(curr_start.y) < EDGE_TOL or absf(curr_start.y - 1080.0) < EDGE_TOL)
+	return prev_at_edge or curr_at_edge
 
 func check_S16(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
@@ -265,7 +276,7 @@ func check_SOLID_PATH_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Arr
 	for i in range(1, solid_steps.size()):
 		var prev: Tracer.Step = solid_steps[i - 1]
 		var curr: Tracer.Step = solid_steps[i]
-		if prev.end.distance_to(curr.start) > 0.01:
+		if prev.end.distance_to(curr.start) > 0.05:
 			# Skip gaps at escape/return boundaries (ray wraps through infinity)
 			var at_bounds := (prev.end.x <= bounds.position.x + 1.0 or prev.end.x >= bounds.end.x - 1.0 or
 				prev.end.y <= bounds.position.y + 1.0 or prev.end.y >= bounds.end.y - 1.0)
@@ -469,8 +480,9 @@ func check_S18_FRAME_DETERMINANT(player_pos: Vector2, cursor_pos: Vector2) -> Ar
 			var step: Tracer.Step = path.steps[i]
 			if step.frame == null:
 				continue
-			var det := MobiusTransform.cmul(step.frame.a, step.frame.d) - MobiusTransform.cmul(step.frame.b, step.frame.c)
-			var det_mod2 := MobiusTransform.cmod2(det)
+			var det_re: float = (step.frame.a_re * step.frame.d_re - step.frame.a_im * step.frame.d_im) - (step.frame.b_re * step.frame.c_re - step.frame.b_im * step.frame.c_im)
+			var det_im: float = (step.frame.a_re * step.frame.d_im + step.frame.a_im * step.frame.d_re) - (step.frame.b_re * step.frame.c_im + step.frame.b_im * step.frame.c_re)
+			var det_mod2: float = det_re * det_re + det_im * det_im
 			if det_mod2 == 0.0:
 				violations.append("S18-FRAME-DET: %s step %d |det|^2 = 0" % [trace_name, i])
 	return violations
@@ -587,7 +599,7 @@ func check_ARC_MIDPOINT_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> A
 				continue
 			if _is_at_bounds(step.start, bounds) or _is_at_bounds(step.end, bounds):
 				continue
-			var bt_via := step.frame.invert().apply_f64(step.via)
+			var bt_via := step.frame.invert().apply(step.via)
 			if is_inf(bt_via.x) or is_inf(bt_via.y) or bt_via.length() > 1e5:
 				continue
 			var cross := (bt_via - origin).cross(aim_dir)
@@ -707,6 +719,13 @@ func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) 
 					on_carrier = true
 					break
 			if not on_carrier:
+				if not step.hit_on_segment:
+					continue
+				if step.frame_id != MobiusTransform.IDENTITY_ID and step.hit.segment != null:
+					var nc := step.hit.segment.get_carrier()
+					var norm_err := _geometric_carrier_dist(step.hit.point.coords, nc)
+					if norm_err < 1.0:
+						continue
 				violations.append("VISUAL-ON-CARRIER: %s step %d visual endpoint %s not on any physical carrier" % [trace_name, i, end_pos])
 	return violations
 

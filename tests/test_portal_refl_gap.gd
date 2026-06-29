@@ -102,7 +102,7 @@ func test_hitpoint_visual_end_consistency() -> void:
 		if step.hit == null:
 			continue
 		var hp_coords := step.hit.point.coords
-		var recomputed_end: Vector2 = step.frame.apply_f64(hp_coords)
+		var recomputed_end: Vector2 = step.frame.apply(hp_coords)
 		var end_diff := step.end.distance_to(recomputed_end)
 		if end_diff > max_diff:
 			max_diff = end_diff
@@ -200,8 +200,8 @@ func _analyze_frame_transitions(path: Tracer.TracedPath, label: String) -> void:
 				label, i - 1, i, gap, transition, portal,
 				prev.frame.conjugating, curr.frame.conjugating])
 			if prev.frame.id != curr.frame.id:
-				gut.p("    prev_frame: a=%s b=%s c=%s d=%s" % [prev.frame.a, prev.frame.b, prev.frame.c, prev.frame.d])
-				gut.p("    curr_frame: a=%s b=%s c=%s d=%s" % [curr.frame.a, curr.frame.b, curr.frame.c, curr.frame.d])
+				gut.p("    prev_frame: a=(%.4f,%.4f) b=(%.4f,%.4f) c=(%.4f,%.4f) d=(%.4f,%.4f)" % [prev.frame.a_re, prev.frame.a_im, prev.frame.b_re, prev.frame.b_im, prev.frame.c_re, prev.frame.c_im, prev.frame.d_re, prev.frame.d_im])
+				gut.p("    curr_frame: a=(%.4f,%.4f) b=(%.4f,%.4f) c=(%.4f,%.4f) d=(%.4f,%.4f)" % [curr.frame.a_re, curr.frame.a_im, curr.frame.b_re, curr.frame.b_im, curr.frame.c_re, curr.frame.c_im, curr.frame.d_re, curr.frame.d_im])
 
 
 func test_trace_ends_on_wall_carrier() -> void:
@@ -369,7 +369,7 @@ func test_investigate_violations() -> void:
 				hit_seg.start.coords, hit_seg.end.coords, hit_seg.via.coords])
 
 		# Show the frame details
-		gut.p("  frame: a=%s b=%s c=%s d=%s" % [step.frame.a, step.frame.b, step.frame.c, step.frame.d])
+		gut.p("  frame: a=(%.4f,%.4f) b=(%.4f,%.4f) c=(%.4f,%.4f) d=(%.4f,%.4f)" % [step.frame.a_re, step.frame.a_im, step.frame.b_re, step.frame.b_im, step.frame.c_re, step.frame.c_im, step.frame.d_re, step.frame.d_im])
 
 		# Check visual end against ALL physical carriers
 		gut.p("  visual end dist to each physical carrier:")
@@ -400,8 +400,8 @@ func test_investigate_violations() -> void:
 		var hp := last_phys.hit.point.coords
 		gut.p("Last step: hit surf=%d, frame=%d, conj=%s, after_portal=%s" % [
 			hit_surf_id, last_phys.frame.id, last_phys.frame.conjugating, last_phys.after_portal])
-		gut.p("  frame: a=%s b=%s c=%s d=%s" % [
-			last_phys.frame.a, last_phys.frame.b, last_phys.frame.c, last_phys.frame.d])
+		gut.p("  frame: a=(%.4f,%.4f) b=(%.4f,%.4f) c=(%.4f,%.4f) d=(%.4f,%.4f)" % [
+			last_phys.frame.a_re, last_phys.frame.a_im, last_phys.frame.b_re, last_phys.frame.b_im, last_phys.frame.c_re, last_phys.frame.c_im, last_phys.frame.d_re, last_phys.frame.d_im])
 		gut.p("  Hit point (normalized): %s" % hp)
 		gut.p("  frame.apply(hit): %s" % last_phys.end)
 

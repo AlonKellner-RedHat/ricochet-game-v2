@@ -119,8 +119,8 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 				trace_done = true
 				break
 
-			var vis_start: Vector2 = s.frame.apply_f64(step_origin_pos)
-			var vis_end: Vector2 = s.frame.apply_f64(hp.point.coords)
+			var vis_start: Vector2 = s.frame.apply(step_origin_pos)
+			var vis_end: Vector2 = s.frame.apply(hp.point.coords)
 			var is_wrap := hp.t < walk_t
 			var is_null_seg := hp.segment == null
 			var is_cursor := hp == s.cursor_hp
@@ -134,11 +134,11 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 			if _start_inf or _end_inf:
 				vis_via = Vector2(INF, INF)
 			elif is_wrap:
-				vis_via = s.frame.apply_f64(Vector2(INF, INF))
+				vis_via = s.frame.apply(Vector2(INF, INF))
 			else:
-				vis_via = s.frame.apply_f64((step_origin_pos + hp.point.coords) / 2.0)
+				vis_via = s.frame.apply((step_origin_pos + hp.point.coords) / 2.0)
 				if is_inf(vis_via.x) or is_inf(vis_via.y):
-					vis_via = s.frame.apply_f64(Vector2(INF, INF))
+					vis_via = s.frame.apply(Vector2(INF, INF))
 
 			# --- Zero-length skip ---
 			if vis_start == vis_end:
@@ -157,7 +157,7 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, game_s
 							s.path.targets_hit[orig_surf_zl.id] = true
 						var result_zl = _apply_effect(s, hp, true, orig_surf_zl, plan_entries, cache)
 						if result_zl == 2:
-							if s.cursor_injected_at_zero_length:
+							if s.cursor_injected_at_zero_length and hp.at_endpoint > 0:
 								s.step_left_blocked = false
 								s.step_right_blocked = false
 							else:
@@ -267,7 +267,7 @@ static func _inject_cursor(s: TraceState, post_cursor_mode: int) -> void:
 
 static func _try_escape(s: TraceState, vis_start: Vector2, step_origin_pos: Vector2) -> void:
 	var p_dir := s.ray.direction.to_vector().normalized()
-	var vis_shifted: Vector2 = s.frame.apply_f64(step_origin_pos + p_dir)
+	var vis_shifted: Vector2 = s.frame.apply(step_origin_pos + p_dir)
 	if not (is_inf(vis_shifted.x) or is_inf(vis_shifted.y)):
 		var vis_dir: Vector2 = (vis_shifted - vis_start).normalized()
 		_add_escape_steps(s.path, vis_start, vis_dir, s.frame, s.shared_ray, step_origin_pos, p_dir)
@@ -316,7 +316,7 @@ static func _apply_effect(s: TraceState, hp: Intersection.HitRecord, fully_block
 						else:
 							s.plan_matched = false
 					Effect.Kind.PROJECTIVE:
-						var visual_hit: Vector2 = s.frame.apply_f64(hp.point.coords)
+						var visual_hit: Vector2 = s.frame.apply(hp.point.coords)
 						var phys_cfg := orig_surf.active_side_config(lookup_side, s.state_copy)
 						var out_ray: Ray = phys_cfg.effect.apply_forward(visual_hit, orig_surf.segment, lookup_side)
 						s.transform_stack.clear()
@@ -432,7 +432,7 @@ static func _assemble_hitpoints(s: TraceState, plan_entries: Array) -> Array:
 
 	var cursor_reachable := not s.cursor_injected and s.plan_index >= plan_entries.size() and s.plan_matched
 	if carrier_hits.size() == 0 and not cursor_reachable:
-		var vis_origin: Vector2 = s.frame.apply_f64(s.ray.origin.coords)
+		var vis_origin: Vector2 = s.frame.apply(s.ray.origin.coords)
 		if is_inf(vis_origin.x) or is_inf(vis_origin.y):
 			return []
 		_try_escape(s, vis_origin, s.ray.origin.coords)

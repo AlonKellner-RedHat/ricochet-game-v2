@@ -24,10 +24,10 @@ func test_stage40_inversion_construction_rejects_line() -> void:
 
 func test_stage40_inversion_mobius_coefficients() -> void:
 	var m := _effect().get_mobius()
-	assert_almost_eq(m.a, Vector2(200, 200), Vector2(0.01, 0.01), "alpha = center")
-	assert_almost_eq(m.b, Vector2(-70000, 0), Vector2(0.01, 0.01), "beta = r^2 - |center|^2")
-	assert_almost_eq(m.c, Vector2(1, 0), Vector2(0.01, 0.01), "gamma = 1")
-	assert_almost_eq(m.d, Vector2(-200, 200), Vector2(0.01, 0.01), "delta = -conj(center)")
+	assert_almost_eq(Vector2(m.a_re, m.a_im), Vector2(200, 200), Vector2(0.01, 0.01), "alpha = center")
+	assert_almost_eq(Vector2(m.b_re, m.b_im), Vector2(-70000, 0), Vector2(0.01, 0.01), "beta = r^2 - |center|^2")
+	assert_almost_eq(Vector2(m.c_re, m.c_im), Vector2(1, 0), Vector2(0.01, 0.01), "gamma = 1")
+	assert_almost_eq(Vector2(m.d_re, m.d_im), Vector2(-200, 200), Vector2(0.01, 0.01), "delta = -conj(center)")
 	assert_true(m.conjugating, "conjugating = true")
 
 # --- Point application ---
@@ -64,8 +64,8 @@ func test_stage40_S2_transform_round_trip() -> void:
 
 func test_stage40_S18_determinant_nonzero() -> void:
 	var m := _effect().get_mobius()
-	var ad := MobiusTransform.cmul(m.a, m.d)
-	var bc := MobiusTransform.cmul(m.b, m.c)
+	var ad := MobiusTransform.cmul(Vector2(m.a_re, m.a_im), Vector2(m.d_re, m.d_im))
+	var bc := MobiusTransform.cmul(Vector2(m.b_re, m.b_im), Vector2(m.c_re, m.c_im))
 	var det := ad - bc
 	var det_mod2 := MobiusTransform.cmod2(det)
 	assert_true(det_mod2 > 0.0, "S18: determinant |ad - bc|^2 > 0 (got %f)" % det_mod2)

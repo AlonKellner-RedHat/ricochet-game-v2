@@ -92,7 +92,8 @@ func test_composed_identities_stay_linear() -> void:
 	var id2 := MobiusTransform.identity()
 	var composed := id1.compose(id2)
 	assert_false(composed.maps_lines_to_arcs(), "Identity composed with identity stays linear")
-	assert_eq(composed.c, Vector2.ZERO, "Composed identity c should be exactly zero")
+	assert_eq(composed.c_re, 0.0, "Composed identity c_re should be exactly zero")
+	assert_eq(composed.c_im, 0.0, "Composed identity c_im should be exactly zero")
 
 # =============================================================================
 # Step 4: E5 + E6 — exact equality for zero-length steps and degenerate arcs

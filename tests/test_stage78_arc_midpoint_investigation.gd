@@ -220,7 +220,7 @@ func test_exp3_backtransform_f32_vs_f64() -> void:
 	print("  arc_mid = angular midpoint of visual arc (invariant's point)")
 	print("  via     = step.via (Mobius image of physical midpoint)")
 	print("  f32     = frame.invert().apply()  (current invariant)")
-	print("  f64     = frame.invert().apply_f64()")
+	print("  f64     = frame.invert().apply()")
 	print("")
 
 	var found := false
@@ -259,9 +259,9 @@ func test_exp3_backtransform_f32_vs_f64() -> void:
 				continue
 
 			found = true
-			var bt_arc_mid_f64: Vector2 = frame_inv.apply_f64(arc_mid)
+			var bt_arc_mid_f64: Vector2 = frame_inv.apply(arc_mid)
 			var bt_via_f32 := frame_inv.apply(step.via)
-			var bt_via_f64: Vector2 = frame_inv.apply_f64(step.via)
+			var bt_via_f64: Vector2 = frame_inv.apply(step.via)
 
 			var cross_arc_mid_f64 := (bt_arc_mid_f64 - origin).cross(aim_dir)
 			var cross_via_f32 := (bt_via_f32 - origin).cross(aim_dir)
@@ -319,9 +319,9 @@ func test_exp4_algebraic_proof() -> void:
 
 	var frame: MobiusTransform = effect.get_mobius()
 
-	var vis_start: Vector2 = frame.apply_f64(ray_origin)
-	var vis_end: Vector2 = frame.apply_f64(ray_end)
-	var vis_via: Vector2 = frame.apply_f64(ray_mid)
+	var vis_start: Vector2 = frame.apply(ray_origin)
+	var vis_end: Vector2 = frame.apply(ray_end)
+	var vis_via: Vector2 = frame.apply(ray_mid)
 
 	print("Physical ray: %s -> %s (midpoint: %s)" % [ray_origin, ray_end, ray_mid])
 	print("Circle: center=%s radius=%.0f" % [center, radius])
@@ -329,7 +329,7 @@ func test_exp4_algebraic_proof() -> void:
 	print("Visual (Mobius image):")
 	print("  vis_start: %s" % vis_start)
 	print("  vis_end:   %s" % vis_end)
-	print("  vis_via:   %s  (frame.apply_f64(physical midpoint))" % vis_via)
+	print("  vis_via:   %s  (frame.apply(physical midpoint))" % vis_via)
 
 	if VisualConverter.is_arc(vis_start, vis_via, vis_end):
 		var p := VisualConverter.arc_params(vis_start, vis_via, vis_end)
@@ -347,8 +347,8 @@ func test_exp4_algebraic_proof() -> void:
 		print("  distance between them:      %.4f px" % arc_mid.distance_to(vis_via))
 
 		var frame_inv: MobiusTransform = frame.invert()
-		var bt_arc_mid_f64: Vector2 = frame_inv.apply_f64(arc_mid)
-		var bt_via_f64: Vector2 = frame_inv.apply_f64(vis_via)
+		var bt_arc_mid_f64: Vector2 = frame_inv.apply(arc_mid)
+		var bt_via_f64: Vector2 = frame_inv.apply(vis_via)
 
 		var ray_dir := (ray_end - ray_origin).normalized()
 		var cross_arc_mid := (bt_arc_mid_f64 - ray_origin).cross(ray_dir)
@@ -514,9 +514,9 @@ func test_exp6_statistical_sweep() -> void:
 						total_checked += 1
 						count_arc_mid_f32_violates += 1
 
-						var bt_arc_mid_f64: Vector2 = frame_inv.apply_f64(arc_mid)
+						var bt_arc_mid_f64: Vector2 = frame_inv.apply(arc_mid)
 						var bt_via_f32 := frame_inv.apply(step.via)
-						var bt_via_f64: Vector2 = frame_inv.apply_f64(step.via)
+						var bt_via_f64: Vector2 = frame_inv.apply(step.via)
 
 						var cross_arc_mid_f64 := (bt_arc_mid_f64 - origin).cross(aim_dir)
 						var cross_via_f32 := (bt_via_f32 - origin).cross(aim_dir)
